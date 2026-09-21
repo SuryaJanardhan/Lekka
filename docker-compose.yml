@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: lekka-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - lekka-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lekka-backend
+    restart: always
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/lekka_db
+    depends_on:
+      - mongodb
+    networks:
+      - lekka-network
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: lekka-app
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - lekka-network
+
+networks:
+  lekka-network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+    driver: local
