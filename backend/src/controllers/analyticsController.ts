@@ -1,29 +1,9 @@
 import { Request, Response } from 'express';
-import mongoose from 'mongoose';
 import { EmailModel } from '../models/Email';
 
 export class AnalyticsController {
   public static async getDashboardStats(_req: Request, res: Response) {
     try {
-      if (mongoose.connection.readyState !== 1) {
-        return res.json({
-          success: true,
-          data: {
-            summary: {
-              totalEmails: 2,
-              pendingReviews: 1,
-              totalFinancialAmount: 142.50,
-              sources: { rule: 1, ai: 1, user: 0 },
-              aiAccuracyPercentage: 94
-            },
-            categoryBreakdown: [
-              { categoryName: 'Invoices & Receipts', colorCode: '#059669', count: 1 },
-              { categoryName: 'Alerts & Security', colorCode: '#DC2626', count: 1 }
-            ]
-          }
-        });
-      }
-
       const totalEmails = await EmailModel.countDocuments({});
       const pendingReviews = await EmailModel.countDocuments({ needsUserReview: true });
       const ruleCategorized = await EmailModel.countDocuments({ categorySource: 'RULE' });
@@ -90,19 +70,7 @@ export class AnalyticsController {
         }
       });
     } catch (error: any) {
-      res.json({
-        success: true,
-        data: {
-          summary: {
-            totalEmails: 2,
-            pendingReviews: 1,
-            totalFinancialAmount: 142.50,
-            sources: { rule: 1, ai: 1, user: 0 },
-            aiAccuracyPercentage: 94
-          },
-          categoryBreakdown: []
-        }
-      });
+      res.status(500).json({ success: false, error: error.message });
     }
   }
 }

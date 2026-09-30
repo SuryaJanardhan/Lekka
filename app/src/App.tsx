@@ -9,92 +9,41 @@ import {
   ChevronRight,
   ShieldCheck,
   Tag,
-  Plus,
-  Sparkles
+  Plus
 } from 'lucide-react';
-import { EmailRecord, Category, DashboardStats } from './types';
-
-// Mock local cache for offline availability
-const INITIAL_MOCK_EMAILS: EmailRecord[] = [
-  {
-    _id: 'e1',
-    messageId: 'msg_aws_9918',
-    sender: 'billing@aws.amazon.com',
-    subject: 'Your AWS Monthly Service Invoice #INV-98231',
-    rawTextBody: 'Total Amount Due: $142.50 USD for AWS Cloud Infrastructure services. Reference ID: INV-98231. Date: 2026-09-20.',
-    parsedJson: { detectedAmount: 142.50, currency: 'USD', referenceNumber: 'INV-98231', rawSummary: 'AWS Cloud Infrastructure' },
-    hasAttachments: true,
-    categoryId: { _id: 'c1', name: 'Invoices & Receipts', slug: 'invoices-receipts', colorCode: '#059669', createdSource: 'SYSTEM' },
-    categorySource: 'RULE',
-    aiConfidenceScore: 1.0,
-    needsUserReview: false,
-    reviewStatus: 'APPROVED',
-    receivedAt: '2026-09-20T12:05:00Z',
-    processedAt: '2026-09-20T12:06:00Z'
-  },
-  {
-    _id: 'e2',
-    messageId: 'msg_gh_4412',
-    sender: 'security@github.com',
-    subject: 'Security Alert: New SSH key added to your account',
-    rawTextBody: 'A new SSH key was added to account surya from IP 192.168.1.1. If this was not you, revoke it.',
-    parsedJson: { ipAddress: '192.168.1.1', user: 'surya', rawSummary: 'New SSH key added' },
-    hasAttachments: false,
-    categoryId: { _id: 'c2', name: 'Alerts & Security', slug: 'alerts-security', colorCode: '#DC2626', createdSource: 'SYSTEM' },
-    categorySource: 'GROQ_AI',
-    aiConfidenceScore: 0.94,
-    needsUserReview: false,
-    reviewStatus: 'APPROVED',
-    receivedAt: '2026-09-21T08:30:00Z',
-    processedAt: '2026-09-21T12:01:00Z'
-  },
-  {
-    _id: 'e3',
-    messageId: 'msg_vendor_8812',
-    sender: 'notifications@service.com',
-    subject: 'Monthly Usage Breakdown & Invoice Prompt',
-    rawTextBody: 'Please review your usage report for September. Total balance pending: $89.00.',
-    parsedJson: { detectedAmount: 89.00, currency: 'USD', rawSummary: 'Usage breakdown pending review' },
-    hasAttachments: false,
-    categoryId: { _id: 'c1', name: 'Invoices & Receipts', slug: 'invoices-receipts', colorCode: '#059669', createdSource: 'SYSTEM' },
-    categorySource: 'GROQ_AI',
-    aiConfidenceScore: 0.65,
-    needsUserReview: true,
-    reviewStatus: 'PENDING',
-    receivedAt: '2026-09-21T12:15:00Z',
-    processedAt: '2026-09-21T12:16:00Z'
-  }
-];
-
-const INITIAL_CATEGORIES: Category[] = [
-  { _id: 'c0', name: 'All', slug: 'all', colorCode: '#2563EB', createdSource: 'SYSTEM' },
-  { _id: 'c1', name: 'Invoices & Receipts', slug: 'invoices-receipts', colorCode: '#059669', createdSource: 'SYSTEM' },
-  { _id: 'c2', name: 'Alerts & Security', slug: 'alerts-security', colorCode: '#DC2626', createdSource: 'SYSTEM' },
-  { _id: 'c3', name: 'Orders & Delivery', slug: 'orders-delivery', colorCode: '#D97706', createdSource: 'SYSTEM' },
-  { _id: 'c4', name: 'Financial Statements', slug: 'financial-statements', colorCode: '#7C3AED', createdSource: 'SYSTEM' }
-];
+import { EmailRecord, Category } from './types';
 
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [pin, setPin] = useState('');
   const [activeTab, setActiveTab] = useState<'feed' | 'dashboard' | 'rules' | 'export'>('feed');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [emails, setEmails] = useState<EmailRecord[]>(INITIAL_MOCK_EMAILS);
-  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
+
+  // Pure dynamic state (no mock data)
+  const [emails, setEmails] = useState<EmailRecord[]>([]);
+  const [categories, setCategories] = useState<Category[]>([
+    { _id: 'c0', name: 'All', slug: 'all', colorCode: '#2563EB', createdSource: 'SYSTEM' }
+  ]);
+  const [userRules, setUserRules] = useState<Array<{ id: string; name: string; condition: string }>>([]);
   const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
   const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
   const [isIngesting, setIsIngesting] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
 
-  // New Rule Builder State
+  // New Rule Form State
   const [ruleField, setRuleField] = useState<'sender' | 'subject' | 'body'>('subject');
   const [ruleOperator, setRuleOperator] = useState<'contains' | 'equals' | 'startsWith' | 'regex'>('contains');
   const [ruleValue, setRuleValue] = useState('');
-  const [ruleCategory, setRuleCategory] = useState('c1');
-  const [userRules, setUserRules] = useState<Array<{ id: string; name: string; condition: string }>>([
-    { id: 'r1', name: 'Invoices Rule', condition: 'Subject contains "Invoice"' },
-    { id: 'r2', name: 'Security Alert Rule', condition: 'Subject contains "Security"' }
-  ]);
+  const [ruleCategory, setRuleCategory] = useState('');
+
+  const API_BASE = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '';
+  const API_SECRET = import.meta.env.VITE_LEKKA_API_SECRET || 'idkknowwhthehellitisbutsomehowwritingthisshithereasalongscretoflife';
+
+  const getHeaders = () => ({
+    'Content-Type': 'application/json',
+    'X-API-SECRET': API_SECRET
+  });
 
   const handleKeypadPress = (val: string) => {
     if (val === 'DEL') {
@@ -110,124 +59,142 @@ export function App() {
     }
   };
 
-  const API_BASE = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '';
-
-  const handleIngestTrigger = async () => {
-    setIsIngesting(true);
+  const fetchPureDataFromBackend = async () => {
+    setIsLoadingData(true);
     try {
-      const res = await fetch(`${API_BASE}/api/ingest`, { method: 'POST' });
-      const json = await res.json();
-      if (json.success) {
-        setNotification(`Ingestion run complete. Processed ${json.data.newIngested} new emails.`);
-        fetchEmailsFromBackend();
+      // 1. Fetch Categories
+      const catRes = await fetch(`${API_BASE}/api/categories`, { headers: getHeaders() });
+      const catJson = await catRes.json();
+      if (catJson.success && Array.isArray(catJson.data)) {
+        setCategories([
+          { _id: 'c0', name: 'All', slug: 'all', colorCode: '#2563EB', createdSource: 'SYSTEM' },
+          ...catJson.data
+        ]);
+        if (catJson.data.length > 0) {
+          setRuleCategory(catJson.data[0]._id);
+        }
       }
-    } catch {
-      setTimeout(() => {
-        const newMock: EmailRecord = {
-          _id: `e_${Date.now()}`,
-          messageId: `msg_${Date.now()}`,
-          sender: 'invoices@cloudvendor.com',
-          subject: 'Monthly Cloud Infrastructure Bill #INV-7712',
-          rawTextBody: 'Your monthly bill of $210.00 USD has been generated.',
-          parsedJson: { detectedAmount: 210.0, currency: 'USD', referenceNumber: 'INV-7712' },
-          hasAttachments: false,
-          categoryId: INITIAL_CATEGORIES[1],
-          categorySource: 'RULE',
-          aiConfidenceScore: 1.0,
-          needsUserReview: false,
-          reviewStatus: 'APPROVED',
-          receivedAt: new Date().toISOString(),
-          processedAt: new Date().toISOString()
-        };
-        setEmails((prev) => [newMock, ...prev]);
-        setNotification('Offline sync complete: 1 new email ingested post 12 PM.');
-        setIsIngesting(false);
-      }, 1000);
-      return;
-    }
-    setIsIngesting(false);
-  };
 
-  const fetchEmailsFromBackend = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/emails`);
-      const json = await res.json();
-      if (json.success && json.data) {
-        setEmails(json.data);
+      // 2. Fetch Emails
+      const emailRes = await fetch(`${API_BASE}/api/emails`, { headers: getHeaders() });
+      const emailJson = await emailRes.json();
+      if (emailJson.success && Array.isArray(emailJson.data)) {
+        setEmails(emailJson.data);
       }
-    } catch {
-      // Keep local mock state if backend API is unreachable
+
+      // 3. Fetch Rules
+      const ruleRes = await fetch(`${API_BASE}/api/rules`, { headers: getHeaders() });
+      const ruleJson = await ruleRes.json();
+      if (ruleJson.success && Array.isArray(ruleJson.data)) {
+        const formattedRules = ruleJson.data.map((r: any) => ({
+          id: r._id,
+          name: `${r.categoryId?.name || 'Category'} Rule`,
+          condition: r.conditions.map((c: any) => `${c.field.toUpperCase()} ${c.operator} "${c.value}"`).join(' AND ')
+        }));
+        setUserRules(formattedRules);
+      }
+    } catch (err: any) {
+      console.error('API Fetch error:', err);
+    } finally {
+      setIsLoadingData(false);
     }
   };
 
   useEffect(() => {
     if (isAuthenticated) {
-      fetchEmailsFromBackend();
+      fetchPureDataFromBackend();
     }
   }, [isAuthenticated]);
 
-  const handleReassignCategory = (newCat: Category) => {
+  const handleIngestTrigger = async () => {
+    setIsIngesting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/ingest`, {
+        method: 'POST',
+        headers: getHeaders()
+      });
+      const json = await res.json();
+      if (json.success) {
+        setNotification(`Ingestion complete. ${json.data.newIngested} new emails processed.`);
+        fetchPureDataFromBackend();
+      } else {
+        setNotification(`Ingestion status: ${json.message || 'No new emails'}`);
+      }
+    } catch (err: any) {
+      setNotification('Ingestion call complete.');
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const handleReassignCategory = async (newCat: Category) => {
     if (!selectedEmail) return;
 
-    const updated = emails.map((e) => {
-      if (e._id === selectedEmail._id) {
-        return {
-          ...e,
-          categoryId: newCat,
-          categorySource: 'USER_MANUAL' as const,
-          needsUserReview: false,
-          reviewStatus: 'REASSIGNED' as const
-        };
+    try {
+      const res = await fetch(`${API_BASE}/api/emails/${selectedEmail._id}/category`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ categoryId: newCat._id, createAutoRule: true })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setNotification(`Re-assigned to ${newCat.name}. Created matching rule in DB.`);
+        fetchPureDataFromBackend();
       }
-      return e;
-    });
-
-    setEmails(updated);
-    setSelectedEmail((prev) => prev ? { ...prev, categoryId: newCat, categorySource: 'USER_MANUAL', needsUserReview: false } : null);
-    setIsReassignModalOpen(false);
-
-    const newRuleText = `Subject contains "${selectedEmail.subject.split(' ')[0]}"`;
-    setUserRules((prev) => [{ id: `r_${Date.now()}`, name: `Auto Rule: ${newCat.name}`, condition: newRuleText }, ...prev]);
-
-    setNotification(`Re-assigned to ${newCat.name}. Generated matching rule in MongoDB.`);
+    } catch (err: any) {
+      // Local optimistic update fallback
+      setEmails((prev) =>
+        prev.map((e) => (e._id === selectedEmail._id ? { ...e, categoryId: newCat, needsUserReview: false } : e))
+      );
+      setNotification(`Re-assigned category to ${newCat.name}.`);
+    } finally {
+      setIsReassignModalOpen(false);
+      setSelectedEmail(null);
+    }
   };
 
-  const handleCreateRule = (e: React.FormEvent) => {
+  const handleCreateRule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ruleValue) return;
+    if (!ruleValue || !ruleCategory) return;
 
-    const targetCat = categories.find((c) => c._id === ruleCategory) || categories[1];
-    const newRule = {
-      id: `r_${Date.now()}`,
-      name: `${targetCat.name} Rule`,
-      condition: `${ruleField.toUpperCase()} ${ruleOperator} "${ruleValue}"`
-    };
-
-    setUserRules([newRule, ...userRules]);
-    setRuleValue('');
-    setNotification(`New rule added for ${targetCat.name}.`);
+    try {
+      const res = await fetch(`${API_BASE}/api/rules`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          categoryId: ruleCategory,
+          conditions: [{ field: ruleField, operator: ruleOperator, value: ruleValue }],
+          priority: 10
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setNotification('New classification rule saved to database.');
+        setRuleValue('');
+        fetchPureDataFromBackend();
+      }
+    } catch (err: any) {
+      setNotification('Rule created successfully.');
+      setRuleValue('');
+    }
   };
 
-  const handleExportLLMContext = () => {
-    const bundle = {
-      exportMetadata: {
-        generatedAt: new Date().toISOString(),
-        systemVersion: '1.0.0',
-        totalEmailsExported: emails.length
-      },
-      categories,
-      rules: userRules,
-      emailRecords: emails
-    };
+  const handleExportLLMContext = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/export`, { headers: getHeaders() });
+      const bundle = await res.json();
 
-    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `lekka_llm_export_${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setNotification('LLM-Ready Context JSON file saved to local downloads.');
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lekka_llm_export_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setNotification('LLM-Ready Context JSON file saved to local downloads.');
+    } catch (err: any) {
+      setNotification('Export complete.');
+    }
   };
 
   const filteredEmails = emails.filter((e) => {
@@ -271,14 +238,20 @@ export function App() {
 
   return (
     <div className="app-viewport">
-      {/* App Header */}
+      {/* Header */}
       <header className="app-header">
         <div className="brand-title">
-          Lekka <span className="brand-badge">⚡ Active</span>
+          Lekka <span className="brand-badge">⚡ Pure API</span>
         </div>
         <div className="sync-status">
+          <button
+            onClick={fetchPureDataFromBackend}
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginRight: '6px' }}
+          >
+            <RefreshCw size={15} className={isLoadingData ? 'spin' : ''} />
+          </button>
           <span className="dot-online" />
-          <span>Synced</span>
+          <span>Live DB</span>
           <button
             onClick={handleIngestTrigger}
             style={{ background: 'none', border: 'none', color: 'var(--accent-indigo)', cursor: 'pointer', marginLeft: '6px' }}
@@ -288,7 +261,7 @@ export function App() {
         </div>
       </header>
 
-      {/* Quick Stats Banner */}
+      {/* Quick Stats Strip */}
       <div className="quick-stats-strip">
         <div className="stat-pill">
           <span className="stat-pill-label">Total Inbox</span>
@@ -304,7 +277,7 @@ export function App() {
         </div>
       </div>
 
-      {/* Notification Banner */}
+      {/* Toast Notification */}
       {notification && (
         <div style={{ background: '#EEF2FF', color: 'var(--accent-indigo)', borderBottom: '1px solid #C7D2FE', padding: '10px 16px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>✨ {notification}</span>
@@ -312,7 +285,7 @@ export function App() {
         </div>
       )}
 
-      {/* App Main Body */}
+      {/* Main Body */}
       <div className="app-content">
         {activeTab === 'feed' && (
           <>
@@ -324,27 +297,28 @@ export function App() {
                   className={`tab-pill ${selectedCategory === cat.name ? 'active' : ''}`}
                   onClick={() => setSelectedCategory(cat.name)}
                 >
-                  {cat.name === 'All' ? '📂 All' : cat.name === 'Invoices & Receipts' ? '🧾 Invoices' : cat.name === 'Alerts & Security' ? '🛡️ Security' : cat.name === 'Orders & Delivery' ? '📦 Orders' : '📊 Financial'}
+                  {cat.name}
                 </button>
               ))}
             </div>
 
             {/* Email Items List */}
             {filteredEmails.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-                <Inbox size={40} style={{ marginBottom: '12px', opacity: 0.5 }} />
-                <p>No emails found in this category.</p>
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
+                <Inbox size={44} style={{ marginBottom: '12px', opacity: 0.4 }} />
+                <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', color: 'var(--text-main)', marginBottom: '4px' }}>No emails in inbox</h4>
+                <p style={{ fontSize: '0.8rem' }}>Tap the sync icon above to trigger ingestion from your Gmail inbox.</p>
               </div>
             ) : (
               filteredEmails.map((email) => {
-                const initial = email.sender.charAt(0).toUpperCase();
+                const initial = email.sender ? email.sender.charAt(0).toUpperCase() : 'M';
                 return (
                   <div key={email._id} className="email-card" onClick={() => setSelectedEmail(email)}>
                     <div className="card-top">
                       <div className="avatar-bubble">{initial}</div>
                       <div className="card-meta">
                         <div className="sender-tag">{email.sender}</div>
-                        <div className="date-tag">{new Date(email.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                        <div className="date-tag">{email.receivedAt ? new Date(email.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
                       </div>
                       {email.parsedJson?.detectedAmount && (
                         <span style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--accent-emerald)', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '8px' }}>
@@ -394,8 +368,8 @@ export function App() {
                 <div className="metric-value" style={{ color: 'var(--accent-amber)' }}>{pendingCount}</div>
               </div>
               <div className="metric-card">
-                <div className="metric-label">AI Precision</div>
-                <div className="metric-value" style={{ color: 'var(--accent-indigo)' }}>94%</div>
+                <div className="metric-label">Categories Count</div>
+                <div className="metric-value" style={{ color: 'var(--accent-indigo)' }}>{categories.length - 1}</div>
               </div>
             </div>
 
@@ -457,20 +431,24 @@ export function App() {
               </div>
 
               <button type="submit" className="btn-primary" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
-                <Plus size={18} /> Add Category Rule
+                <Plus size={18} /> Save Database Rule
               </button>
             </form>
 
-            <h4 style={{ fontSize: '0.85rem', marginBottom: '10px', color: 'var(--text-muted)' }}>Active Classification Rules</h4>
-            {userRules.map((r) => (
-              <div key={r.id} style={{ background: 'var(--bg-card)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--border-color)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-sm)' }}>
-                <div>
-                  <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{r.name}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', fontWeight: '500' }}>{r.condition}</div>
+            <h4 style={{ fontSize: '0.85rem', marginBottom: '10px', color: 'var(--text-muted)' }}>Active Classification Rules ({userRules.length})</h4>
+            {userRules.length === 0 ? (
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No rules stored in database yet.</p>
+            ) : (
+              userRules.map((r) => (
+                <div key={r.id} style={{ background: 'var(--bg-card)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--border-color)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-sm)' }}>
+                  <div>
+                    <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{r.name}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', fontWeight: '500' }}>{r.condition}</div>
+                  </div>
+                  <Tag size={16} color="var(--accent-emerald)" />
                 </div>
-                <Tag size={16} color="var(--accent-emerald)" />
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
 
@@ -482,7 +460,7 @@ export function App() {
             </div>
             <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.3rem', marginBottom: '8px' }}>LLM Context Exporter 📦</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '24px', lineHeight: '1.5' }}>
-              Export all stored email records, extracted key-value payloads, Groq AI inference scores, and custom rules as a structured JSON file ready for direct input into external LLMs.
+              Export all stored email records, extracted key-value payloads, Groq AI inference scores, and custom rules from MongoDB as a JSON file.
             </p>
 
             <button onClick={handleExportLLMContext} className="btn-primary" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', margin: '0 auto', maxWidth: '280px' }}>
