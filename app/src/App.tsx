@@ -110,10 +110,12 @@ export function App() {
     }
   };
 
+  const API_BASE = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '';
+
   const handleIngestTrigger = async () => {
     setIsIngesting(true);
     try {
-      const res = await fetch('http://localhost:5000/api/ingest', { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/ingest`, { method: 'POST' });
       const json = await res.json();
       if (json.success) {
         setNotification(`Ingestion run complete. Processed ${json.data.newIngested} new emails.`);
@@ -148,7 +150,7 @@ export function App() {
 
   const fetchEmailsFromBackend = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/emails');
+      const res = await fetch(`${API_BASE}/api/emails`);
       const json = await res.json();
       if (json.success && json.data) {
         setEmails(json.data);
