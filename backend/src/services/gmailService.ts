@@ -1,3 +1,5 @@
+import { ImapFlow } from 'imapflow';
+import { simpleParser, ParsedMail } from 'mailparser';
 import { google } from 'googleapis';
 import { EmailModel } from '../models/Email.js';
 import { RuleEngine } from './ruleEngine.js';
@@ -13,6 +15,113 @@ export interface IngestionResult {
 }
 
 export class GmailService {
+  public static async processIngestionPipeline(): Promise<IngestionResult> {
+    const imapUser = process.env.GMAIL_USER;
+    const imapPass = process.env.GMAIL_APP_PASSWORD;
+
+    // 1. Direct Gmail App Password IMAP Ingestion Path
+    if (imapUser && imapPass && imapPass !== 'your_16_character_app_password' && imapPass !== 'mock_app_password') {
+      console.log(`[GmailService] Connecting via IMAP for ${imapUser}...`);
+      return this.processImapIngestion(imapUser, imapPass);
+    }
+
+    // 2. OAuth2 Ingestion Path
+    const oauth2Client = this.getOAuth2Client();
+    if (oauth2Client) {
+      console.log('[GmailService] Connecting via Google OAuth2 API...');
+      return this.processOAuth2Ingestion(oauth2Client);
+    }
+
+    // 3. Mock Batch Fallback
+    console.log('[GmailService] No live credentials found. Executing mock ingestion batch...');
+    return this.executeMockIngestionBatch();
+  }
+
+  private static async processImapIngestion(user: string, pass: string): Promise<IngestionResult> {
+    const client = new ImapFlow({
+      host: 'imap.gmail.com',
+      port: 993,
+      secure: true,
+      auth: { user, pass },
+      logger: false
+    });
+
+    let totalProcessed = 0;
+    let newIngested = 0;
+    let duplicatesSkipped = 0;
+    let needsReviewCount = 0;
+
+    try {
+      await client.connect();
+      const lock = await client.getMailboxLock('INBOX');
+
+      try {
+        const targetSenders = (process.env.TARGET_SENDER_EMAILS || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        for await (const message of client.fetch('1:*', { envelope: true, source: true })) {
+          if (!message.source) continue;
+          totalProcessed++;
+
+          const parsed: ParsedMail = await simpleParser(message.source);
+          const messageIdHeader = parsed.messageId || `imap_msg_${message.uid}`;
+          const sender = parsed.from?.value[0]?.address || 'unknown@domain.com';
+          const subject = parsed.subject || 'No Subject';
+          const receivedAt = parsed.date || new Date();
+
+          // Filter by target senders if configured
+          if (targetSenders.length > 0) {
+            const senderMatch = targetSenders.some((ts) => sender.toLowerCase().includes(ts.toLowerCase()));
+            if (!senderMatch) continue;
+          }
+
+          // Check deduplication index in MongoDB
+          const existing = await EmailModel.findOne({ messageId: messageIdHeader });
+          if (existing) {
+            duplicatesSkipped++;
+            continue;
+          }
+
+          // Body & Attachment text extraction
+          const bodyContent = parsed.text || parsed.html || subject;
+          const { cleanText, structuredJson } = await ParserService.parseEmailBody(bodyContent as string);
+
+          let ocrText = '';
+          if (parsed.attachments && parsed.attachments.length > 0) {
+            for (const att of parsed.attachments) {
+              if (att.contentType.startsWith('image/')) {
+                ocrText += await ParserService.processAttachmentImage(att.content);
+              }
+            }
+          }
+
+          const res = await this.classifyAndStoreEmail({
+            messageId: messageIdHeader,
+            sender,
+            subject,
+            rawTextBody: cleanText,
+            parsedJson: structuredJson,
+            ocrExtractedText: ocrText || undefined,
+            receivedAt
+          });
+
+          if (res.needsUserReview) needsReviewCount++;
+          newIngested++;
+        }
+      } finally {
+        lock.release();
+      }
+
+      await client.logout();
+    } catch (error) {
+      console.error('[GmailService] IMAP error:', error);
+    }
+
+    return { totalProcessed, newIngested, duplicatesSkipped, needsReviewCount };
+  }
+
   private static getOAuth2Client() {
     const clientId = process.env.GMAIL_CLIENT_ID;
     const clientSecret = process.env.GMAIL_CLIENT_SECRET;
@@ -28,18 +137,9 @@ export class GmailService {
     return oauth2Client;
   }
 
-  public static async processIngestionPipeline(): Promise<IngestionResult> {
-    const oauth2Client = this.getOAuth2Client();
-
-    if (!oauth2Client) {
-      // Execute mock email ingestion batch for testing when real Gmail API tokens are unconfigured
-      return this.executeMockIngestionBatch();
-    }
-
+  private static async processOAuth2Ingestion(oauth2Client: any): Promise<IngestionResult> {
     try {
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-
-      // Build target senders query filter
       const targetSenders = (process.env.TARGET_SENDER_EMAILS || '')
         .split(',')
         .map((s) => s.trim())
@@ -72,18 +172,15 @@ export class GmailService {
         const dateHeader = headers.find((h) => h.name?.toLowerCase() === 'date')?.value;
         const receivedAt = dateHeader ? new Date(dateHeader) : new Date();
 
-        // Check deduplication index in MongoDB
         const existing = await EmailModel.findOne({ messageId: messageIdHeader });
         if (existing) {
           duplicatesSkipped++;
           continue;
         }
 
-        // Body extraction
         const bodyData = msgDetail.data.snippet || subject;
         const { cleanText, structuredJson } = await ParserService.parseEmailBody(bodyData);
 
-        // Process email classification
         const result = await this.classifyAndStoreEmail({
           messageId: messageIdHeader,
           sender,
@@ -97,14 +194,9 @@ export class GmailService {
         newIngested++;
       }
 
-      return {
-        totalProcessed: messages.length,
-        newIngested,
-        duplicatesSkipped,
-        needsReviewCount
-      };
+      return { totalProcessed: messages.length, newIngested, duplicatesSkipped, needsReviewCount };
     } catch (error) {
-      console.error('Gmail Ingestion Error:', error);
+      console.error('[GmailService] OAuth2 Ingestion error:', error);
       return this.executeMockIngestionBatch();
     }
   }
@@ -123,13 +215,6 @@ export class GmailService {
         sender: 'security@github.com',
         subject: 'Security Alert: New SSH key added to your account',
         body: 'A new SSH key was added to account username surya from IP address 192.168.1.1. If this was not you, revoke it immediately.',
-        date: new Date()
-      },
-      {
-        messageId: `msg_mock_order_${Date.now()}_3`,
-        sender: 'orders@vendor.com',
-        subject: 'Order Confirmation #ORD-44910',
-        body: 'Thank you for your order #ORD-44910. Total Amount: $49.99. Estimated Delivery: Sep 24, 2026.',
         date: new Date()
       }
     ];
@@ -159,12 +244,7 @@ export class GmailService {
       newIngested++;
     }
 
-    return {
-      totalProcessed: mockEmails.length,
-      newIngested,
-      duplicatesSkipped,
-      needsReviewCount
-    };
+    return { totalProcessed: mockEmails.length, newIngested, duplicatesSkipped, needsReviewCount };
   }
 
   private static async classifyAndStoreEmail(emailData: {
@@ -173,21 +253,19 @@ export class GmailService {
     subject: string;
     rawTextBody: string;
     parsedJson: Record<string, any>;
+    ocrExtractedText?: string;
     receivedAt: Date;
   }) {
-    // 1. Rule Engine Evaluation
     let categoryId = await RuleEngine.evaluateEmail(emailData.sender, emailData.subject, emailData.rawTextBody);
     let categorySource: 'RULE' | 'GROQ_AI' | 'USER_MANUAL' | 'UNASSIGNED' = 'RULE';
     let needsReview = false;
     let confidenceScore = 1.0;
 
     if (!categoryId) {
-      // 2. Groq AI Fallback Classification
       const aiResult = await GroqService.classifyEmailContent(emailData.sender, emailData.subject, emailData.rawTextBody);
       categorySource = 'GROQ_AI';
       confidenceScore = aiResult.confidenceScore;
 
-      // Find or create category in DB
       let category = await CategoryModel.findOne({ name: aiResult.categoryName });
       if (!category) {
         category = new CategoryModel({
@@ -210,6 +288,7 @@ export class GmailService {
       subject: emailData.subject,
       rawTextBody: emailData.rawTextBody,
       parsedJson: emailData.parsedJson,
+      ocrExtractedText: emailData.ocrExtractedText,
       categoryId,
       categorySource,
       aiConfidenceScore: confidenceScore,
