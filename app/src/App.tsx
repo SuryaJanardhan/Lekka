@@ -6,17 +6,15 @@ import {
   Download,
   Lock,
   RefreshCw,
-  CheckCircle,
-  AlertCircle,
   ChevronRight,
   ShieldCheck,
   Tag,
   Plus,
-  ArrowUpRight
+  Sparkles
 } from 'lucide-react';
-import { EmailRecord, Category, Rule, DashboardStats } from './types';
+import { EmailRecord, Category, DashboardStats } from './types';
 
-// Mock offline cache initialization matching MMKV key-value behavior
+// Mock local cache for offline availability
 const INITIAL_MOCK_EMAILS: EmailRecord[] = [
   {
     _id: 'e1',
@@ -26,7 +24,7 @@ const INITIAL_MOCK_EMAILS: EmailRecord[] = [
     rawTextBody: 'Total Amount Due: $142.50 USD for AWS Cloud Infrastructure services. Reference ID: INV-98231. Date: 2026-09-20.',
     parsedJson: { detectedAmount: 142.50, currency: 'USD', referenceNumber: 'INV-98231', rawSummary: 'AWS Cloud Infrastructure' },
     hasAttachments: true,
-    categoryId: { _id: 'c1', name: 'Invoices & Receipts', slug: 'invoices-receipts', colorCode: '#10B981', createdSource: 'SYSTEM' },
+    categoryId: { _id: 'c1', name: 'Invoices & Receipts', slug: 'invoices-receipts', colorCode: '#059669', createdSource: 'SYSTEM' },
     categorySource: 'RULE',
     aiConfidenceScore: 1.0,
     needsUserReview: false,
@@ -42,7 +40,7 @@ const INITIAL_MOCK_EMAILS: EmailRecord[] = [
     rawTextBody: 'A new SSH key was added to account surya from IP 192.168.1.1. If this was not you, revoke it.',
     parsedJson: { ipAddress: '192.168.1.1', user: 'surya', rawSummary: 'New SSH key added' },
     hasAttachments: false,
-    categoryId: { _id: 'c2', name: 'Alerts & Security', slug: 'alerts-security', colorCode: '#EF4444', createdSource: 'SYSTEM' },
+    categoryId: { _id: 'c2', name: 'Alerts & Security', slug: 'alerts-security', colorCode: '#DC2626', createdSource: 'SYSTEM' },
     categorySource: 'GROQ_AI',
     aiConfidenceScore: 0.94,
     needsUserReview: false,
@@ -58,7 +56,7 @@ const INITIAL_MOCK_EMAILS: EmailRecord[] = [
     rawTextBody: 'Please review your usage report for September. Total balance pending: $89.00.',
     parsedJson: { detectedAmount: 89.00, currency: 'USD', rawSummary: 'Usage breakdown pending review' },
     hasAttachments: false,
-    categoryId: { _id: 'c1', name: 'Invoices & Receipts', slug: 'invoices-receipts', colorCode: '#10B981', createdSource: 'SYSTEM' },
+    categoryId: { _id: 'c1', name: 'Invoices & Receipts', slug: 'invoices-receipts', colorCode: '#059669', createdSource: 'SYSTEM' },
     categorySource: 'GROQ_AI',
     aiConfidenceScore: 0.65,
     needsUserReview: true,
@@ -69,11 +67,11 @@ const INITIAL_MOCK_EMAILS: EmailRecord[] = [
 ];
 
 const INITIAL_CATEGORIES: Category[] = [
-  { _id: 'c0', name: 'All', slug: 'all', colorCode: '#3B82F6', createdSource: 'SYSTEM' },
-  { _id: 'c1', name: 'Invoices & Receipts', slug: 'invoices-receipts', colorCode: '#10B981', createdSource: 'SYSTEM' },
-  { _id: 'c2', name: 'Alerts & Security', slug: 'alerts-security', colorCode: '#EF4444', createdSource: 'SYSTEM' },
-  { _id: 'c3', name: 'Orders & Delivery', slug: 'orders-delivery', colorCode: '#F59E0B', createdSource: 'SYSTEM' },
-  { _id: 'c4', name: 'Financial Statements', slug: 'financial-statements', colorCode: '#8B5CF6', createdSource: 'SYSTEM' }
+  { _id: 'c0', name: 'All', slug: 'all', colorCode: '#2563EB', createdSource: 'SYSTEM' },
+  { _id: 'c1', name: 'Invoices & Receipts', slug: 'invoices-receipts', colorCode: '#059669', createdSource: 'SYSTEM' },
+  { _id: 'c2', name: 'Alerts & Security', slug: 'alerts-security', colorCode: '#DC2626', createdSource: 'SYSTEM' },
+  { _id: 'c3', name: 'Orders & Delivery', slug: 'orders-delivery', colorCode: '#D97706', createdSource: 'SYSTEM' },
+  { _id: 'c4', name: 'Financial Statements', slug: 'financial-statements', colorCode: '#7C3AED', createdSource: 'SYSTEM' }
 ];
 
 export function App() {
@@ -98,7 +96,6 @@ export function App() {
     { id: 'r2', name: 'Security Alert Rule', condition: 'Subject contains "Security"' }
   ]);
 
-  // Handle PIN unlock
   const handleKeypadPress = (val: string) => {
     if (val === 'DEL') {
       setPin((prev) => prev.slice(0, -1));
@@ -113,7 +110,6 @@ export function App() {
     }
   };
 
-  // Trigger Backend Ingestion Pipeline
   const handleIngestTrigger = async () => {
     setIsIngesting(true);
     try {
@@ -121,11 +117,9 @@ export function App() {
       const json = await res.json();
       if (json.success) {
         setNotification(`Ingestion run complete. Processed ${json.data.newIngested} new emails.`);
-        // Refresh emails from API if available
         fetchEmailsFromBackend();
       }
     } catch {
-      // Mock local sync fallback
       setTimeout(() => {
         const newMock: EmailRecord = {
           _id: `e_${Date.now()}`,
@@ -160,7 +154,7 @@ export function App() {
         setEmails(json.data);
       }
     } catch {
-      // Keep local MMKV mock state if backend is offline
+      // Keep local mock state if backend API is unreachable
     }
   };
 
@@ -190,11 +184,10 @@ export function App() {
     setSelectedEmail((prev) => prev ? { ...prev, categoryId: newCat, categorySource: 'USER_MANUAL', needsUserReview: false } : null);
     setIsReassignModalOpen(false);
 
-    // Auto-generate matching rule
     const newRuleText = `Subject contains "${selectedEmail.subject.split(' ')[0]}"`;
     setUserRules((prev) => [{ id: `r_${Date.now()}`, name: `Auto Rule: ${newCat.name}`, condition: newRuleText }, ...prev]);
 
-    setNotification(`Re-assigned to ${newCat.name}. Created automatic matching rule in MongoDB.`);
+    setNotification(`Re-assigned to ${newCat.name}. Generated matching rule in MongoDB.`);
   };
 
   const handleCreateRule = (e: React.FormEvent) => {
@@ -210,7 +203,7 @@ export function App() {
 
     setUserRules([newRule, ...userRules]);
     setRuleValue('');
-    setNotification(`New classification rule added for ${targetCat.name}.`);
+    setNotification(`New rule added for ${targetCat.name}.`);
   };
 
   const handleExportLLMContext = () => {
@@ -248,10 +241,12 @@ export function App() {
       <div className="app-viewport">
         <div className="lock-screen">
           <div className="lock-icon-wrapper">
-            <Lock size={36} />
+            <Lock size={34} />
           </div>
-          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.5rem', marginBottom: '8px' }}>Lekka Security</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Enter PIN or tap Biometrics to unlock local MMKV storage</p>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', marginBottom: '6px' }}>
+            Lekka Mobile 🔒
+          </h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Enter PIN or tap Biometrics to unlock</p>
 
           <div className="pin-display">
             {[0, 1, 2, 3].map((idx) => (
@@ -262,11 +257,11 @@ export function App() {
           <div className="keypad-grid">
             {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'BIO', '0', 'DEL'].map((val) => (
               <button key={val} className="keypad-btn" onClick={() => handleKeypadPress(val)}>
-                {val === 'BIO' ? <ShieldCheck size={22} color="#3B82F6" /> : val === 'DEL' ? '←' : val}
+                {val === 'BIO' ? <ShieldCheck size={22} color="#4F46E5" /> : val === 'DEL' ? '←' : val}
               </button>
             ))}
           </div>
-          <p style={{ marginTop: '20px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Default PIN: 1234 or tap Shield icon</p>
+          <p style={{ marginTop: '24px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Default PIN: 1234 or tap Shield icon</p>
         </div>
       </div>
     );
@@ -277,33 +272,49 @@ export function App() {
       {/* App Header */}
       <header className="app-header">
         <div className="brand-title">
-          Lekka <span className="brand-badge">MMKV Offline</span>
+          Lekka <span className="brand-badge">⚡ Active</span>
         </div>
         <div className="sync-status">
           <span className="dot-online" />
           <span>Synced</span>
           <button
             onClick={handleIngestTrigger}
-            style={{ background: 'none', border: 'none', color: 'var(--accent-blue)', cursor: 'pointer', marginLeft: '6px' }}
+            style={{ background: 'none', border: 'none', color: 'var(--accent-indigo)', cursor: 'pointer', marginLeft: '6px' }}
           >
             <RefreshCw size={16} className={isIngesting ? 'spin' : ''} />
           </button>
         </div>
       </header>
 
-      {/* Toast Notification */}
+      {/* Quick Stats Banner */}
+      <div className="quick-stats-strip">
+        <div className="stat-pill">
+          <span className="stat-pill-label">Total Inbox</span>
+          <span className="stat-pill-value">{emails.length} 📩</span>
+        </div>
+        <div className="stat-pill">
+          <span className="stat-pill-label">Tracked</span>
+          <span className="stat-pill-value" style={{ color: 'var(--accent-emerald)' }}>${totalFinancial.toFixed(0)} 💰</span>
+        </div>
+        <div className="stat-pill">
+          <span className="stat-pill-label">Pending</span>
+          <span className="stat-pill-value" style={{ color: 'var(--accent-amber)' }}>{pendingCount} ⚠️</span>
+        </div>
+      </div>
+
+      {/* Notification Banner */}
       {notification && (
-        <div style={{ background: 'var(--accent-blue)', color: '#fff', padding: '10px 16px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{notification}</span>
-          <button onClick={() => setNotification(null)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
+        <div style={{ background: '#EEF2FF', color: 'var(--accent-indigo)', borderBottom: '1px solid #C7D2FE', padding: '10px 16px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>✨ {notification}</span>
+          <button onClick={() => setNotification(null)} style={{ background: 'none', border: 'none', color: 'var(--accent-indigo)', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
         </div>
       )}
 
-      {/* Main Viewport Content */}
+      {/* App Main Body */}
       <div className="app-content">
         {activeTab === 'feed' && (
           <>
-            {/* Category Tabs Header */}
+            {/* Category Filter Pills */}
             <div className="tabs-scroll" style={{ margin: '-16px -16px 16px -16px' }}>
               {categories.map((cat) => (
                 <button
@@ -311,87 +322,93 @@ export function App() {
                   className={`tab-pill ${selectedCategory === cat.name ? 'active' : ''}`}
                   onClick={() => setSelectedCategory(cat.name)}
                 >
-                  {cat.name}
+                  {cat.name === 'All' ? '📂 All' : cat.name === 'Invoices & Receipts' ? '🧾 Invoices' : cat.name === 'Alerts & Security' ? '🛡️ Security' : cat.name === 'Orders & Delivery' ? '📦 Orders' : '📊 Financial'}
                 </button>
               ))}
             </div>
 
-            {/* Email Feed Items */}
+            {/* Email Items List */}
             {filteredEmails.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
                 <Inbox size={40} style={{ marginBottom: '12px', opacity: 0.5 }} />
-                <p>No processed emails found in this category.</p>
+                <p>No emails found in this category.</p>
               </div>
             ) : (
-              filteredEmails.map((email) => (
-                <div key={email._id} className="email-card" onClick={() => setSelectedEmail(email)}>
-                  <div className="card-header">
-                    <span className="sender-tag">{email.sender}</span>
-                    <span className="date-tag">{new Date(email.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                  <div className="email-subject">{email.subject}</div>
-                  <div className="email-body-snippet">{email.rawTextBody}</div>
+              filteredEmails.map((email) => {
+                const initial = email.sender.charAt(0).toUpperCase();
+                return (
+                  <div key={email._id} className="email-card" onClick={() => setSelectedEmail(email)}>
+                    <div className="card-top">
+                      <div className="avatar-bubble">{initial}</div>
+                      <div className="card-meta">
+                        <div className="sender-tag">{email.sender}</div>
+                        <div className="date-tag">{new Date(email.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      </div>
+                      {email.parsedJson?.detectedAmount && (
+                        <span style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--accent-emerald)', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '8px' }}>
+                          ${email.parsedJson.detectedAmount.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
 
-                  <div className="card-footer">
-                    <span
-                      className="category-chip"
-                      style={{ background: email.categoryId?.colorCode || '#3B82F6' }}
-                    >
-                      {email.categoryId?.name || 'General'}
-                    </span>
+                    <div className="email-subject">{email.subject}</div>
+                    <div className="email-body-snippet">{email.rawTextBody}</div>
 
-                    {email.needsUserReview && (
-                      <span className="review-badge">Review Required</span>
-                    )}
-
-                    {email.parsedJson?.detectedAmount && (
-                      <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--accent-emerald)' }}>
-                        ${email.parsedJson.detectedAmount.toFixed(2)}
+                    <div className="card-footer">
+                      <span
+                        className="category-chip"
+                        style={{ background: email.categoryId?.colorCode || '#2563EB' }}
+                      >
+                        {email.categoryId?.name || 'General'}
                       </span>
-                    )}
+
+                      {email.needsUserReview && (
+                        <span className="review-badge">⚠️ Review Required</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </>
         )}
 
-        {/* Dashboard Tab */}
+        {/* Dashboard Metrics Tab */}
         {activeTab === 'dashboard' && (
           <div>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', marginBottom: '16px' }}>Analytics & Insights</h3>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', marginBottom: '16px' }}>Analytics & Insights 📊</h3>
 
             <div className="metrics-grid">
               <div className="metric-card">
-                <div className="metric-label">Total Ingested</div>
+                <div className="metric-label">Total Processed</div>
                 <div className="metric-value">{emails.length}</div>
               </div>
               <div className="metric-card">
-                <div className="metric-label">Financial Tracked</div>
+                <div className="metric-label">Tracked Balance</div>
                 <div className="metric-value" style={{ color: 'var(--accent-emerald)' }}>${totalFinancial.toFixed(2)}</div>
               </div>
               <div className="metric-card">
-                <div className="metric-label">Pending Reviews</div>
+                <div className="metric-label">Review Queue</div>
                 <div className="metric-value" style={{ color: 'var(--accent-amber)' }}>{pendingCount}</div>
               </div>
               <div className="metric-card">
-                <div className="metric-label">AI Accuracy</div>
-                <div className="metric-value" style={{ color: 'var(--accent-blue)' }}>92%</div>
+                <div className="metric-label">AI Precision</div>
+                <div className="metric-value" style={{ color: 'var(--accent-indigo)' }}>94%</div>
               </div>
             </div>
 
-            <h4 style={{ fontSize: '0.9rem', marginBottom: '12px', color: 'var(--text-muted)' }}>Classification Source Breakdown</h4>
-            <div style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.8rem' }}>
-                <span>Rule Engine Matches</span>
+            <h4 style={{ fontSize: '0.85rem', marginBottom: '10px', color: 'var(--text-muted)' }}>Categorization Source Metrics</h4>
+            <div style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '20px', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.82rem' }}>
+                <span>Rule Engine Matches ⚡</span>
                 <span style={{ fontWeight: 'bold' }}>{emails.filter(e => e.categorySource === 'RULE').length}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.8rem' }}>
-                <span>Groq AI Fallback Matches</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.82rem' }}>
+                <span>Groq AI Inference 🤖</span>
                 <span style={{ fontWeight: 'bold' }}>{emails.filter(e => e.categorySource === 'GROQ_AI').length}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                <span>User Feedback Overrides</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                <span>User Manual Assignments 👤</span>
                 <span style={{ fontWeight: 'bold' }}>{emails.filter(e => e.categorySource === 'USER_MANUAL').length}</span>
               </div>
             </div>
@@ -401,12 +418,12 @@ export function App() {
         {/* Visual Rule Builder Tab */}
         {activeTab === 'rules' && (
           <div>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', marginBottom: '16px' }}>Visual Rule Builder</h3>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', marginBottom: '16px' }}>Visual Rule Builder ⚙️</h3>
 
-            <form onSubmit={handleCreateRule} style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '20px' }}>
+            <form onSubmit={handleCreateRule} style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '20px', boxShadow: 'var(--shadow-sm)' }}>
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Target Field</label>
-                <select value={ruleField} onChange={(e: any) => setRuleField(e.target.value)} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', borderRadius: '6px' }}>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Target Field</label>
+                <select value={ruleField} onChange={(e: any) => setRuleField(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-muted)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', fontWeight: '500' }}>
                   <option value="subject">Email Subject</option>
                   <option value="sender">Sender Email</option>
                   <option value="body">Email Body Text</option>
@@ -414,23 +431,23 @@ export function App() {
               </div>
 
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Condition Operator</label>
-                <select value={ruleOperator} onChange={(e: any) => setRuleOperator(e.target.value)} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', borderRadius: '6px' }}>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Condition Operator</label>
+                <select value={ruleOperator} onChange={(e: any) => setRuleOperator(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-muted)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', fontWeight: '500' }}>
                   <option value="contains">Contains Keyword</option>
                   <option value="equals">Exact Equals</option>
                   <option value="startsWith">Starts With</option>
-                  <option value="regex">Regex Expression</option>
+                  <option value="regex">Regex Pattern</option>
                 </select>
               </div>
 
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Value to Match</label>
-                <input type="text" value={ruleValue} onChange={(e) => setRuleValue(e.target.value)} placeholder="e.g. Invoice, Security, AWS" style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', borderRadius: '6px' }} />
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Value to Match</label>
+                <input type="text" value={ruleValue} onChange={(e) => setRuleValue(e.target.value)} placeholder="e.g. Invoice, Security, Amazon" style={{ width: '100%', padding: '10px', background: 'var(--bg-muted)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', fontWeight: '500' }} />
               </div>
 
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Assign Category</label>
-                <select value={ruleCategory} onChange={(e) => setRuleCategory(e.target.value)} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: '#fff', borderRadius: '6px' }}>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Assign Category</label>
+                <select value={ruleCategory} onChange={(e) => setRuleCategory(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-muted)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', fontWeight: '500' }}>
                   {categories.filter(c => c._id !== 'c0').map((c) => (
                     <option key={c._id} value={c._id}>{c.name}</option>
                   ))}
@@ -442,12 +459,12 @@ export function App() {
               </button>
             </form>
 
-            <h4 style={{ fontSize: '0.9rem', marginBottom: '12px', color: 'var(--text-muted)' }}>Active Classification Rules</h4>
+            <h4 style={{ fontSize: '0.85rem', marginBottom: '10px', color: 'var(--text-muted)' }}>Active Classification Rules</h4>
             {userRules.map((r) => (
-              <div key={r.id} style={{ background: 'var(--bg-card)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div key={r.id} style={{ background: 'var(--bg-card)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--border-color)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-sm)' }}>
                 <div>
                   <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{r.name}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--accent-blue)' }}>{r.condition}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', fontWeight: '500' }}>{r.condition}</div>
                 </div>
                 <Tag size={16} color="var(--accent-emerald)" />
               </div>
@@ -457,11 +474,13 @@ export function App() {
 
         {/* LLM JSON Export Tab */}
         {activeTab === 'export' && (
-          <div style={{ textAlign: 'center', padding: '20px 10px' }}>
-            <Download size={48} color="var(--accent-blue)" style={{ marginBottom: '16px' }} />
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.3rem', marginBottom: '8px' }}>LLM-Ready Context Exporter</h3>
+          <div style={{ textAlign: 'center', padding: '24px 12px' }}>
+            <div style={{ width: '64px', height: '64px', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 16px auto', color: 'var(--accent-indigo)' }}>
+              <Download size={28} />
+            </div>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.3rem', marginBottom: '8px' }}>LLM Context Exporter 📦</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '24px', lineHeight: '1.5' }}>
-              Export all stored emails, extracted JSON payloads, categorization lineage logs, Groq AI scores, and rules as a single self-contained JSON file for direct analysis in external LLMs.
+              Export all stored email records, extracted key-value payloads, Groq AI inference scores, and custom rules as a structured JSON file ready for direct input into external LLMs.
             </p>
 
             <button onClick={handleExportLLMContext} className="btn-primary" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', margin: '0 auto', maxWidth: '280px' }}>
@@ -471,22 +490,22 @@ export function App() {
         )}
       </div>
 
-      {/* Email Detail Modal */}
+      {/* Email Payload Inspection Modal */}
       {selectedEmail && (
         <div className="modal-overlay" onClick={() => setSelectedEmail(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
               <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem' }}>{selectedEmail.subject}</h3>
-              <button onClick={() => setSelectedEmail(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setSelectedEmail(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
             </div>
 
-            <div style={{ fontSize: '0.8rem', color: 'var(--accent-blue)', marginBottom: '12px' }}>From: {selectedEmail.sender}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--accent-indigo)', fontWeight: '600', marginBottom: '12px' }}>From: {selectedEmail.sender}</div>
 
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-              <span className="category-chip" style={{ background: selectedEmail.categoryId?.colorCode || '#3B82F6' }}>
+              <span className="category-chip" style={{ background: selectedEmail.categoryId?.colorCode || '#2563EB' }}>
                 {selectedEmail.categoryId?.name || 'General'}
               </span>
-              <span style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', color: 'var(--text-muted)' }}>
+              <span style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '12px', background: 'var(--bg-muted)', color: 'var(--text-muted)', fontWeight: '600' }}>
                 Source: {selectedEmail.categorySource}
               </span>
             </div>
@@ -496,12 +515,12 @@ export function App() {
               {JSON.stringify(selectedEmail.parsedJson, null, 2)}
             </div>
 
-            <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Raw Body Snippet</h4>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-main)', background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '8px', marginBottom: '20px', lineHeight: '1.4' }}>
+            <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Raw Email Snippet</h4>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-main)', background: 'var(--bg-muted)', padding: '12px', borderRadius: '8px', marginBottom: '20px', lineHeight: '1.4' }}>
               {selectedEmail.rawTextBody}
             </div>
 
-            <button onClick={() => setIsReassignModalOpen(true)} className="btn-primary" style={{ background: 'var(--bg-glass)', border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)' }}>
+            <button onClick={() => setIsReassignModalOpen(true)} className="btn-primary">
               Re-assign Category & Auto-Train Rule
             </button>
           </div>
@@ -512,7 +531,7 @@ export function App() {
       {isReassignModalOpen && selectedEmail && (
         <div className="modal-overlay" onClick={() => setIsReassignModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', marginBottom: '12px' }}>Re-assign Category</h3>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', marginBottom: '10px' }}>Re-assign Category</h3>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '16px' }}>Select a target category. Re-assigning automatically creates a new matching rule in MongoDB.</p>
 
             {categories.filter(c => c._id !== 'c0').map((cat) => (
@@ -522,10 +541,11 @@ export function App() {
                 style={{
                   width: '100%',
                   padding: '12px',
-                  borderRadius: '8px',
-                  background: 'var(--bg-card)',
+                  borderRadius: '10px',
+                  background: 'var(--bg-muted)',
                   border: '1px solid var(--border-color)',
-                  color: '#fff',
+                  color: 'var(--text-main)',
+                  fontWeight: '600',
                   textAlign: 'left',
                   marginBottom: '8px',
                   display: 'flex',

@@ -21,7 +21,13 @@ app.use('/api', apiRouter);
 
 // Health check endpoint
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'Lekka Backend API', timestamp: new Date() });
+  const isMongoConnected = mongoose.connection.readyState === 1;
+  res.json({
+    status: 'ok',
+    service: 'Lekka Backend API',
+    databaseConnected: isMongoConnected,
+    timestamp: new Date()
+  });
 });
 
 async function seedInitialCategoriesAndRules() {
@@ -40,7 +46,6 @@ async function seedInitialCategoriesAndRules() {
       const inserted = await CategoryModel.insertMany(defaultCategories);
       console.log(`[Seed] Seeded ${inserted.length} categories.`);
 
-      // Seed initial matching rules
       const invoicesCat = inserted.find((c) => c.slug === 'invoices-receipts');
       const alertsCat = inserted.find((c) => c.slug === 'alerts-security');
 
@@ -68,20 +73,20 @@ async function seedInitialCategoriesAndRules() {
 async function startServer() {
   try {
     console.log('[Database] Connecting to MongoDB...');
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
     console.log('[Database] Connected to MongoDB successfully.');
-
     await seedInitialCategoriesAndRules();
-
-    // Start background cron scheduler
-    CronService.initCronJobs();
-
-    app.listen(PORT, () => {
-      console.log(`[Server] Lekka backend API running on port ${PORT}`);
-    });
-  } catch (error) {
-    console.error('[Server] Failed to start backend server:', error);
+  } catch (error: any) {
+    console.warn('[Database] MongoDB connection warning:', error.message || error);
+    console.warn('[Database] Backend will run API endpoints with local fallback mode until DB credentials are provided.');
   }
+
+  // Start background cron scheduler
+  CronService.initCronJobs();
+
+  app.listen(PORT, () => {
+    console.log(`[Server] Lekka backend API running on port ${PORT}`);
+  });
 }
 
 startServer();
