@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { EmailController } from '../controllers/emailController.js';
-import { CategoryController } from '../controllers/categoryController.js';
-import { RuleController } from '../controllers/ruleController.js';
-import { AnalyticsController } from '../controllers/analyticsController.js';
-import { ExportController } from '../controllers/exportController.js';
-import { IngestController } from '../controllers/ingestController.js';
+import { EmailController } from '../controllers/emailController';
+import { CategoryController } from '../controllers/categoryController';
+import { RuleController } from '../controllers/ruleController';
+import { AnalyticsController } from '../controllers/analyticsController';
+import { ExportController } from '../controllers/exportController';
+import { IngestController } from '../controllers/ingestController';
 
 const router = Router();
 

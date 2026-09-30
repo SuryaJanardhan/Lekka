@@ -1,5 +1,5 @@
 import Groq from 'groq-sdk';
-import { CategoryModel } from '../models/Category.js';
+import { CategoryModel } from '../models/Category';
 
 export interface AICategorizationResult {
   categoryName: string;

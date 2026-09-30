@@ -2,10 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
-import apiRouter from './routes/api.js';
-import { CronService } from './services/cronService.js';
-import { CategoryModel } from './models/Category.js';
-import { RuleModel } from './models/Rule.js';
+import apiRouter from './routes/api';
+import { CronService } from './services/cronService';
+import { CategoryModel } from './models/Category';
+import { RuleModel } from './models/Rule';
 
 dotenv.config();
 

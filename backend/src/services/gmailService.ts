@@ -1,11 +1,11 @@
 import { ImapFlow } from 'imapflow';
 import { simpleParser, ParsedMail } from 'mailparser';
 import { google } from 'googleapis';
-import { EmailModel } from '../models/Email.js';
-import { RuleEngine } from './ruleEngine.js';
-import { GroqService } from './groqService.js';
-import { CategoryModel } from '../models/Category.js';
-import { ParserService } from './parserService.js';
+import { EmailModel } from '../models/Email';
+import { RuleEngine } from './ruleEngine';
+import { GroqService } from './groqService';
+import { CategoryModel } from '../models/Category';
+import { ParserService } from './parserService';
 
 export interface IngestionResult {
   totalProcessed: number;
