@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { EmailModel } from '../models/Email.js';
-import { CategoryModel } from '../models/Category.js';
-import { RuleEngine } from '../services/ruleEngine.js';
+import { EmailModel } from '../models/Email';
+import { CategoryModel } from '../models/Category';
+import { RuleEngine } from '../services/ruleEngine';
 import { Types } from 'mongoose';
 
 export class EmailController {
@@ -58,7 +58,6 @@ export class EmailController {
       email.reviewStatus = 'APPROVED';
       await email.save();
 
-      // Trigger automatic rule generation from user feedback if requested
       if (createAutoRule !== false) {
         await RuleEngine.autoGenerateRuleFromUserFeedback(
           email.subject,

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { GmailService } from '../services/gmailService.js';
+import { GmailService } from '../services/gmailService';
 
 export class IngestController {
   public static async triggerManualIngestion(_req: Request, res: Response) {

@@ -1,6 +1,6 @@
-import { EmailModel } from '../models/Email.js';
-import { CategoryModel } from '../models/Category.js';
-import { RuleModel } from '../models/Rule.js';
+import { EmailModel } from '../models/Email';
+import { CategoryModel } from '../models/Category';
+import { RuleModel } from '../models/Rule';
 
 export interface LLMExportBundle {
   exportMetadata: {

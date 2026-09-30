@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { ExportService } from '../services/exportService.js';
+import { ExportService } from '../services/exportService';
 
 export class ExportController {
   public static async getLLMContextBundle(_req: Request, res: Response) {

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { EmailModel } from '../models/Email.js';
-import { CategoryModel } from '../models/Category.js';
+import { EmailModel } from '../models/Email';
+import { CategoryModel } from '../models/Category';
 
 export class AnalyticsController {
   public static async getDashboardStats(_req: Request, res: Response) {
@@ -11,7 +11,6 @@ export class AnalyticsController {
       const aiCategorized = await EmailModel.countDocuments({ categorySource: 'GROQ_AI' });
       const userCategorized = await EmailModel.countDocuments({ categorySource: 'USER_MANUAL' });
 
-      // Category breakdown aggregation
       const categoryBreakdown = await EmailModel.aggregate([
         {
           $group: {
@@ -39,7 +38,6 @@ export class AnalyticsController {
         }
       ]);
 
-      // Financial totals extraction from parsed JSON payloads
       const amountAggregation = await EmailModel.aggregate([
         {
           $match: { 'parsedJson.detectedAmount': { $exists: true, $ne: null } }

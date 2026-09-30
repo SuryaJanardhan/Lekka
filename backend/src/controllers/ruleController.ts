@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { RuleModel } from '../models/Rule.js';
+import { RuleModel } from '../models/Rule';
 
 export class RuleController {
   public static async getRules(_req: Request, res: Response) {
