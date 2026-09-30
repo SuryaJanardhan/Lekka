@@ -5,8 +5,12 @@ import { RuleController } from '../controllers/ruleController';
 import { AnalyticsController } from '../controllers/analyticsController';
 import { ExportController } from '../controllers/exportController';
 import { IngestController } from '../controllers/ingestController';
+import { secureApiMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
+
+// Apply cryptographic API secret middleware to all /api routes
+router.use(secureApiMiddleware);
 
 // Email routes
 router.get('/emails', EmailController.getEmails);
