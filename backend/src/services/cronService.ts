@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { GmailService } from './gmailService.js';
+import { GmailService } from './gmailService';
 
 export class CronService {
   public static initCronJobs() {

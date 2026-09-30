@@ -1,5 +1,5 @@
-import { RuleModel, IRule } from '../models/Rule.js';
-import { CategoryModel } from '../models/Category.js';
+import { RuleModel, IRule } from '../models/Rule';
+import { CategoryModel } from '../models/Category';
 import { Types } from 'mongoose';
 
 export class RuleEngine {
@@ -52,7 +52,6 @@ export class RuleEngine {
     sender: string,
     categoryId: Types.ObjectId
   ): Promise<IRule> {
-    // Extract key distinguishing word from subject or sender
     const cleanSubject = subject.replace(/re:|fw:|fwd:/gi, '').trim();
     const words = cleanSubject.split(/\s+/).filter((w) => w.length > 3);
     const primaryKeyword = words[0] || sender.split('@')[0] || 'mail';
