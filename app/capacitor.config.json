@@ -1,0 +1,8 @@
+{
+  "appId": "com.lekka.app",
+  "appName": "Lekka",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
