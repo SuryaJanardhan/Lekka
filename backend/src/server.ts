@@ -13,7 +13,6 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/lekka_db';
 
-// Enable open CORS for mobile devices, emulators, and Expo clients
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -35,6 +34,10 @@ app.get('/health', (_req, res) => {
     databaseConnected: isMongoConnected,
     timestamp: new Date()
   });
+});
+
+app.get('/', (_req, res) => {
+  res.json({ status: 'ok', service: 'Lekka API Serverless Entry Point' });
 });
 
 async function seedInitialCategoriesAndRules() {
@@ -77,23 +80,36 @@ async function seedInitialCategoriesAndRules() {
   }
 }
 
-async function startServer() {
+// Database Connection Helper for Serverless
+let isDbConnecting = false;
+export async function connectDatabase() {
+  if (mongoose.connection.readyState === 1 || isDbConnecting) return;
+  isDbConnecting = true;
   try {
-    console.log('[Database] Connecting to MongoDB...');
+    console.log('[Database] Connecting to MongoDB Atlas...');
     await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
-    console.log('[Database] Connected to MongoDB successfully.');
+    console.log('[Database] Connected to MongoDB Atlas.');
     await seedInitialCategoriesAndRules();
-  } catch (error: any) {
-    console.warn('[Database] MongoDB connection warning:', error.message || error);
-    console.warn('[Database] Backend will run API endpoints with fallback data until DB credentials are validated.');
+  } catch (err: any) {
+    console.warn('[Database] Connection warning:', err.message || err);
+  } finally {
+    isDbConnecting = false;
   }
+}
 
-  // Start background cron scheduler
-  CronService.initCronJobs();
+// Middleware for serverless request DB connection
+app.use(async (_req, _res, next) => {
+  await connectDatabase();
+  next();
+});
 
-  app.listen(PORT, () => {
-    console.log(`[Server] Lekka backend API running on port ${PORT}`);
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  connectDatabase().then(() => {
+    CronService.initCronJobs();
+    app.listen(PORT, () => {
+      console.log(`[Server] Lekka backend API running on port ${PORT}`);
+    });
   });
 }
 
-startServer();
+export default app;
