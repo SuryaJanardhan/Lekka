@@ -13,8 +13,15 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/lekka_db';
 
-app.use(cors());
-app.use(express.json());
+// Enable open CORS for mobile devices, emulators, and Expo clients
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // API route middleware
 app.use('/api', apiRouter);
@@ -36,10 +43,10 @@ async function seedInitialCategoriesAndRules() {
     if (categoryCount === 0) {
       console.log('[Seed] Seeding initial categories into MongoDB...');
       const defaultCategories = [
-        { name: 'Invoices & Receipts', slug: 'invoices-receipts', colorCode: '#10B981', createdSource: 'SYSTEM' },
-        { name: 'Alerts & Security', slug: 'alerts-security', colorCode: '#EF4444', createdSource: 'SYSTEM' },
-        { name: 'Orders & Delivery', slug: 'orders-delivery', colorCode: '#3B82F6', createdSource: 'SYSTEM' },
-        { name: 'Financial Statements', slug: 'financial-statements', colorCode: '#8B5CF6', createdSource: 'SYSTEM' },
+        { name: 'Invoices & Receipts', slug: 'invoices-receipts', colorCode: '#059669', createdSource: 'SYSTEM' },
+        { name: 'Alerts & Security', slug: 'alerts-security', colorCode: '#DC2626', createdSource: 'SYSTEM' },
+        { name: 'Orders & Delivery', slug: 'orders-delivery', colorCode: '#D97706', createdSource: 'SYSTEM' },
+        { name: 'Financial Statements', slug: 'financial-statements', colorCode: '#7C3AED', createdSource: 'SYSTEM' },
         { name: 'General', slug: 'general', colorCode: '#6B7280', createdSource: 'SYSTEM' }
       ];
 
@@ -78,7 +85,7 @@ async function startServer() {
     await seedInitialCategoriesAndRules();
   } catch (error: any) {
     console.warn('[Database] MongoDB connection warning:', error.message || error);
-    console.warn('[Database] Backend will run API endpoints with local fallback mode until DB credentials are provided.');
+    console.warn('[Database] Backend will run API endpoints with fallback data until DB credentials are validated.');
   }
 
   // Start background cron scheduler
