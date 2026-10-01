@@ -8,19 +8,19 @@ Lekka is an Android-focused application built with React Native (TypeScript), No
 
 ```mermaid
 graph TD
-    A[Gmail API - OAuth2] -->|Daily Cron Job post 12 PM| B[Node.js Ingestion Worker]
-    B -->|RFC 822 Message-ID Check| C{Already Ingested?}
-    C -->|Yes| D[Skip Duplicate]
-    C -->|No| E[HTML & Tesseract OCR Parser]
-    E --> F[Rule Engine Matching]
-    F -->|Match Found| G[MongoDB Cluster Persistence]
-    F -->|No Match| H[Groq AI Classifier API]
-    H -->|Categorized| G
-    H -->|Low Confidence| I[Review Queue + Push Notification]
-    G <-->|REST API Sync| J[React Native Android App]
-    J <-->|PIN / Biometrics Auth| K[MMKV Local Cache]
-    J -->|User Assigns Category| L[Auto-Generate Keyword Rule]
-    J -->|Export Command| M[LLM-Ready Context JSON]
+    A["Gmail API - OAuth2"] -->|"Daily Sync post 12 PM"| B["Node.js Ingestion Worker"]
+    B -->|"RFC 822 Message-ID Check"| C{"Already Ingested?"}
+    C -->|"Yes"| D["Skip Duplicate"]
+    C -->|"No"| E["HTML & Tesseract OCR Parser"]
+    E --> F["Rule Engine Matching"]
+    F -->|"Match Found"| G["MongoDB Cluster Persistence"]
+    F -->|"No Match"| H["Groq AI Classifier API"]
+    H -->|"Categorized"| G
+    H -->|"Low Confidence"| I["Review Queue + Push Notification"]
+    G <-->|"REST API Sync"| J["React Native Android App"]
+    J <-->|"PIN / Biometrics Auth"| K["MMKV Local Cache"]
+    J -->|"User Assigns Category"| L["Auto-Generate Keyword Rule"]
+    J -->|"Export Command"| M["LLM-Ready Context JSON"]
 ```
 
 ---
@@ -36,6 +36,7 @@ graph TD
 * **Analytics & Financial Dashboard**: Aggregates financial totals, monthly volume trends, category breakdowns, and AI accuracy metrics.
 * **Visual Rule Builder**: Drag-and-drop / condition builder allowing users to create custom pattern matching rules.
 * **LLM-Ready Context Exporter**: Produces a self-contained, structured JSON bundle containing categorization history, lineage logs, and parsed payloads ready for external LLMs.
+* **Mobile Remote Control**: Supports optional Tailscale SSH integration and system monitoring for on-demand remote access.
 
 ---
 
@@ -44,7 +45,7 @@ graph TD
 | Layer | Technology | Purpose |
 | :--- | :--- | :--- |
 | Mobile Frontend | React Native / Vite (TypeScript) | Android mobile application interface |
-| Security | PIN & Biometric Authorization | Device-level data encryption & lock |
+| Security | PIN & Biometric Authorization | Device-level data encryption & lock screen |
 | Local Mobile Storage | MMKV Key-Value Cache | High-performance offline data caching |
 | Backend Service | Node.js (TypeScript + Express) | API server, ingestion worker, and parser pipeline |
 | Primary Database | MongoDB Cluster | Document persistence for emails, categories, and rules |
@@ -52,6 +53,7 @@ graph TD
 | OCR Parser | Tesseract.js | Text extraction from invoice and receipt image attachments |
 | Scheduler | `node-cron` | Execution trigger for daily post-12 PM sync |
 | Containerization | Docker & Docker Compose | Containerized service deployment |
+| Remote Management | Tailscale SSH & Systemd Monitor | On-demand secure remote control and battery alerts |
 
 ---
 
@@ -74,6 +76,7 @@ Lekka/
 │   │   ├── App.tsx           # React app with PIN lock, category tabs, dashboard, rule builder
 │   │   ├── index.css         # Glassmorphism dark mode CSS design system
 │   │   └── types.ts          # Frontend TypeScript interfaces
+│   ├── android/              # Native Android Gradle configuration & Expo React Native wrappers
 │   ├── Dockerfile            # Multi-stage Docker container served via Nginx
 │   └── package.json
 ├── docker-compose.yml        # Orchestration for MongoDB, backend, and app
@@ -118,7 +121,15 @@ Lekka/
    npm run dev
    ```
 
-### Option B: Docker Compose Deployment
+### Option B: Mobile APK Preview Build
+
+To trigger an Android APK cloud preview build via Expo Application Services (EAS):
+```bash
+cd app
+npx eas-cli build -p android --profile preview
+```
+
+### Option C: Docker Compose Deployment
 
 Run the complete stack (MongoDB 7, Backend Service, and Frontend Application) in isolated containers:
 

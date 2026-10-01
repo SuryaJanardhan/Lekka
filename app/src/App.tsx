@@ -338,37 +338,39 @@ export function App() {
     return (
       <div className="app-viewport">
         <div className="lock-screen">
-          <div className="lock-icon-wrapper">
-            <Lock size={40} />
-          </div>
-          <h2 style={{ fontFamily: 'var(--font-logo)', fontSize: '1.85rem', fontWeight: '700', marginBottom: '4px', letterSpacing: '-1.2px', background: 'linear-gradient(135deg, #047857, #10B981)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Lekka Wallet
-          </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', marginBottom: '20px' }}>Enter 4-digit PIN to unlock</p>
+          <div className="lock-card-container">
+            <div className="lock-icon-wrapper">
+              <Lock size={36} />
+            </div>
+            <h2 style={{ fontFamily: 'var(--font-logo)', fontSize: '1.75rem', fontWeight: '700', marginBottom: '4px', letterSpacing: '-1.2px', background: 'linear-gradient(135deg, #047857, #10B981)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              Lekka Wallet
+            </h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '16px' }}>Enter 4-digit PIN to unlock</p>
 
-          <div className={`pin-display ${isShaking ? 'shake' : ''}`}>
-            {[0, 1, 2, 3].map((idx) => (
-              <div key={idx} className={`pin-dot ${pin.length > idx ? 'filled' : ''}`} />
-            ))}
-          </div>
+            <div className={`pin-display ${isShaking ? 'shake' : ''}`}>
+              {[0, 1, 2, 3].map((idx) => (
+                <div key={idx} className={`pin-dot ${pin.length > idx ? 'filled' : ''}`} />
+              ))}
+            </div>
 
-          <div className="keypad-grid">
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'BIO', '0', 'DEL'].map((val) => (
-              <button key={val} className="keypad-btn" onClick={() => handleKeypadPress(val)}>
-                {val === 'BIO' ? (
-                  <Fingerprint size={28} color={isBiometricEnabled ? 'var(--accent-emerald)' : '#94A3B8'} />
-                ) : val === 'DEL' ? (
-                  '←'
-                ) : (
-                  val
-                )}
-              </button>
-            ))}
-          </div>
+            <div className="keypad-grid">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'BIO', '0', 'DEL'].map((val) => (
+                <button key={val} className="keypad-btn" onClick={() => handleKeypadPress(val)}>
+                  {val === 'BIO' ? (
+                    <Fingerprint size={26} color={isBiometricEnabled ? 'var(--accent-emerald)' : '#94A3B8'} />
+                  ) : val === 'DEL' ? (
+                    '←'
+                  ) : (
+                    val
+                  )}
+                </button>
+              ))}
+            </div>
 
-          <p style={{ marginTop: '24px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-            Default PIN: {savedPin} | Biometrics: {isBiometricEnabled ? 'Enabled' : 'Disabled'}
-          </p>
+            <p style={{ marginTop: '20px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Default PIN: {savedPin} | Biometrics: {isBiometricEnabled ? 'Enabled' : 'Disabled'}
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -843,7 +845,7 @@ export function App() {
               Classification Rules
             </h3>
 
-            <form onSubmit={handleCreateRule} style={{ background: 'var(--bg-card)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '20px', boxShadow: 'var(--shadow-sm)', width: '100%', boxSizing: 'border-box' }}>
+            <form onSubmit={handleCreateRule} className="rules-form-card">
               <div className="form-group">
                 <label className="form-label">Target Field</label>
                 <select className="form-select" value={ruleField} onChange={(e: any) => setRuleField(e.target.value)}>
@@ -886,7 +888,7 @@ export function App() {
               Active Classification Rules ({userRules.length})
             </h4>
             {userRules.map((r) => (
-              <div key={r.id} style={{ background: 'var(--bg-card)', padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-sm)', width: '100%', boxSizing: 'border-box' }}>
+              <div key={r.id} className="rule-item-card">
                 <div>
                   <div style={{ fontWeight: '700', fontSize: '0.92rem' }}>{r.name}</div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--accent-emerald)', fontWeight: '600' }}>{r.condition}</div>
