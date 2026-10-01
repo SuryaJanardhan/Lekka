@@ -320,7 +320,7 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 28px 20px; /* Perfectly fills screen width */
+  padding: 24px 16px;
   text-align: center;
   background: #FFFFFF;
 }
@@ -368,15 +368,16 @@ body {
 .keypad-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 14px;
   width: 100%;
-  max-width: 320px;
+  max-width: 100%;
+  padding: 0 12px;
   box-sizing: border-box;
 }
 
 .keypad-btn {
-  width: 72px;
-  height: 72px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
   background: var(--bg-muted);
   border: 1px solid var(--border-color);
