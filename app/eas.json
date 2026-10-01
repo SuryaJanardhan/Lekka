@@ -9,14 +9,12 @@
     },
     "preview": {
       "distribution": "internal",
-      "image": "latest",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
       "distribution": "internal",
-      "image": "latest",
       "android": {
         "buildType": "apk"
       }
