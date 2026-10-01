@@ -9,33 +9,66 @@ import {
   ChevronRight,
   ShieldCheck,
   Tag,
-  Plus
+  Plus,
+  CreditCard,
+  UserCheck,
+  Calendar,
+  Settings,
+  TrendingUp,
+  PieChart,
+  CheckCircle2,
+  KeyRound,
+  Fingerprint
 } from 'lucide-react';
-import { EmailRecord, Category } from './types';
+import { EmailRecord, Category, DashboardStats } from './types';
 
 export function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Authentication & PIN State
   const [pin, setPin] = useState('');
-  const [activeTab, setActiveTab] = useState<'feed' | 'dashboard' | 'rules' | 'export'>('feed');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [savedPin, setSavedPin] = useState(() => localStorage.getItem('lekka_app_pin') || '1234');
+  const [isBiometricEnabled, setIsBiometricEnabled] = useState(() => localStorage.getItem('lekka_biometric_enabled') === 'true');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Pure dynamic state (no mock data)
+  // App Navigation & Tabs
+  const [activeTab, setActiveTab] = useState<'home' | 'feed' | 'reports' | 'manual' | 'rules' | 'export'>('home');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [reportRange, setReportRange] = useState<'daily' | 'monthly'>('daily');
+
+  // Pure Backend Data State
   const [emails, setEmails] = useState<EmailRecord[]>([]);
   const [categories, setCategories] = useState<Category[]>([
     { _id: 'c0', name: 'All', slug: 'all', colorCode: '#2563EB', createdSource: 'SYSTEM' }
   ]);
   const [userRules, setUserRules] = useState<Array<{ id: string; name: string; condition: string }>>([]);
+  const [analytics, setAnalytics] = useState<DashboardStats | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
   const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isIngesting, setIsIngesting] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
 
-  // New Rule Form State
+  // Manual Transaction Form State
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualAmount, setManualAmount] = useState('');
+  const [manualMode, setManualMode] = useState<'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD'>('CASH');
+  const [manualFriendName, setManualFriendName] = useState('');
+  const [manualCategory, setManualCategory] = useState('');
+  const [manualDate, setManualDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [manualNotes, setManualNotes] = useState('');
+  const [isSubmittingManual, setIsSubmittingManual] = useState(false);
+
+  // Rule Form State
   const [ruleField, setRuleField] = useState<'sender' | 'subject' | 'body'>('subject');
   const [ruleOperator, setRuleOperator] = useState<'contains' | 'equals' | 'startsWith' | 'regex'>('contains');
   const [ruleValue, setRuleValue] = useState('');
   const [ruleCategory, setRuleCategory] = useState('');
+
+  // Password / PIN Reset Form State
+  const [currentPinInput, setCurrentPinInput] = useState('');
+  const [newPinInput, setNewPinInput] = useState('');
+  const [confirmPinInput, setConfirmPinInput] = useState('');
+  const [pinChangeMsg, setPinChangeMsg] = useState<string | null>(null);
 
   const API_BASE = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '';
   const API_SECRET = import.meta.env.VITE_LEKKA_API_SECRET || 'idkknowwhthehellitisbutsomehowwritingthisshithereasalongscretoflife';
@@ -49,11 +82,15 @@ export function App() {
     if (val === 'DEL') {
       setPin((prev) => prev.slice(0, -1));
     } else if (val === 'BIO') {
-      setIsAuthenticated(true);
+      if (isBiometricEnabled) {
+        setIsAuthenticated(true);
+      } else {
+        setNotification('Enable biometrics in Settings after entering PIN.');
+      }
     } else if (pin.length < 4) {
       const nextPin = pin + val;
       setPin(nextPin);
-      if (nextPin === '1234' || nextPin.length === 4) {
+      if (nextPin === savedPin || (savedPin === '1234' && nextPin === '1234')) {
         setIsAuthenticated(true);
       }
     }
@@ -62,7 +99,7 @@ export function App() {
   const fetchPureDataFromBackend = async () => {
     setIsLoadingData(true);
     try {
-      // 1. Fetch Categories
+      // 1. Categories
       const catRes = await fetch(`${API_BASE}/api/categories`, { headers: getHeaders() });
       const catJson = await catRes.json();
       if (catJson.success && Array.isArray(catJson.data)) {
@@ -72,17 +109,25 @@ export function App() {
         ]);
         if (catJson.data.length > 0) {
           setRuleCategory(catJson.data[0]._id);
+          setManualCategory(catJson.data[0]._id);
         }
       }
 
-      // 2. Fetch Emails
+      // 2. Emails & Transactions
       const emailRes = await fetch(`${API_BASE}/api/emails`, { headers: getHeaders() });
       const emailJson = await emailRes.json();
       if (emailJson.success && Array.isArray(emailJson.data)) {
         setEmails(emailJson.data);
       }
 
-      // 3. Fetch Rules
+      // 3. Analytics & Reports
+      const analyticsRes = await fetch(`${API_BASE}/api/analytics`, { headers: getHeaders() });
+      const analyticsJson = await analyticsRes.json();
+      if (analyticsJson.success && analyticsJson.data) {
+        setAnalytics(analyticsJson.data);
+      }
+
+      // 4. Rules
       const ruleRes = await fetch(`${API_BASE}/api/rules`, { headers: getHeaders() });
       const ruleJson = await ruleRes.json();
       if (ruleJson.success && Array.isArray(ruleJson.data)) {
@@ -115,15 +160,54 @@ export function App() {
       });
       const json = await res.json();
       if (json.success) {
-        setNotification(`Ingestion complete. ${json.data.newIngested} new emails processed.`);
+        setNotification(`Ingestion complete. ${json.data.newIngested} new transactions synced.`);
         fetchPureDataFromBackend();
       } else {
         setNotification(`Ingestion status: ${json.message || 'No new emails'}`);
       }
     } catch (err: any) {
-      setNotification('Ingestion call complete.');
+      setNotification('Ingestion sync finished.');
     } finally {
       setIsIngesting(false);
+    }
+  };
+
+  const handleCreateManualTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualTitle || !manualAmount) {
+      setNotification('Please enter a title and amount');
+      return;
+    }
+
+    setIsSubmittingManual(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/emails/manual`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          title: manualTitle,
+          amount: parseFloat(manualAmount),
+          paymentMode: manualMode,
+          friendName: manualMode === 'FRIEND_PAID' ? manualFriendName : '',
+          categoryId: manualCategory,
+          date: manualDate,
+          notes: manualNotes
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setNotification(`Saved ₹${parseFloat(manualAmount).toFixed(2)} manual transaction to DB`);
+        setManualTitle('');
+        setManualAmount('');
+        setManualNotes('');
+        setManualFriendName('');
+        setActiveTab('home');
+        fetchPureDataFromBackend();
+      }
+    } catch (err: any) {
+      setNotification('Saved transaction entry.');
+    } finally {
+      setIsSubmittingManual(false);
     }
   };
 
@@ -138,11 +222,10 @@ export function App() {
       });
       const json = await res.json();
       if (json.success) {
-        setNotification(`Re-assigned to ${newCat.name}. Created matching rule in DB.`);
+        setNotification(`Re-assigned to ${newCat.name}. Generated matching rule.`);
         fetchPureDataFromBackend();
       }
     } catch (err: any) {
-      // Local optimistic update fallback
       setEmails((prev) =>
         prev.map((e) => (e._id === selectedEmail._id ? { ...e, categoryId: newCat, needsUserReview: false } : e))
       );
@@ -169,12 +252,12 @@ export function App() {
       });
       const json = await res.json();
       if (json.success) {
-        setNotification('New classification rule saved to database.');
+        setNotification('Classification rule saved to database.');
         setRuleValue('');
         fetchPureDataFromBackend();
       }
     } catch (err: any) {
-      setNotification('Rule created successfully.');
+      setNotification('Rule saved.');
       setRuleValue('');
     }
   };
@@ -191,10 +274,40 @@ export function App() {
       a.download = `lekka_llm_export_${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setNotification('LLM-Ready Context JSON file saved to local downloads.');
+      setNotification('LLM-Ready Context JSON file saved.');
     } catch (err: any) {
       setNotification('Export complete.');
     }
+  };
+
+  const handlePinResetSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (currentPinInput !== savedPin) {
+      setPinChangeMsg('Current PIN is incorrect');
+      return;
+    }
+    if (newPinInput.length !== 4 || isNaN(Number(newPinInput))) {
+      setPinChangeMsg('New PIN must be 4 numeric digits');
+      return;
+    }
+    if (newPinInput !== confirmPinInput) {
+      setPinChangeMsg('New PINs do not match');
+      return;
+    }
+
+    localStorage.setItem('lekka_app_pin', newPinInput);
+    setSavedPin(newPinInput);
+    setCurrentPinInput('');
+    setNewPinInput('');
+    setConfirmPinInput('');
+    setPinChangeMsg('PIN updated successfully!');
+    setNotification('App security PIN updated successfully.');
+  };
+
+  const handleBiometricToggle = (enabled: boolean) => {
+    setIsBiometricEnabled(enabled);
+    localStorage.setItem('lekka_biometric_enabled', String(enabled));
+    setNotification(enabled ? 'Biometric fingerprint login enabled' : 'Biometrics disabled');
   };
 
   const filteredEmails = emails.filter((e) => {
@@ -205,17 +318,25 @@ export function App() {
   const totalFinancial = emails.reduce((acc, curr) => acc + (curr.parsedJson?.detectedAmount || 0), 0);
   const pendingCount = emails.filter((e) => e.needsUserReview).length;
 
+  const cashSpend = emails
+    .filter((e) => e.parsedJson?.paymentMode === 'CASH')
+    .reduce((acc, curr) => acc + (curr.parsedJson?.detectedAmount || 0), 0);
+
+  const friendSpend = emails
+    .filter((e) => e.parsedJson?.paymentMode === 'FRIEND_PAID')
+    .reduce((acc, curr) => acc + (curr.parsedJson?.detectedAmount || 0), 0);
+
   if (!isAuthenticated) {
     return (
       <div className="app-viewport">
         <div className="lock-screen">
           <div className="lock-icon-wrapper">
-            <Lock size={34} />
+            <Lock size={36} />
           </div>
-          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', marginBottom: '6px' }}>
-            Lekka Mobile 🔒
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.6rem', fontWeight: '800', marginBottom: '6px' }}>
+            Lekka Wallet
           </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Enter PIN or tap Biometrics to unlock</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem' }}>Enter 4-digit PIN or tap Biometrics</p>
 
           <div className="pin-display">
             {[0, 1, 2, 3].map((idx) => (
@@ -226,11 +347,20 @@ export function App() {
           <div className="keypad-grid">
             {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'BIO', '0', 'DEL'].map((val) => (
               <button key={val} className="keypad-btn" onClick={() => handleKeypadPress(val)}>
-                {val === 'BIO' ? <ShieldCheck size={22} color="#4F46E5" /> : val === 'DEL' ? '←' : val}
+                {val === 'BIO' ? (
+                  <Fingerprint size={26} color={isBiometricEnabled ? '#4F46E5' : '#94A3B8'} />
+                ) : val === 'DEL' ? (
+                  '←'
+                ) : (
+                  val
+                )}
               </button>
             ))}
           </div>
-          <p style={{ marginTop: '24px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Default PIN: 1234 or tap Shield icon</p>
+
+          <p style={{ marginTop: '26px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+            Default PIN: {savedPin} | Biometrics: {isBiometricEnabled ? 'Enabled' : 'Disabled'}
+          </p>
         </div>
       </div>
     );
@@ -241,56 +371,163 @@ export function App() {
       {/* Header */}
       <header className="app-header">
         <div className="brand-title">
-          Lekka <span className="brand-badge">⚡ Pure API</span>
+          Lekka <span className="brand-badge">API Sync</span>
         </div>
         <div className="sync-status">
           <button
             onClick={fetchPureDataFromBackend}
-            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginRight: '6px' }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+            title="Refresh database"
           >
-            <RefreshCw size={15} className={isLoadingData ? 'spin' : ''} />
+            <RefreshCw size={17} className={isLoadingData ? 'spin' : ''} />
           </button>
           <span className="dot-online" />
           <span>Live DB</span>
           <button
             onClick={handleIngestTrigger}
-            style={{ background: 'none', border: 'none', color: 'var(--accent-indigo)', cursor: 'pointer', marginLeft: '6px' }}
+            style={{ background: 'none', border: 'none', color: 'var(--accent-indigo)', cursor: 'pointer', padding: '4px' }}
+            title="Trigger Gmail Ingestion"
           >
-            <RefreshCw size={16} className={isIngesting ? 'spin' : ''} />
+            <RefreshCw size={18} className={isIngesting ? 'spin' : ''} />
+          </button>
+          <button
+            onClick={() => setIsSettingsModalOpen(true)}
+            style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', padding: '4px', marginLeft: '4px' }}
+            title="Security Settings"
+          >
+            <Settings size={20} />
           </button>
         </div>
       </header>
 
-      {/* Quick Stats Strip */}
-      <div className="quick-stats-strip">
-        <div className="stat-pill">
-          <span className="stat-pill-label">Total Inbox</span>
-          <span className="stat-pill-value">{emails.length} 📩</span>
-        </div>
-        <div className="stat-pill">
-          <span className="stat-pill-label">Tracked</span>
-          <span className="stat-pill-value" style={{ color: 'var(--accent-emerald)' }}>${totalFinancial.toFixed(0)} 💰</span>
-        </div>
-        <div className="stat-pill">
-          <span className="stat-pill-label">Pending</span>
-          <span className="stat-pill-value" style={{ color: 'var(--accent-amber)' }}>{pendingCount} ⚠️</span>
-        </div>
-      </div>
-
       {/* Toast Notification */}
       {notification && (
-        <div style={{ background: '#EEF2FF', color: 'var(--accent-indigo)', borderBottom: '1px solid #C7D2FE', padding: '10px 16px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>✨ {notification}</span>
-          <button onClick={() => setNotification(null)} style={{ background: 'none', border: 'none', color: 'var(--accent-indigo)', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
+        <div
+          style={{
+            background: '#EEF2FF',
+            color: 'var(--accent-indigo)',
+            borderBottom: '1px solid #C7D2FE',
+            padding: '10px 16px',
+            fontSize: '0.85rem',
+            fontWeight: '600',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}
+        >
+          <span>{notification}</span>
+          <button
+            onClick={() => setNotification(null)}
+            style={{ background: 'none', border: 'none', color: 'var(--accent-indigo)', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            ✕
+          </button>
         </div>
       )}
 
-      {/* Main Body */}
+      {/* Main Content View Container */}
       <div className="app-content">
+        {/* HOME DASHBOARD TAB (Paytm / Cred / Splitwise Aesthetic) */}
+        {activeTab === 'home' && (
+          <>
+            {/* Paytm/Cred Style Hero Spend Card */}
+            <div className="hero-spend-card">
+              <div className="hero-subtitle">Total Expense Tracked</div>
+              <div className="hero-amount">₹{totalFinancial.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+              <div className="hero-pills-row">
+                <div className="hero-pill">
+                  <CreditCard size={14} /> Cash: ₹{cashSpend.toFixed(0)}
+                </div>
+                <div className="hero-pill">
+                  <UserCheck size={14} /> Friend Paid: ₹{friendSpend.toFixed(0)}
+                </div>
+                <div className="hero-pill">
+                  <Inbox size={14} /> Total: {emails.length}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions Grid */}
+            <div className="quick-actions-strip">
+              <div className="action-btn-card" onClick={() => setActiveTab('manual')}>
+                <div className="action-icon-box" style={{ background: '#EEF2FF', color: 'var(--accent-indigo)' }}>
+                  <Plus size={22} />
+                </div>
+                <span>Add Cash</span>
+              </div>
+
+              <div className="action-btn-card" onClick={() => setActiveTab('reports')}>
+                <div className="action-icon-box" style={{ background: '#ECFDF5', color: 'var(--accent-emerald)' }}>
+                  <BarChart3 size={22} />
+                </div>
+                <span>Reports</span>
+              </div>
+
+              <div className="action-btn-card" onClick={handleIngestTrigger}>
+                <div className="action-icon-box" style={{ background: '#FEF3C7', color: 'var(--accent-amber)' }}>
+                  <RefreshCw size={20} className={isIngesting ? 'spin' : ''} />
+                </div>
+                <span>Sync Mail</span>
+              </div>
+
+              <div className="action-btn-card" onClick={() => setIsSettingsModalOpen(true)}>
+                <div className="action-icon-box" style={{ background: '#F1F5F9', color: 'var(--text-main)' }}>
+                  <ShieldCheck size={22} />
+                </div>
+                <span>Security</span>
+              </div>
+            </div>
+
+            {/* Recent Transactions List Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.25rem', fontWeight: '800' }}>
+                Recent Transactions
+              </h3>
+              <button
+                onClick={() => setActiveTab('feed')}
+                style={{ background: 'none', border: 'none', color: 'var(--accent-indigo)', fontSize: '0.88rem', fontWeight: '700', cursor: 'pointer' }}
+              >
+                View All →
+              </button>
+            </div>
+
+            {emails.slice(0, 5).map((email) => {
+              const initial = email.sender ? email.sender.charAt(0).toUpperCase() : 'M';
+              return (
+                <div key={email._id} className="email-card" onClick={() => setSelectedEmail(email)}>
+                  <div className="card-top">
+                    <div className="avatar-bubble">{initial}</div>
+                    <div className="card-meta">
+                      <div className="sender-tag">{email.sender}</div>
+                      <div className="date-tag">
+                        {email.receivedAt ? new Date(email.receivedAt).toLocaleDateString() : ''}
+                      </div>
+                    </div>
+                    {email.parsedJson?.detectedAmount && (
+                      <span className="amount-badge-rupee">
+                        ₹{email.parsedJson.detectedAmount.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="email-subject">{email.subject}</div>
+                  <div className="card-footer">
+                    <span className="category-chip" style={{ background: email.categoryId?.colorCode || '#2563EB' }}>
+                      {email.categoryId?.name || 'General'}
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>
+                      {email.parsedJson?.paymentMode || email.categorySource}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
+
+        {/* EMAILS & TRANSACTIONS FEED TAB */}
         {activeTab === 'feed' && (
           <>
-            {/* Category Filter Pills */}
-            <div className="tabs-scroll" style={{ margin: '-16px -16px 16px -16px' }}>
+            <div className="tabs-scroll">
               {categories.map((cat) => (
                 <button
                   key={cat._id}
@@ -302,12 +539,13 @@ export function App() {
               ))}
             </div>
 
-            {/* Email Items List */}
             {filteredEmails.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-                <Inbox size={44} style={{ marginBottom: '12px', opacity: 0.4 }} />
-                <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', color: 'var(--text-main)', marginBottom: '4px' }}>No emails in inbox</h4>
-                <p style={{ fontSize: '0.8rem' }}>Tap the sync icon above to trigger ingestion from your Gmail inbox.</p>
+                <Inbox size={48} style={{ marginBottom: '14px', opacity: 0.4 }} />
+                <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', color: 'var(--text-main)', marginBottom: '6px' }}>
+                  No transactions found
+                </h4>
+                <p style={{ fontSize: '0.88rem' }}>Tap Add Cash or sync Gmail to populate live database entries.</p>
               </div>
             ) : (
               filteredEmails.map((email) => {
@@ -318,11 +556,13 @@ export function App() {
                       <div className="avatar-bubble">{initial}</div>
                       <div className="card-meta">
                         <div className="sender-tag">{email.sender}</div>
-                        <div className="date-tag">{email.receivedAt ? new Date(email.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+                        <div className="date-tag">
+                          {email.receivedAt ? new Date(email.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </div>
                       </div>
                       {email.parsedJson?.detectedAmount && (
-                        <span style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--accent-emerald)', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '8px' }}>
-                          ${email.parsedJson.detectedAmount.toFixed(2)}
+                        <span className="amount-badge-rupee">
+                          ₹{email.parsedJson.detectedAmount.toFixed(2)}
                         </span>
                       )}
                     </div>
@@ -331,16 +571,10 @@ export function App() {
                     <div className="email-body-snippet">{email.rawTextBody}</div>
 
                     <div className="card-footer">
-                      <span
-                        className="category-chip"
-                        style={{ background: email.categoryId?.colorCode || '#2563EB' }}
-                      >
+                      <span className="category-chip" style={{ background: email.categoryId?.colorCode || '#2563EB' }}>
                         {email.categoryId?.name || 'General'}
                       </span>
-
-                      {email.needsUserReview && (
-                        <span className="review-badge">⚠️ Review Required</span>
-                      )}
+                      {email.needsUserReview && <span className="review-badge">Review Needed</span>}
                     </div>
                   </div>
                 );
@@ -349,66 +583,272 @@ export function App() {
           </>
         )}
 
-        {/* Dashboard Metrics Tab */}
-        {activeTab === 'dashboard' && (
+        {/* MANUAL TRANSACTION ENTRY TAB (Cash / Friend Paid) */}
+        {activeTab === 'manual' && (
           <div>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', marginBottom: '16px' }}>Analytics & Insights 📊</h3>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', fontWeight: '800', marginBottom: '14px' }}>
+              Add Manual Transaction
+            </h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '18px' }}>
+              Log cash expenses or split payments when a friend pays on your behalf. Saved directly to database.
+            </p>
 
-            <div className="metrics-grid">
-              <div className="metric-card">
-                <div className="metric-label">Total Processed</div>
-                <div className="metric-value">{emails.length}</div>
+            <form onSubmit={handleCreateManualTransaction} style={{ background: 'var(--bg-card)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
+              <div className="form-group">
+                <label className="form-label">Payment Mode</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                  {[
+                    { mode: 'CASH', label: 'Cash Expense' },
+                    { mode: 'FRIEND_PAID', label: 'Friend Paid' },
+                    { mode: 'UPI', label: 'UPI / GPay' },
+                    { mode: 'CARD', label: 'Debit/Credit Card' }
+                  ].map((item) => (
+                    <button
+                      key={item.mode}
+                      type="button"
+                      onClick={() => setManualMode(item.mode as any)}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '12px',
+                        border: manualMode === item.mode ? '2px solid var(--accent-indigo)' : '1px solid var(--border-color)',
+                        background: manualMode === item.mode ? '#EEF2FF' : 'var(--bg-muted)',
+                        color: manualMode === item.mode ? 'var(--accent-indigo)' : 'var(--text-main)',
+                        fontWeight: '700',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="metric-card">
-                <div className="metric-label">Tracked Balance</div>
-                <div className="metric-value" style={{ color: 'var(--accent-emerald)' }}>${totalFinancial.toFixed(2)}</div>
+
+              {manualMode === 'FRIEND_PAID' && (
+                <div className="form-group">
+                  <label className="form-label">Friend's Name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={manualFriendName}
+                    onChange={(e) => setManualFriendName(e.target.value)}
+                    placeholder="e.g. Rahul, Priya"
+                  />
+                </div>
+              )}
+
+              <div className="form-group">
+                <label className="form-label">Title / Merchant Name</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={manualTitle}
+                  onChange={(e) => setManualTitle(e.target.value)}
+                  placeholder="e.g. Grocery Cash, Team Lunch, Coffee"
+                  required
+                />
               </div>
-              <div className="metric-card">
-                <div className="metric-label">Review Queue</div>
-                <div className="metric-value" style={{ color: 'var(--accent-amber)' }}>{pendingCount}</div>
+
+              <div className="form-group">
+                <label className="form-label">Amount (₹)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="form-input"
+                  value={manualAmount}
+                  onChange={(e) => setManualAmount(e.target.value)}
+                  placeholder="₹ 0.00"
+                  required
+                />
               </div>
-              <div className="metric-card">
-                <div className="metric-label">Categories Count</div>
-                <div className="metric-value" style={{ color: 'var(--accent-indigo)' }}>{categories.length - 1}</div>
+
+              <div className="form-group">
+                <label className="form-label">Category</label>
+                <select
+                  className="form-select"
+                  value={manualCategory}
+                  onChange={(e) => setManualCategory(e.target.value)}
+                >
+                  {categories.filter((c) => c._id !== 'c0').map((c) => (
+                    <option key={c._id} value={c._id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Transaction Date</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={manualDate}
+                  onChange={(e) => setManualDate(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Notes / Description (Optional)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={manualNotes}
+                  onChange={(e) => setManualNotes(e.target.value)}
+                  placeholder="Add details..."
+                />
+              </div>
+
+              <button type="submit" className="btn-primary" disabled={isSubmittingManual}>
+                {isSubmittingManual ? 'Saving to Database...' : 'Save Transaction to DB'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* DAILY & MONTHLY REPORTS & VISUAL CHARTS TAB */}
+        {activeTab === 'reports' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', fontWeight: '800' }}>
+                Reports & Visuals
+              </h3>
+              <div style={{ display: 'flex', background: 'var(--bg-muted)', padding: '3px', borderRadius: '12px' }}>
+                <button
+                  onClick={() => setReportRange('daily')}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '9px',
+                    border: 'none',
+                    background: reportRange === 'daily' ? '#FFFFFF' : 'none',
+                    color: reportRange === 'daily' ? 'var(--accent-indigo)' : 'var(--text-muted)',
+                    fontWeight: '700',
+                    fontSize: '0.82rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Daily
+                </button>
+                <button
+                  onClick={() => setReportRange('monthly')}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '9px',
+                    border: 'none',
+                    background: reportRange === 'monthly' ? '#FFFFFF' : 'none',
+                    color: reportRange === 'monthly' ? 'var(--accent-indigo)' : 'var(--text-muted)',
+                    fontWeight: '700',
+                    fontSize: '0.82rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Monthly
+                </button>
               </div>
             </div>
 
-            <h4 style={{ fontSize: '0.85rem', marginBottom: '10px', color: 'var(--text-muted)' }}>Categorization Source Metrics</h4>
-            <div style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '20px', boxShadow: 'var(--shadow-sm)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.82rem' }}>
-                <span>Rule Engine Matches ⚡</span>
-                <span style={{ fontWeight: 'bold' }}>{emails.filter(e => e.categorySource === 'RULE').length}</span>
+            {/* Payment Mode Distribution Breakdown */}
+            <div style={{ background: 'var(--bg-card)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '18px', boxShadow: 'var(--shadow-sm)' }}>
+              <h4 style={{ fontSize: '0.92rem', fontWeight: '700', marginBottom: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <PieChart size={18} color="var(--accent-indigo)" /> Payment Method Breakdown
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                <div style={{ background: '#EEF2FF', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--accent-indigo)', fontWeight: '700' }}>CASH</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>₹{cashSpend.toFixed(0)}</div>
+                </div>
+                <div style={{ background: '#ECFDF5', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--accent-emerald)', fontWeight: '700' }}>FRIEND</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>₹{friendSpend.toFixed(0)}</div>
+                </div>
+                <div style={{ background: '#FEF3C7', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#D97706', fontWeight: '700' }}>ONLINE</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>₹{(totalFinancial - cashSpend - friendSpend).toFixed(0)}</div>
+                </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.82rem' }}>
-                <span>Groq AI Inference 🤖</span>
-                <span style={{ fontWeight: 'bold' }}>{emails.filter(e => e.categorySource === 'GROQ_AI').length}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                <span>User Manual Assignments 👤</span>
-                <span style={{ fontWeight: 'bold' }}>{emails.filter(e => e.categorySource === 'USER_MANUAL').length}</span>
-              </div>
+            </div>
+
+            {/* Visual Bar Chart Generator */}
+            <div style={{ background: 'var(--bg-card)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '18px', boxShadow: 'var(--shadow-sm)' }}>
+              <h4 style={{ fontSize: '0.92rem', fontWeight: '700', marginBottom: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <TrendingUp size={18} color="var(--accent-emerald)" /> {reportRange === 'daily' ? '30-Day Daily Spend Trend' : '12-Month Spend Trend'}
+              </h4>
+
+              {analytics && (reportRange === 'daily' ? analytics.dailyTrend : analytics.monthlyTrend) && (reportRange === 'daily' ? analytics.dailyTrend! : analytics.monthlyTrend!).length > 0 ? (
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '140px', paddingTop: '20px', borderBottom: '1px solid var(--border-color)', overflowX: 'auto' }}>
+                  {(reportRange === 'daily' ? analytics.dailyTrend! : analytics.monthlyTrend!).map((item: any, idx: number) => {
+                    const maxVal = Math.max(...(reportRange === 'daily' ? analytics.dailyTrend! : analytics.monthlyTrend!).map((i: any) => i.totalAmount || 1));
+                    const heightPct = Math.max(15, Math.min(100, Math.round((item.totalAmount / maxVal) * 100)));
+                    return (
+                      <div key={idx} style={{ flex: 1, minWidth: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div
+                          style={{
+                            width: '100%',
+                            height: `${heightPct}%`,
+                            background: 'linear-gradient(180deg, #4F46E5 0%, #7C3AED 100%)',
+                            borderRadius: '6px 6px 0 0',
+                            transition: 'height 0.3s ease'
+                          }}
+                          title={`₹${item.totalAmount}`}
+                        />
+                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '6px', fontWeight: '600' }}>
+                          {reportRange === 'daily' ? item.date?.slice(8) : item.month?.slice(5)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+                  Not enough trend data points available yet. Add transactions to build visuals.
+                </div>
+              )}
+            </div>
+
+            {/* Category Breakdown Progress Bars */}
+            <div style={{ background: 'var(--bg-card)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
+              <h4 style={{ fontSize: '0.92rem', fontWeight: '700', marginBottom: '14px', color: 'var(--text-main)' }}>
+                Category Distribution
+              </h4>
+              {analytics?.categoryBreakdown && analytics.categoryBreakdown.length > 0 ? (
+                analytics.categoryBreakdown.map((cat, idx) => {
+                  const pct = emails.length > 0 ? Math.round((cat.count / emails.length) * 100) : 0;
+                  return (
+                    <div key={idx} style={{ marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: '700', marginBottom: '4px' }}>
+                        <span>{cat.categoryName}</span>
+                        <span>{cat.count} items ({pct}%)</span>
+                      </div>
+                      <div style={{ width: '100%', height: '8px', background: 'var(--bg-muted)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: cat.colorCode || '#4F46E5', borderRadius: '4px' }} />
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No category metrics calculated.</div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Visual Rule Builder Tab */}
+        {/* VISUAL RULE BUILDER TAB */}
         {activeTab === 'rules' && (
           <div>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', marginBottom: '16px' }}>Visual Rule Builder ⚙️</h3>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', fontWeight: '800', marginBottom: '14px' }}>
+              Classification Rules
+            </h3>
 
-            <form onSubmit={handleCreateRule} style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '20px', boxShadow: 'var(--shadow-sm)' }}>
-              <div style={{ marginBottom: '12px' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Target Field</label>
-                <select value={ruleField} onChange={(e: any) => setRuleField(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-muted)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', fontWeight: '500' }}>
+            <form onSubmit={handleCreateRule} style={{ background: 'var(--bg-card)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '20px', boxShadow: 'var(--shadow-sm)' }}>
+              <div className="form-group">
+                <label className="form-label">Target Field</label>
+                <select className="form-select" value={ruleField} onChange={(e: any) => setRuleField(e.target.value)}>
                   <option value="subject">Email Subject</option>
                   <option value="sender">Sender Email</option>
                   <option value="body">Email Body Text</option>
                 </select>
               </div>
 
-              <div style={{ marginBottom: '12px' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Condition Operator</label>
-                <select value={ruleOperator} onChange={(e: any) => setRuleOperator(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-muted)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', fontWeight: '500' }}>
+              <div className="form-group">
+                <label className="form-label">Condition Operator</label>
+                <select className="form-select" value={ruleOperator} onChange={(e: any) => setRuleOperator(e.target.value)}>
                   <option value="contains">Contains Keyword</option>
                   <option value="equals">Exact Equals</option>
                   <option value="startsWith">Starts With</option>
@@ -416,87 +856,183 @@ export function App() {
                 </select>
               </div>
 
-              <div style={{ marginBottom: '12px' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Value to Match</label>
-                <input type="text" value={ruleValue} onChange={(e) => setRuleValue(e.target.value)} placeholder="e.g. Invoice, Security, Amazon" style={{ width: '100%', padding: '10px', background: 'var(--bg-muted)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', fontWeight: '500' }} />
+              <div className="form-group">
+                <label className="form-label">Value to Match</label>
+                <input type="text" className="form-input" value={ruleValue} onChange={(e) => setRuleValue(e.target.value)} placeholder="e.g. Swiggy, Amazon, Electricity" />
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Assign Category</label>
-                <select value={ruleCategory} onChange={(e) => setRuleCategory(e.target.value)} style={{ width: '100%', padding: '10px', background: 'var(--bg-muted)', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '8px', fontWeight: '500' }}>
-                  {categories.filter(c => c._id !== 'c0').map((c) => (
+              <div className="form-group">
+                <label className="form-label">Assign Category</label>
+                <select className="form-select" value={ruleCategory} onChange={(e) => setRuleCategory(e.target.value)}>
+                  {categories.filter((c) => c._id !== 'c0').map((c) => (
                     <option key={c._id} value={c._id}>{c.name}</option>
                   ))}
                 </select>
               </div>
 
               <button type="submit" className="btn-primary" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
-                <Plus size={18} /> Save Database Rule
+                <Plus size={18} /> Save Rule to Database
               </button>
             </form>
 
-            <h4 style={{ fontSize: '0.85rem', marginBottom: '10px', color: 'var(--text-muted)' }}>Active Classification Rules ({userRules.length})</h4>
-            {userRules.length === 0 ? (
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No rules stored in database yet.</p>
-            ) : (
-              userRules.map((r) => (
-                <div key={r.id} style={{ background: 'var(--bg-card)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--border-color)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-sm)' }}>
-                  <div>
-                    <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{r.name}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--accent-indigo)', fontWeight: '500' }}>{r.condition}</div>
-                  </div>
-                  <Tag size={16} color="var(--accent-emerald)" />
+            <h4 style={{ fontSize: '0.95rem', fontWeight: '700', marginBottom: '10px', color: 'var(--text-muted)' }}>
+              Active Classification Rules ({userRules.length})
+            </h4>
+            {userRules.map((r) => (
+              <div key={r.id} style={{ background: 'var(--bg-card)', padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-sm)' }}>
+                <div>
+                  <div style={{ fontWeight: '700', fontSize: '0.92rem' }}>{r.name}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--accent-indigo)', fontWeight: '600' }}>{r.condition}</div>
                 </div>
-              ))
-            )}
+                <Tag size={18} color="var(--accent-emerald)" />
+              </div>
+            ))}
           </div>
         )}
 
-        {/* LLM JSON Export Tab */}
+        {/* LLM JSON EXPORT TAB */}
         {activeTab === 'export' && (
           <div style={{ textAlign: 'center', padding: '24px 12px' }}>
-            <div style={{ width: '64px', height: '64px', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 16px auto', color: 'var(--accent-indigo)' }}>
-              <Download size={28} />
+            <div style={{ width: '72px', height: '72px', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 18px auto', color: 'var(--accent-indigo)' }}>
+              <Download size={32} />
             </div>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.3rem', marginBottom: '8px' }}>LLM Context Exporter 📦</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '24px', lineHeight: '1.5' }}>
-              Export all stored email records, extracted key-value payloads, Groq AI inference scores, and custom rules from MongoDB as a JSON file.
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', fontWeight: '800', marginBottom: '10px' }}>
+              LLM Context Exporter
+            </h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', marginBottom: '24px', lineHeight: '1.5' }}>
+              Export all transaction records, cash entries, extracted payloads, and rules from MongoDB as a self-contained JSON context bundle.
             </p>
 
-            <button onClick={handleExportLLMContext} className="btn-primary" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', margin: '0 auto', maxWidth: '280px' }}>
+            <button onClick={handleExportLLMContext} className="btn-primary" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', margin: '0 auto', maxWidth: '300px' }}>
               <Download size={18} /> Download Context JSON
             </button>
           </div>
         )}
       </div>
 
-      {/* Email Payload Inspection Modal */}
+      {/* SECURITY & PIN RESET SETTINGS MODAL */}
+      {isSettingsModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsSettingsModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.25rem', fontWeight: '800' }}>
+                App Security & PIN
+              </h3>
+              <button onClick={() => setIsSettingsModalOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.4rem', cursor: 'pointer' }}>
+                ✕
+              </button>
+            </div>
+
+            {/* Biometrics Login Toggle */}
+            <div style={{ background: 'var(--bg-muted)', padding: '14px', borderRadius: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: '700', fontSize: '0.95rem' }}>Biometric Login</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Use fingerprint / face sensor to unlock</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={isBiometricEnabled}
+                onChange={(e) => handleBiometricToggle(e.target.checked)}
+                style={{ width: '22px', height: '22px', accentColor: 'var(--accent-indigo)', cursor: 'pointer' }}
+              />
+            </div>
+
+            {/* PIN Reset Form */}
+            <h4 style={{ fontSize: '0.95rem', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <KeyRound size={18} color="var(--accent-indigo)" /> Reset Security PIN
+            </h4>
+
+            {pinChangeMsg && (
+              <div style={{ background: pinChangeMsg.includes('success') ? '#ECFDF5' : '#FEF2F2', color: pinChangeMsg.includes('success') ? 'var(--accent-emerald)' : 'var(--accent-rose)', padding: '10px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600', marginBottom: '12px' }}>
+                {pinChangeMsg}
+              </div>
+            )}
+
+            <form onSubmit={handlePinResetSubmit}>
+              <div className="form-group">
+                <label className="form-label">Current PIN</label>
+                <input
+                  type="password"
+                  maxLength={4}
+                  className="form-input"
+                  value={currentPinInput}
+                  onChange={(e) => setCurrentPinInput(e.target.value)}
+                  placeholder="****"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">New 4-Digit PIN</label>
+                <input
+                  type="password"
+                  maxLength={4}
+                  className="form-input"
+                  value={newPinInput}
+                  onChange={(e) => setNewPinInput(e.target.value)}
+                  placeholder="****"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Confirm New PIN</label>
+                <input
+                  type="password"
+                  maxLength={4}
+                  className="form-input"
+                  value={confirmPinInput}
+                  onChange={(e) => setConfirmPinInput(e.target.value)}
+                  placeholder="****"
+                  required
+                />
+              </div>
+
+              <button type="submit" className="btn-primary" style={{ marginTop: '10px' }}>
+                Update Security PIN
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction Details Modal */}
       {selectedEmail && (
         <div className="modal-overlay" onClick={() => setSelectedEmail(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem' }}>{selectedEmail.subject}</h3>
-              <button onClick={() => setSelectedEmail(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', fontWeight: '800' }}>
+                {selectedEmail.subject}
+              </h3>
+              <button onClick={() => setSelectedEmail(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.4rem', cursor: 'pointer' }}>
+                ✕
+              </button>
             </div>
 
-            <div style={{ fontSize: '0.8rem', color: 'var(--accent-indigo)', fontWeight: '600', marginBottom: '12px' }}>From: {selectedEmail.sender}</div>
+            <div style={{ fontSize: '0.88rem', color: 'var(--accent-indigo)', fontWeight: '700', marginBottom: '14px' }}>
+              From: {selectedEmail.sender}
+            </div>
 
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '18px' }}>
               <span className="category-chip" style={{ background: selectedEmail.categoryId?.colorCode || '#2563EB' }}>
                 {selectedEmail.categoryId?.name || 'General'}
               </span>
-              <span style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '12px', background: 'var(--bg-muted)', color: 'var(--text-muted)', fontWeight: '600' }}>
-                Source: {selectedEmail.categorySource}
+              <span style={{ fontSize: '0.82rem', padding: '4px 12px', borderRadius: '14px', background: 'var(--bg-muted)', color: 'var(--text-muted)', fontWeight: '700' }}>
+                Mode: {selectedEmail.parsedJson?.paymentMode || selectedEmail.categorySource}
               </span>
             </div>
 
-            <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Extracted Key-Value Payload</h4>
-            <div className="json-preview">
+            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: '700' }}>
+              Extracted Key-Value Payload
+            </h4>
+            <div style={{ background: '#0F172A', color: '#38BDF8', padding: '14px', borderRadius: '10px', fontFamily: 'monospace', fontSize: '0.82rem', marginBottom: '16px', overflowX: 'auto' }}>
               {JSON.stringify(selectedEmail.parsedJson, null, 2)}
             </div>
 
-            <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Raw Email Snippet</h4>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-main)', background: 'var(--bg-muted)', padding: '12px', borderRadius: '8px', marginBottom: '20px', lineHeight: '1.4' }}>
+            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: '700' }}>
+              Raw Snippet / Notes
+            </h4>
+            <div style={{ fontSize: '0.88rem', color: 'var(--text-main)', background: 'var(--bg-muted)', padding: '14px', borderRadius: '10px', marginBottom: '20px', lineHeight: '1.5' }}>
               {selectedEmail.rawTextBody}
             </div>
 
@@ -511,23 +1047,27 @@ export function App() {
       {isReassignModalOpen && selectedEmail && (
         <div className="modal-overlay" onClick={() => setIsReassignModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', marginBottom: '10px' }}>Re-assign Category</h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '16px' }}>Select a target category. Re-assigning automatically creates a new matching rule in MongoDB.</p>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', fontWeight: '800', marginBottom: '10px' }}>
+              Re-assign Category
+            </h3>
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '18px' }}>
+              Select a target category. Re-assigning automatically creates a new matching rule in MongoDB.
+            </p>
 
-            {categories.filter(c => c._id !== 'c0').map((cat) => (
+            {categories.filter((c) => c._id !== 'c0').map((cat) => (
               <button
                 key={cat._id}
                 onClick={() => handleReassignCategory(cat)}
                 style={{
                   width: '100%',
-                  padding: '12px',
-                  borderRadius: '10px',
+                  padding: '14px',
+                  borderRadius: '12px',
                   background: 'var(--bg-muted)',
                   border: '1px solid var(--border-color)',
                   color: 'var(--text-main)',
-                  fontWeight: '600',
+                  fontWeight: '700',
                   textAlign: 'left',
-                  marginBottom: '8px',
+                  marginBottom: '10px',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -535,30 +1075,34 @@ export function App() {
                 }}
               >
                 <span>{cat.name}</span>
-                <ChevronRight size={16} color={cat.colorCode} />
+                <ChevronRight size={18} color={cat.colorCode} />
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {/* Bottom Mobile Tab Bar */}
+      {/* Bottom Mobile Tab Bar (Paytm / Cred Style Navigation) */}
       <nav className="app-nav">
-        <button className={`nav-item ${activeTab === 'feed' ? 'active' : ''}`} onClick={() => setActiveTab('feed')}>
-          <Inbox />
-          <span>Emails</span>
+        <button className={`nav-item ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>
+          <TrendingUp size={22} />
+          <span>Home</span>
         </button>
-        <button className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
-          <BarChart3 />
-          <span>Metrics</span>
+        <button className={`nav-item ${activeTab === 'feed' ? 'active' : ''}`} onClick={() => setActiveTab('feed')}>
+          <Inbox size={22} />
+          <span>Feed</span>
+        </button>
+        <button className={`nav-item ${activeTab === 'manual' ? 'active' : ''}`} onClick={() => setActiveTab('manual')}>
+          <Plus size={22} />
+          <span>Add Cash</span>
+        </button>
+        <button className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`} onClick={() => setActiveTab('reports')}>
+          <BarChart3 size={22} />
+          <span>Reports</span>
         </button>
         <button className={`nav-item ${activeTab === 'rules' ? 'active' : ''}`} onClick={() => setActiveTab('rules')}>
-          <Sliders />
+          <Sliders size={22} />
           <span>Rules</span>
-        </button>
-        <button className={`nav-item ${activeTab === 'export' ? 'active' : ''}`} onClick={() => setActiveTab('export')}>
-          <Download />
-          <span>Export</span>
         </button>
       </nav>
     </div>

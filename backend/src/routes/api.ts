@@ -14,6 +14,7 @@ router.use(secureApiMiddleware);
 
 // Email routes
 router.get('/emails', EmailController.getEmails);
+router.post('/emails/manual', EmailController.createManualTransaction);
 router.get('/emails/:id', EmailController.getEmailById);
 router.post('/emails/:emailId/category', EmailController.assignCategory);
 

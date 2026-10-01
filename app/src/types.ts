@@ -53,4 +53,19 @@ export interface DashboardStats {
     colorCode: string;
     count: number;
   }>;
+  paymentModeBreakdown?: Array<{
+    mode: string;
+    totalAmount: number;
+    count: number;
+  }>;
+  dailyTrend?: Array<{
+    date: string;
+    totalAmount: number;
+    count: number;
+  }>;
+  monthlyTrend?: Array<{
+    month: string;
+    totalAmount: number;
+    count: number;
+  }>;
 }
