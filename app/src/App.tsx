@@ -12,11 +12,9 @@ import {
   Plus,
   CreditCard,
   UserCheck,
-  Calendar,
   Settings,
   TrendingUp,
   PieChart,
-  CheckCircle2,
   KeyRound,
   Fingerprint
 } from 'lucide-react';
@@ -37,7 +35,7 @@ export function App() {
   // Pure Backend Data State
   const [emails, setEmails] = useState<EmailRecord[]>([]);
   const [categories, setCategories] = useState<Category[]>([
-    { _id: 'c0', name: 'All', slug: 'all', colorCode: '#2563EB', createdSource: 'SYSTEM' }
+    { _id: 'c0', name: 'All', slug: 'all', colorCode: '#059669', createdSource: 'SYSTEM' }
   ]);
   const [userRules, setUserRules] = useState<Array<{ id: string; name: string; condition: string }>>([]);
   const [analytics, setAnalytics] = useState<DashboardStats | null>(null);
@@ -104,7 +102,7 @@ export function App() {
       const catJson = await catRes.json();
       if (catJson.success && Array.isArray(catJson.data)) {
         setCategories([
-          { _id: 'c0', name: 'All', slug: 'all', colorCode: '#2563EB', createdSource: 'SYSTEM' },
+          { _id: 'c0', name: 'All', slug: 'all', colorCode: '#059669', createdSource: 'SYSTEM' },
           ...catJson.data
         ]);
         if (catJson.data.length > 0) {
@@ -331,12 +329,12 @@ export function App() {
       <div className="app-viewport">
         <div className="lock-screen">
           <div className="lock-icon-wrapper">
-            <Lock size={36} />
+            <Lock size={38} />
           </div>
-          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.6rem', fontWeight: '800', marginBottom: '6px' }}>
+          <h2 style={{ fontFamily: 'var(--font-brand)', fontSize: '1.7rem', fontWeight: '800', marginBottom: '6px' }}>
             Lekka Wallet
           </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem' }}>Enter 4-digit PIN or tap Biometrics</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem' }}>Enter 4-digit PIN to unlock</p>
 
           <div className="pin-display">
             {[0, 1, 2, 3].map((idx) => (
@@ -348,7 +346,7 @@ export function App() {
             {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'BIO', '0', 'DEL'].map((val) => (
               <button key={val} className="keypad-btn" onClick={() => handleKeypadPress(val)}>
                 {val === 'BIO' ? (
-                  <Fingerprint size={26} color={isBiometricEnabled ? '#4F46E5' : '#94A3B8'} />
+                  <Fingerprint size={26} color={isBiometricEnabled ? 'var(--accent-emerald)' : '#94A3B8'} />
                 ) : val === 'DEL' ? (
                   '←'
                 ) : (
@@ -368,34 +366,32 @@ export function App() {
 
   return (
     <div className="app-viewport">
-      {/* Header */}
+      {/* Consumer Friendly Header */}
       <header className="app-header">
         <div className="brand-title">
-          Lekka <span className="brand-badge">API Sync</span>
+          Lekka <span className="brand-badge-friendly">Smart Ledger</span>
         </div>
-        <div className="sync-status">
+        <div className="header-actions">
           <button
+            className="icon-circle-btn"
             onClick={fetchPureDataFromBackend}
-            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
-            title="Refresh database"
+            title="Refresh transactions"
           >
             <RefreshCw size={17} className={isLoadingData ? 'spin' : ''} />
           </button>
-          <span className="dot-online" />
-          <span>Live DB</span>
           <button
+            className="icon-circle-btn"
             onClick={handleIngestTrigger}
-            style={{ background: 'none', border: 'none', color: 'var(--accent-indigo)', cursor: 'pointer', padding: '4px' }}
-            title="Trigger Gmail Ingestion"
+            title="Sync email transactions"
           >
-            <RefreshCw size={18} className={isIngesting ? 'spin' : ''} />
+            <RefreshCw size={17} color="var(--accent-emerald)" className={isIngesting ? 'spin' : ''} />
           </button>
           <button
+            className="icon-circle-btn"
             onClick={() => setIsSettingsModalOpen(true)}
-            style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', padding: '4px', marginLeft: '4px' }}
-            title="Security Settings"
+            title="App Security Settings"
           >
-            <Settings size={20} />
+            <Settings size={18} />
           </button>
         </div>
       </header>
@@ -404,9 +400,9 @@ export function App() {
       {notification && (
         <div
           style={{
-            background: '#EEF2FF',
-            color: 'var(--accent-indigo)',
-            borderBottom: '1px solid #C7D2FE',
+            background: '#ECFDF5',
+            color: 'var(--accent-dark-green)',
+            borderBottom: '1px solid #A7F3D0',
             padding: '10px 16px',
             fontSize: '0.85rem',
             fontWeight: '600',
@@ -418,7 +414,7 @@ export function App() {
           <span>{notification}</span>
           <button
             onClick={() => setNotification(null)}
-            style={{ background: 'none', border: 'none', color: 'var(--accent-indigo)', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ background: 'none', border: 'none', color: 'var(--accent-dark-green)', cursor: 'pointer', fontWeight: 'bold' }}
           >
             ✕
           </button>
@@ -427,12 +423,12 @@ export function App() {
 
       {/* Main Content View Container */}
       <div className="app-content">
-        {/* HOME DASHBOARD TAB (Paytm / Cred / Splitwise Aesthetic) */}
+        {/* HOME DASHBOARD TAB */}
         {activeTab === 'home' && (
           <>
-            {/* Paytm/Cred Style Hero Spend Card */}
+            {/* Wealth Emerald Spend Card */}
             <div className="hero-spend-card">
-              <div className="hero-subtitle">Total Expense Tracked</div>
+              <div className="hero-subtitle">Total Monthly Spend</div>
               <div className="hero-amount">₹{totalFinancial.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
               <div className="hero-pills-row">
                 <div className="hero-pill">
@@ -450,21 +446,21 @@ export function App() {
             {/* Quick Actions Grid */}
             <div className="quick-actions-strip">
               <div className="action-btn-card" onClick={() => setActiveTab('manual')}>
-                <div className="action-icon-box" style={{ background: '#EEF2FF', color: 'var(--accent-indigo)' }}>
+                <div className="action-icon-box" style={{ background: '#ECFDF5', color: 'var(--accent-emerald)' }}>
                   <Plus size={22} />
                 </div>
                 <span>Add Cash</span>
               </div>
 
               <div className="action-btn-card" onClick={() => setActiveTab('reports')}>
-                <div className="action-icon-box" style={{ background: '#ECFDF5', color: 'var(--accent-emerald)' }}>
+                <div className="action-icon-box" style={{ background: '#EEF2FF', color: 'var(--accent-indigo)' }}>
                   <BarChart3 size={22} />
                 </div>
                 <span>Reports</span>
               </div>
 
               <div className="action-btn-card" onClick={handleIngestTrigger}>
-                <div className="action-icon-box" style={{ background: '#FEF3C7', color: 'var(--accent-amber)' }}>
+                <div className="action-icon-box" style={{ background: '#FEF3C7', color: 'var(--accent-gold)' }}>
                   <RefreshCw size={20} className={isIngesting ? 'spin' : ''} />
                 </div>
                 <span>Sync Mail</span>
@@ -485,7 +481,7 @@ export function App() {
               </h3>
               <button
                 onClick={() => setActiveTab('feed')}
-                style={{ background: 'none', border: 'none', color: 'var(--accent-indigo)', fontSize: '0.88rem', fontWeight: '700', cursor: 'pointer' }}
+                style={{ background: 'none', border: 'none', color: 'var(--accent-emerald)', fontSize: '0.88rem', fontWeight: '700', cursor: 'pointer' }}
               >
                 View All →
               </button>
@@ -511,7 +507,7 @@ export function App() {
                   </div>
                   <div className="email-subject">{email.subject}</div>
                   <div className="card-footer">
-                    <span className="category-chip" style={{ background: email.categoryId?.colorCode || '#2563EB' }}>
+                    <span className="category-chip" style={{ background: email.categoryId?.colorCode || '#059669' }}>
                       {email.categoryId?.name || 'General'}
                     </span>
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>
@@ -524,7 +520,7 @@ export function App() {
           </>
         )}
 
-        {/* EMAILS & TRANSACTIONS FEED TAB */}
+        {/* FEED TAB */}
         {activeTab === 'feed' && (
           <>
             <div className="tabs-scroll">
@@ -571,7 +567,7 @@ export function App() {
                     <div className="email-body-snippet">{email.rawTextBody}</div>
 
                     <div className="card-footer">
-                      <span className="category-chip" style={{ background: email.categoryId?.colorCode || '#2563EB' }}>
+                      <span className="category-chip" style={{ background: email.categoryId?.colorCode || '#059669' }}>
                         {email.categoryId?.name || 'General'}
                       </span>
                       {email.needsUserReview && <span className="review-badge">Review Needed</span>}
@@ -583,7 +579,7 @@ export function App() {
           </>
         )}
 
-        {/* MANUAL TRANSACTION ENTRY TAB (Cash / Friend Paid) */}
+        {/* MANUAL TRANSACTION ENTRY TAB */}
         {activeTab === 'manual' && (
           <div>
             <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', fontWeight: '800', marginBottom: '14px' }}>
@@ -610,9 +606,9 @@ export function App() {
                       style={{
                         padding: '12px',
                         borderRadius: '12px',
-                        border: manualMode === item.mode ? '2px solid var(--accent-indigo)' : '1px solid var(--border-color)',
-                        background: manualMode === item.mode ? '#EEF2FF' : 'var(--bg-muted)',
-                        color: manualMode === item.mode ? 'var(--accent-indigo)' : 'var(--text-main)',
+                        border: manualMode === item.mode ? '2px solid var(--accent-emerald)' : '1px solid var(--border-color)',
+                        background: manualMode === item.mode ? '#ECFDF5' : 'var(--bg-muted)',
+                        color: manualMode === item.mode ? 'var(--accent-dark-green)' : 'var(--text-main)',
                         fontWeight: '700',
                         fontSize: '0.85rem',
                         cursor: 'pointer'
@@ -703,7 +699,7 @@ export function App() {
           </div>
         )}
 
-        {/* DAILY & MONTHLY REPORTS & VISUAL CHARTS TAB */}
+        {/* REPORTS & VISUAL CHARTS TAB */}
         {activeTab === 'reports' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -718,7 +714,7 @@ export function App() {
                     borderRadius: '9px',
                     border: 'none',
                     background: reportRange === 'daily' ? '#FFFFFF' : 'none',
-                    color: reportRange === 'daily' ? 'var(--accent-indigo)' : 'var(--text-muted)',
+                    color: reportRange === 'daily' ? 'var(--accent-emerald)' : 'var(--text-muted)',
                     fontWeight: '700',
                     fontSize: '0.82rem',
                     cursor: 'pointer'
@@ -733,7 +729,7 @@ export function App() {
                     borderRadius: '9px',
                     border: 'none',
                     background: reportRange === 'monthly' ? '#FFFFFF' : 'none',
-                    color: reportRange === 'monthly' ? 'var(--accent-indigo)' : 'var(--text-muted)',
+                    color: reportRange === 'monthly' ? 'var(--accent-emerald)' : 'var(--text-muted)',
                     fontWeight: '700',
                     fontSize: '0.82rem',
                     cursor: 'pointer'
@@ -744,22 +740,22 @@ export function App() {
               </div>
             </div>
 
-            {/* Payment Mode Distribution Breakdown */}
+            {/* Payment Method Breakdown */}
             <div style={{ background: 'var(--bg-card)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '18px', boxShadow: 'var(--shadow-sm)' }}>
               <h4 style={{ fontSize: '0.92rem', fontWeight: '700', marginBottom: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <PieChart size={18} color="var(--accent-indigo)" /> Payment Method Breakdown
+                <PieChart size={18} color="var(--accent-emerald)" /> Payment Method Breakdown
               </h4>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-                <div style={{ background: '#EEF2FF', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--accent-indigo)', fontWeight: '700' }}>CASH</div>
+                <div style={{ background: '#ECFDF5', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--accent-emerald)', fontWeight: '700' }}>CASH</div>
                   <div style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>₹{cashSpend.toFixed(0)}</div>
                 </div>
-                <div style={{ background: '#ECFDF5', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--accent-emerald)', fontWeight: '700' }}>FRIEND</div>
+                <div style={{ background: '#EEF2FF', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--accent-indigo)', fontWeight: '700' }}>FRIEND</div>
                   <div style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>₹{friendSpend.toFixed(0)}</div>
                 </div>
                 <div style={{ background: '#FEF3C7', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.78rem', color: '#D97706', fontWeight: '700' }}>ONLINE</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--accent-gold)', fontWeight: '700' }}>ONLINE</div>
                   <div style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>₹{(totalFinancial - cashSpend - friendSpend).toFixed(0)}</div>
                 </div>
               </div>
@@ -782,7 +778,7 @@ export function App() {
                           style={{
                             width: '100%',
                             height: `${heightPct}%`,
-                            background: 'linear-gradient(180deg, #4F46E5 0%, #7C3AED 100%)',
+                            background: 'linear-gradient(180deg, #059669 0%, #10B981 100%)',
                             borderRadius: '6px 6px 0 0',
                             transition: 'height 0.3s ease'
                           }}
@@ -802,7 +798,7 @@ export function App() {
               )}
             </div>
 
-            {/* Category Breakdown Progress Bars */}
+            {/* Category Distribution Progress Bars */}
             <div style={{ background: 'var(--bg-card)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
               <h4 style={{ fontSize: '0.92rem', fontWeight: '700', marginBottom: '14px', color: 'var(--text-main)' }}>
                 Category Distribution
@@ -817,7 +813,7 @@ export function App() {
                         <span>{cat.count} items ({pct}%)</span>
                       </div>
                       <div style={{ width: '100%', height: '8px', background: 'var(--bg-muted)', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ width: `${pct}%`, height: '100%', background: cat.colorCode || '#4F46E5', borderRadius: '4px' }} />
+                        <div style={{ width: `${pct}%`, height: '100%', background: cat.colorCode || '#059669', borderRadius: '4px' }} />
                       </div>
                     </div>
                   );
@@ -829,7 +825,7 @@ export function App() {
           </div>
         )}
 
-        {/* VISUAL RULE BUILDER TAB */}
+        {/* VISUAL RULE BUILDER TAB (Strict 16px Padding Alignment) */}
         {activeTab === 'rules' && (
           <div>
             <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', fontWeight: '800', marginBottom: '14px' }}>
@@ -882,7 +878,7 @@ export function App() {
               <div key={r.id} style={{ background: 'var(--bg-card)', padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-sm)' }}>
                 <div>
                   <div style={{ fontWeight: '700', fontSize: '0.92rem' }}>{r.name}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--accent-indigo)', fontWeight: '600' }}>{r.condition}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--accent-emerald)', fontWeight: '600' }}>{r.condition}</div>
                 </div>
                 <Tag size={18} color="var(--accent-emerald)" />
               </div>
@@ -893,7 +889,7 @@ export function App() {
         {/* LLM JSON EXPORT TAB */}
         {activeTab === 'export' && (
           <div style={{ textAlign: 'center', padding: '24px 12px' }}>
-            <div style={{ width: '72px', height: '72px', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 18px auto', color: 'var(--accent-indigo)' }}>
+            <div style={{ width: '72px', height: '72px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 18px auto', color: 'var(--accent-emerald)' }}>
               <Download size={32} />
             </div>
             <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', fontWeight: '800', marginBottom: '10px' }}>
@@ -933,13 +929,13 @@ export function App() {
                 type="checkbox"
                 checked={isBiometricEnabled}
                 onChange={(e) => handleBiometricToggle(e.target.checked)}
-                style={{ width: '22px', height: '22px', accentColor: 'var(--accent-indigo)', cursor: 'pointer' }}
+                style={{ width: '22px', height: '22px', accentColor: 'var(--accent-emerald)', cursor: 'pointer' }}
               />
             </div>
 
             {/* PIN Reset Form */}
             <h4 style={{ fontSize: '0.95rem', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <KeyRound size={18} color="var(--accent-indigo)" /> Reset Security PIN
+              <KeyRound size={18} color="var(--accent-emerald)" /> Reset Security PIN
             </h4>
 
             {pinChangeMsg && (
@@ -1009,12 +1005,12 @@ export function App() {
               </button>
             </div>
 
-            <div style={{ fontSize: '0.88rem', color: 'var(--accent-indigo)', fontWeight: '700', marginBottom: '14px' }}>
+            <div style={{ fontSize: '0.88rem', color: 'var(--accent-emerald)', fontWeight: '700', marginBottom: '14px' }}>
               From: {selectedEmail.sender}
             </div>
 
             <div style={{ display: 'flex', gap: '10px', marginBottom: '18px' }}>
-              <span className="category-chip" style={{ background: selectedEmail.categoryId?.colorCode || '#2563EB' }}>
+              <span className="category-chip" style={{ background: selectedEmail.categoryId?.colorCode || '#059669' }}>
                 {selectedEmail.categoryId?.name || 'General'}
               </span>
               <span style={{ fontSize: '0.82rem', padding: '4px 12px', borderRadius: '14px', background: 'var(--bg-muted)', color: 'var(--text-muted)', fontWeight: '700' }}>
@@ -1025,7 +1021,7 @@ export function App() {
             <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: '700' }}>
               Extracted Key-Value Payload
             </h4>
-            <div style={{ background: '#0F172A', color: '#38BDF8', padding: '14px', borderRadius: '10px', fontFamily: 'monospace', fontSize: '0.82rem', marginBottom: '16px', overflowX: 'auto' }}>
+            <div style={{ background: '#0F172A', color: '#34D399', padding: '14px', borderRadius: '10px', fontFamily: 'monospace', fontSize: '0.82rem', marginBottom: '16px', overflowX: 'auto' }}>
               {JSON.stringify(selectedEmail.parsedJson, null, 2)}
             </div>
 
@@ -1082,7 +1078,7 @@ export function App() {
         </div>
       )}
 
-      {/* Bottom Mobile Tab Bar (Paytm / Cred Style Navigation) */}
+      {/* Bottom Mobile Tab Bar */}
       <nav className="app-nav">
         <button className={`nav-item ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>
           <TrendingUp size={22} />
