@@ -26,7 +26,6 @@ export function App() {
   const [savedPin, setSavedPin] = useState(() => localStorage.getItem('lekka_app_pin') || '1234');
   const [isBiometricEnabled, setIsBiometricEnabled] = useState(() => localStorage.getItem('lekka_biometric_enabled') === 'true');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [pinErrorMsg, setPinErrorMsg] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState(false);
 
   // App Navigation & Tabs
@@ -81,7 +80,6 @@ export function App() {
   const handleKeypadPress = (val: string) => {
     if (val === 'DEL') {
       setPin((prev) => prev.slice(0, -1));
-      setPinErrorMsg(null);
     } else if (val === 'BIO') {
       if (isBiometricEnabled) {
         setIsAuthenticated(true);
@@ -94,14 +92,13 @@ export function App() {
       if (nextPin.length === 4) {
         if (nextPin === savedPin || (savedPin === '1234' && nextPin === '1234')) {
           setIsAuthenticated(true);
-          setPinErrorMsg(null);
         } else {
+          // Shake PIN dots on wrong PIN entry
           setIsShaking(true);
-          setPinErrorMsg('😢 Incorrect PIN. Please try again!');
           setTimeout(() => {
             setPin('');
             setIsShaking(false);
-          }, 900);
+          }, 600);
         }
       }
     }
@@ -347,13 +344,7 @@ export function App() {
           <h2 style={{ fontFamily: 'var(--font-logo)', fontSize: '1.85rem', fontWeight: '700', marginBottom: '4px', letterSpacing: '-1.2px', background: 'linear-gradient(135deg, #047857, #10B981)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             Lekka Wallet
           </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', marginBottom: '12px' }}>Enter 4-digit PIN to unlock</p>
-
-          {pinErrorMsg && (
-            <div className="pin-error-banner">
-              {pinErrorMsg}
-            </div>
-          )}
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', marginBottom: '20px' }}>Enter 4-digit PIN to unlock</p>
 
           <div className={`pin-display ${isShaking ? 'shake' : ''}`}>
             {[0, 1, 2, 3].map((idx) => (
@@ -441,7 +432,7 @@ export function App() {
         </div>
       )}
 
-      {/* Main Content View Container with Unified 20px Padding */}
+      {/* Main Content View Container with Unified 18px Padding */}
       <div className="app-content animate-fade-in">
         {/* HOME DASHBOARD TAB */}
         {activeTab === 'home' && (
@@ -852,7 +843,7 @@ export function App() {
               Classification Rules
             </h3>
 
-            <form onSubmit={handleCreateRule} style={{ background: 'var(--bg-card)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '20px', boxShadow: 'var(--shadow-sm)' }}>
+            <form onSubmit={handleCreateRule} style={{ background: 'var(--bg-card)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '20px', boxShadow: 'var(--shadow-sm)', width: '100%', boxSizing: 'border-box' }}>
               <div className="form-group">
                 <label className="form-label">Target Field</label>
                 <select className="form-select" value={ruleField} onChange={(e: any) => setRuleField(e.target.value)}>
@@ -895,7 +886,7 @@ export function App() {
               Active Classification Rules ({userRules.length})
             </h4>
             {userRules.map((r) => (
-              <div key={r.id} style={{ background: 'var(--bg-card)', padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-sm)' }}>
+              <div key={r.id} style={{ background: 'var(--bg-card)', padding: '14px', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-sm)', width: '100%', boxSizing: 'border-box' }}>
                 <div>
                   <div style={{ fontWeight: '700', fontSize: '0.92rem' }}>{r.name}</div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--accent-emerald)', fontWeight: '600' }}>{r.condition}</div>

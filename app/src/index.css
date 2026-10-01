@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Plus+Jakarta+Sans:wght@700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Righteous&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Urbanist:wght@400;500;600;700;800&display=swap');
 
 :root {
   --bg-primary: #F8FAFC;
@@ -19,9 +19,10 @@
 
   --text-main: #0F172A;
   --text-muted: #64748B;
-  --font-logo: 'Space Grotesk', system-ui, sans-serif;
-  --font-heading: 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-body: 'Inter', system-ui, sans-serif;
+  --font-logo: 'Righteous', cursive, sans-serif;
+  --font-heading: 'Outfit', system-ui, sans-serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-sub: 'Urbanist', system-ui, sans-serif;
 
   --radius-lg: 24px;
   --radius-md: 16px;
@@ -41,7 +42,7 @@ body {
   background-color: #E2E8F0;
   color: var(--text-main);
   font-family: var(--font-body);
-  font-size: 16.5px; /* +10% base font scale */
+  font-size: 16.5px;
   line-height: 1.5;
   min-height: 100vh;
   display: flex;
@@ -81,7 +82,7 @@ body {
 
 /* Distinctive Branding Header */
 .app-header {
-  padding: 16px 20px;
+  padding: 16px 18px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   display: flex;
@@ -89,11 +90,13 @@ body {
   align-items: center;
   box-shadow: var(--shadow-sm);
   z-index: 10;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .brand-title {
   font-family: var(--font-logo);
-  font-size: 1.75rem; /* Distinctive Space Grotesk logo */
+  font-size: 1.75rem;
   font-weight: 700;
   background: linear-gradient(135deg, #047857 0%, #059669 40%, #10B981 100%);
   -webkit-background-clip: text;
@@ -146,11 +149,13 @@ body {
   transform: scale(0.92);
 }
 
-/* Unified App Content Container Padding */
+/* Unified App Content Container Padding Across All Views */
 .app-content {
   flex: 1;
+  width: 100%;
+  box-sizing: border-box;
   overflow-y: auto;
-  padding: 18px 20px 90px 20px; /* Unified strict 20px padding */
+  padding: 18px 18px 90px 18px; /* Perfectly aligned edge margins */
 }
 
 /* Keyframe Animations */
@@ -178,8 +183,8 @@ body {
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-12px); }
-  40%, 80% { transform: translateX(12px); }
+  20%, 60% { transform: translateX(-14px); }
+  40%, 80% { transform: translateX(14px); }
 }
 
 @keyframes gradientShift {
@@ -208,6 +213,8 @@ body {
   box-shadow: 0 12px 28px -4px rgba(5, 150, 105, 0.35);
   position: relative;
   overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .hero-spend-card::after {
@@ -263,6 +270,8 @@ body {
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
   margin-bottom: 20px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .action-btn-card {
@@ -302,18 +311,18 @@ body {
   align-items: center;
 }
 
-/* Lock Screen with Unified Width and Shake Animation */
+/* Lock Screen Responsive Clean Alignment */
 .lock-screen {
   flex: 1;
   width: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 24px 20px; /* Perfect match with app-content */
+  padding: 28px 20px; /* Perfectly fills screen width */
   text-align: center;
   background: #FFFFFF;
-  box-sizing: border-box;
 }
 
 .lock-icon-wrapper {
@@ -334,7 +343,7 @@ body {
 .pin-display {
   display: flex;
   gap: 16px;
-  margin: 18px 0 24px 0;
+  margin: 20px 0 32px 0;
 }
 
 .pin-display.shake {
@@ -342,8 +351,8 @@ body {
 }
 
 .pin-dot {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border: 2px solid #CBD5E1;
   border-radius: 50%;
   transition: all 0.2s ease;
@@ -352,38 +361,27 @@ body {
 .pin-dot.filled {
   background: var(--accent-emerald);
   border-color: var(--accent-emerald);
-  box-shadow: 0 0 12px rgba(5, 150, 105, 0.5);
+  box-shadow: 0 0 14px rgba(5, 150, 105, 0.55);
   transform: scale(1.1);
-}
-
-.pin-error-banner {
-  background: #FEF2F2;
-  color: var(--accent-rose);
-  border: 1px solid #FECDD3;
-  padding: 8px 16px;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  margin-bottom: 16px;
-  animation: scaleIn 0.2s ease;
 }
 
 .keypad-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
+  gap: 16px;
   width: 100%;
-  max-width: 300px;
+  max-width: 320px;
+  box-sizing: border-box;
 }
 
 .keypad-btn {
-  width: 68px;
-  height: 68px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   background: var(--bg-muted);
   border: 1px solid var(--border-color);
   color: var(--text-main);
-  font-size: 1.5rem;
+  font-size: 1.55rem;
   font-weight: 700;
   display: flex;
   justify-content: center;
@@ -410,6 +408,8 @@ body {
   padding: 4px 0 16px 0;
   overflow-x: auto;
   scrollbar-width: none;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .tabs-scroll::-webkit-scrollbar {
@@ -436,7 +436,7 @@ body {
   box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
 }
 
-/* Transaction Cards with Entrance Animations */
+/* Transaction Cards */
 .email-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -447,6 +447,8 @@ body {
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .email-card:hover {
@@ -550,11 +552,13 @@ body {
 
 /* Form inputs & Buttons */
 .form-group {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .form-label {
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: var(--text-main);
   display: block;
@@ -563,7 +567,8 @@ body {
 
 .form-input, .form-select {
   width: 100%;
-  padding: 12px 14px;
+  box-sizing: border-box;
+  padding: 14px;
   background: var(--bg-muted);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -581,6 +586,7 @@ body {
 
 .btn-primary {
   width: 100%;
+  box-sizing: border-box;
   padding: 14px;
   background: var(--accent-emerald);
   color: #FFFFFF;
@@ -624,6 +630,7 @@ body {
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
   animation: fadeInUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  box-sizing: border-box;
 }
 
 /* Bottom Navigation Bar */
