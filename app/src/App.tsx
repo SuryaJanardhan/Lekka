@@ -26,6 +26,8 @@ export function App() {
   const [savedPin, setSavedPin] = useState(() => localStorage.getItem('lekka_app_pin') || '1234');
   const [isBiometricEnabled, setIsBiometricEnabled] = useState(() => localStorage.getItem('lekka_biometric_enabled') === 'true');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [pinErrorMsg, setPinErrorMsg] = useState<string | null>(null);
+  const [isShaking, setIsShaking] = useState(false);
 
   // App Navigation & Tabs
   const [activeTab, setActiveTab] = useState<'home' | 'feed' | 'reports' | 'manual' | 'rules' | 'export'>('home');
@@ -79,6 +81,7 @@ export function App() {
   const handleKeypadPress = (val: string) => {
     if (val === 'DEL') {
       setPin((prev) => prev.slice(0, -1));
+      setPinErrorMsg(null);
     } else if (val === 'BIO') {
       if (isBiometricEnabled) {
         setIsAuthenticated(true);
@@ -88,8 +91,18 @@ export function App() {
     } else if (pin.length < 4) {
       const nextPin = pin + val;
       setPin(nextPin);
-      if (nextPin === savedPin || (savedPin === '1234' && nextPin === '1234')) {
-        setIsAuthenticated(true);
+      if (nextPin.length === 4) {
+        if (nextPin === savedPin || (savedPin === '1234' && nextPin === '1234')) {
+          setIsAuthenticated(true);
+          setPinErrorMsg(null);
+        } else {
+          setIsShaking(true);
+          setPinErrorMsg('😢 Incorrect PIN. Please try again!');
+          setTimeout(() => {
+            setPin('');
+            setIsShaking(false);
+          }, 900);
+        }
       }
     }
   };
@@ -329,14 +342,20 @@ export function App() {
       <div className="app-viewport">
         <div className="lock-screen">
           <div className="lock-icon-wrapper">
-            <Lock size={38} />
+            <Lock size={40} />
           </div>
-          <h2 style={{ fontFamily: 'var(--font-brand)', fontSize: '1.7rem', fontWeight: '800', marginBottom: '6px' }}>
+          <h2 style={{ fontFamily: 'var(--font-logo)', fontSize: '1.85rem', fontWeight: '700', marginBottom: '4px', letterSpacing: '-1.2px', background: 'linear-gradient(135deg, #047857, #10B981)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             Lekka Wallet
           </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem' }}>Enter 4-digit PIN to unlock</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', marginBottom: '12px' }}>Enter 4-digit PIN to unlock</p>
 
-          <div className="pin-display">
+          {pinErrorMsg && (
+            <div className="pin-error-banner">
+              {pinErrorMsg}
+            </div>
+          )}
+
+          <div className={`pin-display ${isShaking ? 'shake' : ''}`}>
             {[0, 1, 2, 3].map((idx) => (
               <div key={idx} className={`pin-dot ${pin.length > idx ? 'filled' : ''}`} />
             ))}
@@ -346,7 +365,7 @@ export function App() {
             {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'BIO', '0', 'DEL'].map((val) => (
               <button key={val} className="keypad-btn" onClick={() => handleKeypadPress(val)}>
                 {val === 'BIO' ? (
-                  <Fingerprint size={26} color={isBiometricEnabled ? 'var(--accent-emerald)' : '#94A3B8'} />
+                  <Fingerprint size={28} color={isBiometricEnabled ? 'var(--accent-emerald)' : '#94A3B8'} />
                 ) : val === 'DEL' ? (
                   '←'
                 ) : (
@@ -356,7 +375,7 @@ export function App() {
             ))}
           </div>
 
-          <p style={{ marginTop: '26px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+          <p style={{ marginTop: '24px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
             Default PIN: {savedPin} | Biometrics: {isBiometricEnabled ? 'Enabled' : 'Disabled'}
           </p>
         </div>
@@ -366,7 +385,7 @@ export function App() {
 
   return (
     <div className="app-viewport">
-      {/* Consumer Friendly Header */}
+      {/* Consumer Friendly Header with Space Grotesk Font */}
       <header className="app-header">
         <div className="brand-title">
           Lekka <span className="brand-badge-friendly">Smart Ledger</span>
@@ -377,21 +396,21 @@ export function App() {
             onClick={fetchPureDataFromBackend}
             title="Refresh transactions"
           >
-            <RefreshCw size={17} className={isLoadingData ? 'spin' : ''} />
+            <RefreshCw size={18} className={isLoadingData ? 'spin' : ''} />
           </button>
           <button
             className="icon-circle-btn"
             onClick={handleIngestTrigger}
             title="Sync email transactions"
           >
-            <RefreshCw size={17} color="var(--accent-emerald)" className={isIngesting ? 'spin' : ''} />
+            <RefreshCw size={18} color="var(--accent-emerald)" className={isIngesting ? 'spin' : ''} />
           </button>
           <button
             className="icon-circle-btn"
             onClick={() => setIsSettingsModalOpen(true)}
             title="App Security Settings"
           >
-            <Settings size={18} />
+            <Settings size={19} />
           </button>
         </div>
       </header>
@@ -403,13 +422,14 @@ export function App() {
             background: '#ECFDF5',
             color: 'var(--accent-dark-green)',
             borderBottom: '1px solid #A7F3D0',
-            padding: '10px 16px',
+            padding: '10px 20px',
             fontSize: '0.85rem',
             fontWeight: '600',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center'
           }}
+          className="animate-fade-in"
         >
           <span>{notification}</span>
           <button
@@ -421,8 +441,8 @@ export function App() {
         </div>
       )}
 
-      {/* Main Content View Container */}
-      <div className="app-content">
+      {/* Main Content View Container with Unified 20px Padding */}
+      <div className="app-content animate-fade-in">
         {/* HOME DASHBOARD TAB */}
         {activeTab === 'home' && (
           <>
@@ -825,7 +845,7 @@ export function App() {
           </div>
         )}
 
-        {/* VISUAL RULE BUILDER TAB (Strict 16px Padding Alignment) */}
+        {/* VISUAL RULE BUILDER TAB */}
         {activeTab === 'rules' && (
           <div>
             <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', fontWeight: '800', marginBottom: '14px' }}>
