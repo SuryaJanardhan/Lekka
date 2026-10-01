@@ -318,23 +318,23 @@ body {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
-  padding: 24px 16px;
+  padding: 32px 16px 24px 16px;
   text-align: center;
   background: #FFFFFF;
 }
 
 .lock-icon-wrapper {
-  width: 86px;
-  height: 86px;
+  width: 84px;
+  height: 84px;
   background: #ECFDF5;
   border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
   color: var(--accent-emerald);
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   border: 2px solid #A7F3D0;
   box-shadow: var(--shadow-sm);
   transition: transform 0.2s ease;
@@ -343,7 +343,7 @@ body {
 .pin-display {
   display: flex;
   gap: 16px;
-  margin: 20px 0 32px 0;
+  margin: 16px 0 28px 0;
 }
 
 .pin-display.shake {
@@ -370,14 +370,16 @@ body {
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
   width: 100%;
-  max-width: 100%;
-  padding: 0 12px;
+  max-width: 340px;
+  margin: 0 auto;
   box-sizing: border-box;
 }
 
 .keypad-btn {
-  width: 76px;
-  height: 76px;
+  width: 100%;
+  max-width: 76px;
+  aspect-ratio: 1;
+  height: auto;
   border-radius: 50%;
   background: var(--bg-muted);
   border: 1px solid var(--border-color);
