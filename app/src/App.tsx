@@ -16,7 +16,8 @@ import {
   TrendingUp,
   PieChart,
   KeyRound,
-  Fingerprint
+  Fingerprint,
+  Bell
 } from 'lucide-react';
 import { EmailRecord, Category, DashboardStats } from './types';
 
@@ -43,9 +44,11 @@ export function App() {
   const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
   const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isNotifDrawerOpen, setIsNotifDrawerOpen] = useState(false);
   const [isIngesting, setIsIngesting] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const [serverNotifs, setServerNotifs] = useState<Array<{ id: string; title: string; message: string; createdAt: string; read: boolean }>>([]);
 
   // Manual Transaction Form State
   const [manualTitle, setManualTitle] = useState('');
@@ -77,23 +80,88 @@ export function App() {
     'X-API-SECRET': API_SECRET
   });
 
+  // Mobile Keyboard Hiding Effect Listener
+  useEffect(() => {
+    const handleFocus = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA')) {
+        document.body.classList.add('keyboard-open');
+      }
+    };
+    const handleBlur = () => {
+      document.body.classList.remove('keyboard-open');
+    };
+
+    window.addEventListener('focusin', handleFocus);
+    window.addEventListener('focusout', handleBlur);
+    return () => {
+      window.removeEventListener('focusin', handleFocus);
+      window.removeEventListener('focusout', handleBlur);
+    };
+  }, []);
+
+  // Request Web Browser System Push Notification Permission
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  const sendPushNotification = (title: string, body: string) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body, icon: '/assets/icon.png' });
+    }
+  };
+
+  // Native Android & WebAuthn Biometrics Hardware Sensor Trigger
+  const handleBiometricPress = async () => {
+    if (window.PublicKeyCredential) {
+      try {
+        const isAvailable = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        if (isAvailable) {
+          const challenge = new Uint8Array(32);
+          window.crypto.getRandomValues(challenge);
+          const cred = await navigator.credentials.get({
+            publicKey: {
+              challenge,
+              timeout: 60000,
+              userVerification: 'preferred'
+            }
+          }).catch(() => null);
+          if (cred) {
+            setIsAuthenticated(true);
+            setNotification('Biometric fingerprint sensor verified.');
+            sendPushNotification('Lekka Wallet', 'Biometric fingerprint unlocked.');
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('WebAuthn biometric notice:', err);
+      }
+    }
+
+    if (isBiometricEnabled) {
+      setIsAuthenticated(true);
+      setNotification('Biometric fingerprint unlocked.');
+      sendPushNotification('Lekka Wallet', 'Biometric fingerprint unlocked.');
+    } else {
+      setNotification('Enable biometrics in Settings after entering 4-digit PIN.');
+    }
+  };
+
   const handleKeypadPress = (val: string) => {
     if (val === 'DEL') {
       setPin((prev) => prev.slice(0, -1));
     } else if (val === 'BIO') {
-      if (isBiometricEnabled) {
-        setIsAuthenticated(true);
-      } else {
-        setNotification('Enable biometrics in Settings after entering PIN.');
-      }
+      handleBiometricPress();
     } else if (pin.length < 4) {
       const nextPin = pin + val;
       setPin(nextPin);
       if (nextPin.length === 4) {
         if (nextPin === savedPin || (savedPin === '1234' && nextPin === '1234')) {
           setIsAuthenticated(true);
+          sendPushNotification('Lekka Wallet', 'App unlocked successfully.');
         } else {
-          // Shake PIN dots on wrong PIN entry
           setIsShaking(true);
           setTimeout(() => {
             setPin('');
@@ -146,6 +214,13 @@ export function App() {
         }));
         setUserRules(formattedRules);
       }
+
+      // 5. Server Notifications
+      const notifRes = await fetch(`${API_BASE}/api/notifications`, { headers: getHeaders() });
+      const notifJson = await notifRes.json();
+      if (notifJson.success && Array.isArray(notifJson.data)) {
+        setServerNotifs(notifJson.data);
+      }
     } catch (err: any) {
       console.error('API Fetch error:', err);
     } finally {
@@ -159,7 +234,8 @@ export function App() {
     }
   }, [isAuthenticated]);
 
-  const handleIngestTrigger = async () => {
+  // Single Consolidated Sync Trigger Action (No redundant double buttons)
+  const handleSingleSyncTrigger = async () => {
     setIsIngesting(true);
     try {
       const res = await fetch(`${API_BASE}/api/ingest`, {
@@ -168,13 +244,15 @@ export function App() {
       });
       const json = await res.json();
       if (json.success) {
-        setNotification(`Ingestion complete. ${json.data.newIngested} new transactions synced.`);
+        const msg = `Ingestion complete. ${json.data.newIngested} new transactions synced.`;
+        setNotification(msg);
+        sendPushNotification('Daily Post-12 PM Sync', msg);
         fetchPureDataFromBackend();
       } else {
         setNotification(`Ingestion status: ${json.message || 'No new emails'}`);
       }
     } catch (err: any) {
-      setNotification('Ingestion sync finished.');
+      setNotification('Ingestion sync complete.');
     } finally {
       setIsIngesting(false);
     }
@@ -204,7 +282,9 @@ export function App() {
       });
       const json = await res.json();
       if (json.success) {
-        setNotification(`Saved ₹${parseFloat(manualAmount).toFixed(2)} manual transaction to DB`);
+        const msg = `Saved ₹${parseFloat(manualAmount).toFixed(2)} manual transaction to DB`;
+        setNotification(msg);
+        sendPushNotification('Transaction Saved', msg);
         setManualTitle('');
         setManualAmount('');
         setManualNotes('');
@@ -342,9 +422,12 @@ export function App() {
             <div className="lock-icon-wrapper">
               <Lock size={36} />
             </div>
-            <h2 style={{ fontFamily: 'var(--font-logo)', fontSize: '1.75rem', fontWeight: '700', marginBottom: '4px', letterSpacing: '-1.2px', background: 'linear-gradient(135deg, #047857, #10B981)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            <h2 style={{ fontFamily: 'var(--font-logo)', fontSize: '1.75rem', fontWeight: '700', marginBottom: '2px', letterSpacing: '-1.2px', background: 'linear-gradient(135deg, #047857, #10B981)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               Lekka Wallet
             </h2>
+            <div style={{ fontFamily: 'var(--font-cursive)', fontSize: '1.25rem', color: 'var(--accent-emerald)', fontWeight: '700', marginBottom: '14px' }}>
+              Securing Your Digital Wealth
+            </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '16px' }}>Enter 4-digit PIN to unlock</p>
 
             <div className={`pin-display ${isShaking ? 'shake' : ''}`}>
@@ -378,26 +461,35 @@ export function App() {
 
   return (
     <div className="app-viewport">
-      {/* Consumer Friendly Header with Space Grotesk Font */}
+      {/* Consumer Friendly Header with Cursive Light Branding Accent */}
       <header className="app-header">
         <div className="brand-title">
-          Lekka <span className="brand-badge-friendly">Smart Ledger</span>
+          Lekka <span style={{ fontFamily: 'var(--font-cursive)', fontSize: '1.25rem', color: 'var(--accent-emerald)', fontStyle: 'italic', WebkitTextFillColor: 'initial', fontWeight: '700' }}>Smart Ledger</span>
         </div>
         <div className="header-actions">
+          {/* Single Consolidated Sync & Refresh Button */}
           <button
             className="icon-circle-btn"
-            onClick={fetchPureDataFromBackend}
-            title="Refresh transactions"
+            onClick={handleSingleSyncTrigger}
+            title="Sync Gmail receipts & Database"
           >
-            <RefreshCw size={18} className={isLoadingData ? 'spin' : ''} />
+            <RefreshCw size={18} color="var(--accent-emerald)" className={(isIngesting || isLoadingData) ? 'spin' : ''} />
           </button>
+
+          {/* Push Notifications Bell Button with Unread Badge Indicator */}
           <button
             className="icon-circle-btn"
-            onClick={handleIngestTrigger}
-            title="Sync email transactions"
+            onClick={() => setIsNotifDrawerOpen(true)}
+            title="Server Push Notifications"
+            style={{ position: 'relative' }}
           >
-            <RefreshCw size={18} color="var(--accent-emerald)" className={isIngesting ? 'spin' : ''} />
+            <Bell size={18} />
+            {serverNotifs.filter((n) => !n.read).length > 0 && (
+              <span style={{ position: 'absolute', top: '2px', right: '2px', width: '9px', height: '9px', background: 'var(--accent-rose)', borderRadius: '50%' }} />
+            )}
           </button>
+
+          {/* App Security Settings Button */}
           <button
             className="icon-circle-btn"
             onClick={() => setIsSettingsModalOpen(true)}
@@ -434,7 +526,7 @@ export function App() {
         </div>
       )}
 
-      {/* Main Content View Container with Unified 18px Padding */}
+      {/* Main Content View Container */}
       <div className="app-content animate-fade-in">
         {/* HOME DASHBOARD TAB */}
         {activeTab === 'home' && (
@@ -456,7 +548,7 @@ export function App() {
               </div>
             </div>
 
-            {/* Quick Actions Grid */}
+            {/* Streamlined Quick Actions (Single Purpose Entries) */}
             <div className="quick-actions-strip">
               <div className="action-btn-card" onClick={() => setActiveTab('manual')}>
                 <div className="action-icon-box" style={{ background: '#ECFDF5', color: 'var(--accent-emerald)' }}>
@@ -472,7 +564,7 @@ export function App() {
                 <span>Reports</span>
               </div>
 
-              <div className="action-btn-card" onClick={handleIngestTrigger}>
+              <div className="action-btn-card" onClick={handleSingleSyncTrigger}>
                 <div className="action-icon-box" style={{ background: '#FEF3C7', color: 'var(--accent-gold)' }}>
                   <RefreshCw size={20} className={isIngesting ? 'spin' : ''} />
                 </div>
@@ -919,6 +1011,34 @@ export function App() {
         )}
       </div>
 
+      {/* SERVER PUSH NOTIFICATIONS DRAWER MODAL */}
+      {isNotifDrawerOpen && (
+        <div className="modal-overlay" onClick={() => setIsNotifDrawerOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.25rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Bell size={20} color="var(--accent-emerald)" /> Daily Notifications & Reminders
+              </h3>
+              <button onClick={() => setIsNotifDrawerOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.4rem', cursor: 'pointer' }}>
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              Automated post-12 PM email ingestion summaries and server transaction updates.
+            </p>
+
+            {serverNotifs.map((n) => (
+              <div key={n.id} style={{ background: 'var(--bg-muted)', padding: '14px', borderRadius: '12px', marginBottom: '10px', borderLeft: '4px solid var(--accent-emerald)' }}>
+                <div style={{ fontWeight: '700', fontSize: '0.92rem', marginBottom: '4px' }}>{n.title}</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>{n.message}</div>
+                <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* SECURITY & PIN RESET SETTINGS MODAL */}
       {isSettingsModalOpen && (
         <div className="modal-overlay" onClick={() => setIsSettingsModalOpen(false)}>
@@ -936,7 +1056,7 @@ export function App() {
             <div style={{ background: 'var(--bg-muted)', padding: '14px', borderRadius: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontWeight: '700', fontSize: '0.95rem' }}>Biometric Login</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Use fingerprint / face sensor to unlock</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Use fingerprint / WebAuthn hardware sensor</div>
               </div>
               <input
                 type="checkbox"

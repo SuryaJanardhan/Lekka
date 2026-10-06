@@ -5,6 +5,7 @@ import { RuleController } from '../controllers/ruleController';
 import { AnalyticsController } from '../controllers/analyticsController';
 import { ExportController } from '../controllers/exportController';
 import { IngestController } from '../controllers/ingestController';
+import { NotificationController } from '../services/notificationService';
 import { secureApiMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -35,5 +36,10 @@ router.get('/export', ExportController.getLLMContextBundle);
 
 // Ingestion trigger route
 router.post('/ingest', IngestController.triggerManualIngestion);
+
+// Notification & Server Push routes
+router.get('/notifications', NotificationController.getNotifications);
+router.post('/notifications/reminder', NotificationController.triggerReminder);
+router.post('/notifications/:id/read', NotificationController.markRead);
 
 export default router;
