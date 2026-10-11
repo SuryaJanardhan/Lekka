@@ -25,6 +25,8 @@ import {
   Database,
   Trash2
 } from 'lucide-react';
+import { BiometricAuth } from '@aparajita/capacitor-biometric-auth';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { EmailRecord, Category, DashboardStats } from './types';
 
 interface ChatMessage {
@@ -135,9 +137,12 @@ export function App() {
     'X-API-SECRET': API_SECRET
   });
 
-  // Request Web Browser System Push Notification Permission and test backend health on mount
+  // Request Native Android and Browser System Push Notification Permission and test backend health on mount
   useEffect(() => {
     testBackendConnection();
+    try {
+      LocalNotifications.requestPermissions().catch(() => {});
+    } catch {}
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
@@ -149,7 +154,7 @@ export function App() {
     }
   }, [chatMessages, isChatModalOpen]);
 
-  // Production-grade Android Push Notification Delivery via ServiceWorker & In-App Toast
+  // Production-grade Native Android & Push Notification Delivery
   const sendPushNotification = async (title: string, body: string) => {
     // 1. Tactile feedback
     if ('vibrate' in navigator) {
@@ -157,7 +162,25 @@ export function App() {
     }
     setNotification(`${title}: ${body}`);
 
-    // 2. Android Service Worker Push Notification
+    // 2. Native Android Status Bar Notification via Capacitor LocalNotifications
+    try {
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            title,
+            body,
+            id: Math.floor(Math.random() * 1000000),
+            schedule: { at: new Date(Date.now() + 100) },
+            sound: 'default'
+          }
+        ]
+      });
+      return;
+    } catch (nativeErr) {
+      // Fallback to web APIs if not running in native container
+    }
+
+    // 3. Android Service Worker Push Notification (for PWA / Chrome)
     if ('serviceWorker' in navigator) {
       try {
         const reg = await navigator.serviceWorker.ready;
@@ -175,7 +198,7 @@ export function App() {
       }
     }
 
-    // 3. Desktop / Fallback Notification
+    // 4. Desktop Browser Notification
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
         new Notification(title, { body, icon: '/assets/icon.png' });
@@ -185,12 +208,34 @@ export function App() {
     }
   };
 
-  // Native Android & WebAuthn Biometrics Hardware Sensor Trigger
+  // Hardware Biometrics Sensor Trigger (Android BiometricPrompt + WebAuthn)
   const handleBiometricPress = async () => {
     if ('vibrate' in navigator) {
       navigator.vibrate([40, 60, 40]);
     }
 
+    // 1. Native Android Hardware Fingerprint Sensor (BiometricPrompt)
+    try {
+      const bioCheck = await BiometricAuth.checkBiometry();
+      if (bioCheck.isAvailable) {
+        await BiometricAuth.authenticate({
+          reason: 'Scan your fingerprint to unlock Lekka Wallet',
+          cancelTitle: 'Cancel',
+          allowDeviceCredential: true
+        });
+        setIsAuthenticated(true);
+        setNotification('Biometric identity confirmed.');
+        sendPushNotification('Lekka Wallet', 'Wallet unlocked via fingerprint.');
+        return;
+      }
+    } catch (err: any) {
+      if (err?.code === 'userCancel' || err?.message?.includes('cancel') || err?.message?.includes('Cancel')) {
+        return;
+      }
+      console.warn('Native biometric error:', err);
+    }
+
+    // 2. WebAuthn Hardware Sensor (for Desktop/Web Browser)
     if (window.PublicKeyCredential) {
       try {
         const isAvailable = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();

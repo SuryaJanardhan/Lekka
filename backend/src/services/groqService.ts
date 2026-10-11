@@ -73,7 +73,7 @@ Respond ONLY with a valid JSON object in this format:
 
       const chatCompletion = await client.chat.completions.create({
         messages: [{ role: 'user', content: prompt }],
-        model: 'llama-3.1-8b-instant',
+        model: 'qwen/qwen3.8-27b',
         temperature: 0.1,
         response_format: { type: 'json_object' }
       });
