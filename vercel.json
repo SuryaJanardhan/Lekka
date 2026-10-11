@@ -1,29 +1,23 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "backend": {
-      "root": "backend",
-      "framework": "express"
+  "version": 2,
+  "builds": [
+    {
+      "src": "backend/src/server.ts",
+      "use": "@vercel/node"
     }
-  },
-  "rewrites": [
+  ],
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "destination": {
-        "service": "backend"
-      }
+      "src": "/api/(.*)",
+      "dest": "backend/src/server.ts"
     },
     {
-      "source": "/health",
-      "destination": {
-        "service": "backend"
-      }
+      "src": "/health",
+      "dest": "backend/src/server.ts"
     },
     {
-      "source": "/(.*)",
-      "destination": {
-        "service": "backend"
-      }
+      "src": "/(.*)",
+      "dest": "backend/src/server.ts"
     }
   ],
   "crons": [

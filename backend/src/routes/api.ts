@@ -6,6 +6,7 @@ import { AnalyticsController } from '../controllers/analyticsController';
 import { ExportController } from '../controllers/exportController';
 import { IngestController } from '../controllers/ingestController';
 import { NotificationController } from '../services/notificationService';
+import { ChatController } from '../controllers/chatController';
 import { secureApiMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -41,5 +42,9 @@ router.post('/ingest', IngestController.triggerManualIngestion);
 router.get('/notifications', NotificationController.getNotifications);
 router.post('/notifications/reminder', NotificationController.triggerReminder);
 router.post('/notifications/:id/read', NotificationController.markRead);
+
+// Groq AI Chatbot routes (with Read-Only Database Tool Calling)
+router.post('/chat', ChatController.sendMessage);
+router.post('/chat/clear', ChatController.clearHistory);
 
 export default router;

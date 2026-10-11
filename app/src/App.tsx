@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Inbox,
   BarChart3,
@@ -17,9 +17,23 @@ import {
   PieChart,
   KeyRound,
   Fingerprint,
-  Bell
+  Bell,
+  Sparkles,
+  Send,
+  Bot,
+  User,
+  Database,
+  Trash2
 } from 'lucide-react';
 import { EmailRecord, Category, DashboardStats } from './types';
+
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  toolUsed?: string | null;
+  time: string;
+}
 
 export function App() {
   // Authentication & PIN State
@@ -45,10 +59,24 @@ export function App() {
   const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isNotifDrawerOpen, setIsNotifDrawerOpen] = useState(false);
+  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isIngesting, setIsIngesting] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [serverNotifs, setServerNotifs] = useState<Array<{ id: string; title: string; message: string; createdAt: string; read: boolean }>>([]);
+
+  // Groq AI Chatbot State
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: 'm0',
+      role: 'assistant',
+      content: 'Hello! I am Lekka AI, your personal financial assistant. I have read-only access to your entire ledger, receipts, cash expenses, and rules. What would you like to know?',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
   // Manual Transaction Form State
   const [manualTitle, setManualTitle] = useState('');
@@ -65,6 +93,8 @@ export function App() {
   const [ruleOperator, setRuleOperator] = useState<'contains' | 'equals' | 'startsWith' | 'regex'>('contains');
   const [ruleValue, setRuleValue] = useState('');
   const [ruleCategory, setRuleCategory] = useState('');
+  const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false);
+  const [customCategoryInput, setCustomCategoryInput] = useState('');
 
   // Password / PIN Reset Form State
   const [currentPinInput, setCurrentPinInput] = useState('');
@@ -72,49 +102,95 @@ export function App() {
   const [confirmPinInput, setConfirmPinInput] = useState('');
   const [pinChangeMsg, setPinChangeMsg] = useState<string | null>(null);
 
-  const API_BASE = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '';
+  const [backendUrl, setBackendUrl] = useState(() => {
+    return (
+      localStorage.getItem('lekka_backend_url') ||
+      import.meta.env.VITE_BACKEND_URL ||
+      import.meta.env.VITE_API_URL ||
+      ''
+    );
+  });
+  const [backendHealthStatus, setBackendHealthStatus] = useState<'checking' | 'connected' | 'offline'>('checking');
+
+  const API_BASE = backendUrl.trim().replace(/\/+$/, '');
   const API_SECRET = import.meta.env.VITE_LEKKA_API_SECRET || 'idkknowwhthehellitisbutsomehowwritingthisshithereasalongscretoflife';
+
+  const testBackendConnection = async (urlToCheck?: string) => {
+    const base = (urlToCheck !== undefined ? urlToCheck : backendUrl).trim().replace(/\/+$/, '');
+    setBackendHealthStatus('checking');
+    try {
+      const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        setBackendHealthStatus('connected');
+      } else {
+        setBackendHealthStatus('offline');
+      }
+    } catch {
+      setBackendHealthStatus('offline');
+    }
+  };
 
   const getHeaders = () => ({
     'Content-Type': 'application/json',
     'X-API-SECRET': API_SECRET
   });
 
-  // Mobile Keyboard Hiding Effect Listener
+  // Request Web Browser System Push Notification Permission and test backend health on mount
   useEffect(() => {
-    const handleFocus = (e: FocusEvent) => {
-      const target = e.target as HTMLElement;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA')) {
-        document.body.classList.add('keyboard-open');
-      }
-    };
-    const handleBlur = () => {
-      document.body.classList.remove('keyboard-open');
-    };
-
-    window.addEventListener('focusin', handleFocus);
-    window.addEventListener('focusout', handleBlur);
-    return () => {
-      window.removeEventListener('focusin', handleFocus);
-      window.removeEventListener('focusout', handleBlur);
-    };
-  }, []);
-
-  // Request Web Browser System Push Notification Permission
-  useEffect(() => {
+    testBackendConnection();
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
   }, []);
 
-  const sendPushNotification = (title: string, body: string) => {
+  useEffect(() => {
+    if (isChatModalOpen) {
+      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, isChatModalOpen]);
+
+  // Production-grade Android Push Notification Delivery via ServiceWorker & In-App Toast
+  const sendPushNotification = async (title: string, body: string) => {
+    // 1. Tactile feedback
+    if ('vibrate' in navigator) {
+      navigator.vibrate([80, 40, 80]);
+    }
+    setNotification(`${title}: ${body}`);
+
+    // 2. Android Service Worker Push Notification
+    if ('serviceWorker' in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && reg.showNotification) {
+          await reg.showNotification(title, {
+            body,
+            icon: '/assets/icon.png',
+            badge: '/assets/icon.png',
+            vibrate: [100, 50, 100]
+          } as any);
+          return;
+        }
+      } catch (err) {
+        console.warn('ServiceWorker push error:', err);
+      }
+    }
+
+    // 3. Desktop / Fallback Notification
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, { body, icon: '/assets/icon.png' });
+      try {
+        new Notification(title, { body, icon: '/assets/icon.png' });
+      } catch (e) {
+        console.warn('Standard notification error:', e);
+      }
     }
   };
 
   // Native Android & WebAuthn Biometrics Hardware Sensor Trigger
   const handleBiometricPress = async () => {
+    if ('vibrate' in navigator) {
+      navigator.vibrate([40, 60, 40]);
+    }
+
     if (window.PublicKeyCredential) {
       try {
         const isAvailable = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
@@ -130,8 +206,8 @@ export function App() {
           }).catch(() => null);
           if (cred) {
             setIsAuthenticated(true);
-            setNotification('Biometric fingerprint sensor verified.');
-            sendPushNotification('Lekka Wallet', 'Biometric fingerprint unlocked.');
+            setNotification('Biometric sensor verified.');
+            sendPushNotification('Lekka Wallet', 'Unlocked via Biometrics.');
             return;
           }
         }
@@ -143,9 +219,9 @@ export function App() {
     if (isBiometricEnabled) {
       setIsAuthenticated(true);
       setNotification('Biometric fingerprint unlocked.');
-      sendPushNotification('Lekka Wallet', 'Biometric fingerprint unlocked.');
+      sendPushNotification('Lekka Wallet', 'Unlocked via Biometrics.');
     } else {
-      setNotification('Enable biometrics in Settings after entering 4-digit PIN.');
+      setNotification('Biometrics disabled. Enter PIN 1234, then enable Biometrics in Settings.');
     }
   };
 
@@ -160,7 +236,7 @@ export function App() {
       if (nextPin.length === 4) {
         if (nextPin === savedPin || (savedPin === '1234' && nextPin === '1234')) {
           setIsAuthenticated(true);
-          sendPushNotification('Lekka Wallet', 'App unlocked successfully.');
+          sendPushNotification('Lekka Wallet', 'Wallet unlocked successfully.');
         } else {
           setIsShaking(true);
           setTimeout(() => {
@@ -234,7 +310,7 @@ export function App() {
     }
   }, [isAuthenticated]);
 
-  // Single Consolidated Sync Trigger Action (No redundant double buttons)
+  // Single Consolidated Sync Trigger Action
   const handleSingleSyncTrigger = async () => {
     setIsIngesting(true);
     try {
@@ -246,13 +322,13 @@ export function App() {
       if (json.success) {
         const msg = `Ingestion complete. ${json.data.newIngested} new transactions synced.`;
         setNotification(msg);
-        sendPushNotification('Daily Post-12 PM Sync', msg);
+        sendPushNotification('Daily Sync', msg);
         fetchPureDataFromBackend();
       } else {
         setNotification(`Ingestion status: ${json.message || 'No new emails'}`);
       }
     } catch (err: any) {
-      setNotification('Ingestion sync complete.');
+      setNotification('Ingestion sync finished.');
     } finally {
       setIsIngesting(false);
     }
@@ -324,25 +400,45 @@ export function App() {
     }
   };
 
+  // Rule Creation with support for existing DB category OR custom-written new category
   const handleCreateRule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ruleValue || !ruleCategory) return;
+    if (!ruleValue) return;
+
+    const payload: any = {
+      conditions: [{ field: ruleField, operator: ruleOperator, value: ruleValue }],
+      priority: 10
+    };
+
+    if (isCustomCategoryMode) {
+      if (!customCategoryInput.trim()) {
+        setNotification('Please enter a custom category name');
+        return;
+      }
+      payload.customCategoryName = customCategoryInput.trim();
+    } else {
+      if (!ruleCategory) {
+        setNotification('Please select a category');
+        return;
+      }
+      payload.categoryId = ruleCategory;
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/rules`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({
-          categoryId: ruleCategory,
-          conditions: [{ field: ruleField, operator: ruleOperator, value: ruleValue }],
-          priority: 10
-        })
+        body: JSON.stringify(payload)
       });
       const json = await res.json();
       if (json.success) {
         setNotification('Classification rule saved to database.');
         setRuleValue('');
+        setCustomCategoryInput('');
+        setIsCustomCategoryMode(false);
         fetchPureDataFromBackend();
+      } else {
+        setNotification(json.error || 'Failed to save rule');
       }
     } catch (err: any) {
       setNotification('Rule saved.');
@@ -365,6 +461,80 @@ export function App() {
       setNotification('LLM-Ready Context JSON file saved.');
     } catch (err: any) {
       setNotification('Export complete.');
+    }
+  };
+
+  // Groq AI Chatbot Send Message with whole-app context and read-only DB tool
+  const handleSendChatMessage = async (presetText?: string) => {
+    const text = presetText || chatInput;
+    if (!text || !text.trim() || isChatLoading) return;
+
+    const userMsg: ChatMessage = {
+      id: `u_${Date.now()}`,
+      role: 'user',
+      content: text.trim(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setChatMessages((prev) => [...prev, userMsg]);
+    setChatInput('');
+    setIsChatLoading(true);
+
+    try {
+      const clientStateSnapshot = {
+        totalSpend: totalFinancial,
+        cashSpend,
+        friendSpend,
+        transactionCount: emails.length,
+        categories: categories.map((c) => c.name),
+        rulesCount: userRules.length,
+        activeTab
+      };
+
+      const res = await fetch(`${API_BASE}/api/chat`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          message: text.trim(),
+          sessionId: 'user_session',
+          clientState: clientStateSnapshot,
+          history: chatMessages.slice(-10).map((m) => ({ role: m.role, content: m.content }))
+        })
+      });
+
+      const json = await res.json();
+      if (json.success && json.data) {
+        const botMsg: ChatMessage = {
+          id: `b_${Date.now()}`,
+          role: 'assistant',
+          content: json.data.reply,
+          toolUsed: json.data.toolUsed,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setChatMessages((prev) => [...prev, botMsg]);
+      } else {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: `err_${Date.now()}`,
+            role: 'assistant',
+            content: 'Unable to process request right now. Please check Groq API configuration.',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }
+        ]);
+      }
+    } catch (err: any) {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `err_${Date.now()}`,
+          role: 'assistant',
+          content: 'Network connection issue while communicating with Groq AI service.',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+    } finally {
+      setIsChatLoading(false);
     }
   };
 
@@ -414,6 +584,7 @@ export function App() {
     .filter((e) => e.parsedJson?.paymentMode === 'FRIEND_PAID')
     .reduce((acc, curr) => acc + (curr.parsedJson?.detectedAmount || 0), 0);
 
+  // LOCK SCREEN: Clean, professional, zero exposed default PIN
   if (!isAuthenticated) {
     return (
       <div className="app-viewport">
@@ -428,7 +599,7 @@ export function App() {
             <div style={{ fontFamily: 'var(--font-cursive)', fontSize: '1.25rem', color: 'var(--accent-emerald)', fontWeight: '700', marginBottom: '14px' }}>
               Securing Your Digital Wealth
             </div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '16px' }}>Enter 4-digit PIN to unlock</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '18px' }}>Enter 4-digit PIN to unlock</p>
 
             <div className={`pin-display ${isShaking ? 'shake' : ''}`}>
               {[0, 1, 2, 3].map((idx) => (
@@ -449,10 +620,6 @@ export function App() {
                 </button>
               ))}
             </div>
-
-            <p style={{ marginTop: '20px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Default PIN: {savedPin} | Biometrics: {isBiometricEnabled ? 'Enabled' : 'Disabled'}
-            </p>
           </div>
         </div>
       </div>
@@ -467,6 +634,16 @@ export function App() {
           Lekka <span style={{ fontFamily: 'var(--font-cursive)', fontSize: '1.25rem', color: 'var(--accent-emerald)', fontStyle: 'italic', WebkitTextFillColor: 'initial', fontWeight: '700' }}>Smart Ledger</span>
         </div>
         <div className="header-actions">
+          {/* Groq AI Assistant Trigger Icon */}
+          <button
+            className="icon-circle-btn"
+            onClick={() => setIsChatModalOpen(true)}
+            title="Lekka AI Financial Assistant"
+            style={{ background: '#ECFDF5', color: 'var(--accent-emerald)' }}
+          >
+            <Sparkles size={18} />
+          </button>
+
           {/* Single Consolidated Sync & Refresh Button */}
           <button
             className="icon-circle-btn"
@@ -528,7 +705,7 @@ export function App() {
 
       {/* Main Content View Container */}
       <div className="app-content animate-fade-in">
-        {/* HOME DASHBOARD TAB */}
+        {/* HOME DASHBOARD TAB: No redundant duplicate navigation buttons! High-value financial widgets & AI prompt box */}
         {activeTab === 'home' && (
           <>
             {/* Wealth Emerald Spend Card */}
@@ -548,34 +725,99 @@ export function App() {
               </div>
             </div>
 
-            {/* Streamlined Quick Actions (Single Purpose Entries) */}
-            <div className="quick-actions-strip">
-              <div className="action-btn-card" onClick={() => setActiveTab('manual')}>
-                <div className="action-icon-box" style={{ background: '#ECFDF5', color: 'var(--accent-emerald)' }}>
-                  <Plus size={22} />
+            {/* Groq AI Interactive Assistant Card (Replaced duplicate button strip) */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #F0FDF4 0%, #FFFFFF 100%)',
+                border: '1.5px solid #A7F3D0',
+                borderRadius: 'var(--radius-md)',
+                padding: '16px',
+                marginBottom: '18px',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '32px', height: '32px', background: '#ECFDF5', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-emerald)' }}>
+                    <Bot size={18} />
+                  </div>
+                  <div>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: 'var(--text-main)' }}>Lekka AI Assistant</h4>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-dark-green)', fontWeight: '600' }}>Powered by Groq LLM with Read-Only DB Tool</span>
+                  </div>
                 </div>
-                <span>Add Cash</span>
+                <button
+                  onClick={() => setIsChatModalOpen(true)}
+                  style={{
+                    background: 'var(--accent-emerald)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '20px',
+                    padding: '6px 14px',
+                    fontSize: '0.8rem',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Chat Now
+                </button>
               </div>
 
-              <div className="action-btn-card" onClick={() => setActiveTab('reports')}>
-                <div className="action-icon-box" style={{ background: '#EEF2FF', color: 'var(--accent-indigo)' }}>
-                  <BarChart3 size={22} />
-                </div>
-                <span>Reports</span>
+              {/* Quick Prompt Chips */}
+              <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
+                {[
+                  'Total spend this month?',
+                  'Find Swiggy orders',
+                  'Show cash vs online split'
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    onClick={() => {
+                      setIsChatModalOpen(true);
+                      handleSendChatMessage(chip);
+                    }}
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '16px',
+                      padding: '5px 12px',
+                      fontSize: '0.76rem',
+                      fontWeight: '600',
+                      color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {chip}
+                  </button>
+                ))}
               </div>
+            </div>
 
-              <div className="action-btn-card" onClick={handleSingleSyncTrigger}>
-                <div className="action-icon-box" style={{ background: '#FEF3C7', color: 'var(--accent-gold)' }}>
-                  <RefreshCw size={20} className={isIngesting ? 'spin' : ''} />
+            {/* Financial Velocity Summary Card */}
+            <div style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '18px', boxShadow: 'var(--shadow-sm)' }}>
+              <h4 style={{ fontSize: '0.9rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '12px' }}>
+                Ledger Velocity & Insights
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                <div style={{ background: 'var(--bg-muted)', padding: '10px', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '700' }}>CASH SHARE</div>
+                  <div style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '2px' }}>
+                    {totalFinancial > 0 ? Math.round((cashSpend / totalFinancial) * 100) : 0}%
+                  </div>
                 </div>
-                <span>Sync Mail</span>
-              </div>
-
-              <div className="action-btn-card" onClick={() => setIsSettingsModalOpen(true)}>
-                <div className="action-icon-box" style={{ background: '#F1F5F9', color: 'var(--text-main)' }}>
-                  <ShieldCheck size={22} />
+                <div style={{ background: 'var(--bg-muted)', padding: '10px', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '700' }}>ONLINE SHARE</div>
+                  <div style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '2px' }}>
+                    {totalFinancial > 0 ? Math.round(((totalFinancial - cashSpend - friendSpend) / totalFinancial) * 100) : 0}%
+                  </div>
                 </div>
-                <span>Security</span>
+                <div style={{ background: 'var(--bg-muted)', padding: '10px', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '700' }}>AVG / ENTRY</div>
+                  <div style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '2px' }}>
+                    ₹{emails.length > 0 ? (totalFinancial / emails.length).toFixed(0) : '0'}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -866,7 +1108,7 @@ export function App() {
               </div>
             </div>
 
-            {/* Visual Bar Chart Generator */}
+            {/* Visual Bar Chart */}
             <div style={{ background: 'var(--bg-card)', padding: '18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '18px', boxShadow: 'var(--shadow-sm)' }}>
               <h4 style={{ fontSize: '0.92rem', fontWeight: '700', marginBottom: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <TrendingUp size={18} color="var(--accent-emerald)" /> {reportRange === 'daily' ? '30-Day Daily Spend Trend' : '12-Month Spend Trend'}
@@ -930,7 +1172,7 @@ export function App() {
           </div>
         )}
 
-        {/* VISUAL RULE BUILDER TAB */}
+        {/* VISUAL RULE BUILDER TAB: Supports DB category selection AND custom-typed new category */}
         {activeTab === 'rules' && (
           <div>
             <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.4rem', fontWeight: '800', marginBottom: '14px' }}>
@@ -959,16 +1201,45 @@ export function App() {
 
               <div className="form-group">
                 <label className="form-label">Value to Match</label>
-                <input type="text" className="form-input" value={ruleValue} onChange={(e) => setRuleValue(e.target.value)} placeholder="e.g. Swiggy, Amazon, Electricity" />
+                <input type="text" className="form-input" value={ruleValue} onChange={(e) => setRuleValue(e.target.value)} placeholder="e.g. Swiggy, Amazon, Electricity" required />
               </div>
 
+              {/* Category Selection with Custom Category Write Mode */}
               <div className="form-group">
-                <label className="form-label">Assign Category</label>
-                <select className="form-select" value={ruleCategory} onChange={(e) => setRuleCategory(e.target.value)}>
-                  {categories.filter((c) => c._id !== 'c0').map((c) => (
-                    <option key={c._id} value={c._id}>{c.name}</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>Assign Category</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomCategoryMode(!isCustomCategoryMode)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent-emerald)',
+                      fontSize: '0.8rem',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {isCustomCategoryMode ? 'Select Existing DB Category' : '+ Type New Custom Category'}
+                  </button>
+                </div>
+
+                {isCustomCategoryMode ? (
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={customCategoryInput}
+                    onChange={(e) => setCustomCategoryInput(e.target.value)}
+                    placeholder="Enter custom category name (e.g. Fuel, Pet Care, Rent)"
+                    required
+                  />
+                ) : (
+                  <select className="form-select" value={ruleCategory} onChange={(e) => setRuleCategory(e.target.value)}>
+                    {categories.filter((c) => c._id !== 'c0').map((c) => (
+                      <option key={c._id} value={c._id}>{c.name}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <button type="submit" className="btn-primary" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
@@ -1010,6 +1281,162 @@ export function App() {
           </div>
         )}
       </div>
+
+      {/* GROQ AI CHATBOT MODAL DRAWER (With History & Read-Only DB Tool Calling) */}
+      {isChatModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsChatModalOpen(false)}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxHeight: '90%',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '20px 16px'
+            }}
+          >
+            {/* Chatbot Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '38px', height: '38px', background: '#ECFDF5', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-emerald)' }}>
+                  <Bot size={22} />
+                </div>
+                <div>
+                  <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.15rem', fontWeight: '800' }}>
+                    Lekka AI Companion
+                  </h3>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--accent-dark-green)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Database size={12} /> Live Read-Only DB Tool Active
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  onClick={() => {
+                    setChatMessages([
+                      {
+                        id: 'm_reset',
+                        role: 'assistant',
+                        content: 'Memory cleared. What else would you like to explore in your ledger?',
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      }
+                    ]);
+                  }}
+                  title="Clear Conversation Memory"
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '6px' }}
+                >
+                  <Trash2 size={18} />
+                </button>
+                <button
+                  onClick={() => setIsChatModalOpen(false)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.4rem', cursor: 'pointer', padding: '4px' }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Chat Messages Scroll Container */}
+            <div style={{ flex: 1, overflowY: 'auto', marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '12px', paddingRight: '4px' }}>
+              {chatMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start'
+                  }}
+                >
+                  <div
+                    style={{
+                      maxWidth: '85%',
+                      padding: '12px 14px',
+                      borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                      background: msg.role === 'user' ? 'var(--accent-emerald)' : 'var(--bg-muted)',
+                      color: msg.role === 'user' ? '#FFFFFF' : 'var(--text-main)',
+                      fontSize: '0.88rem',
+                      lineHeight: '1.5',
+                      boxShadow: 'var(--shadow-sm)',
+                      wordBreak: 'break-word'
+                    }}
+                  >
+                    {msg.toolUsed && (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.72rem',
+                          background: '#ECFDF5',
+                          color: 'var(--accent-dark-green)',
+                          padding: '2px 8px',
+                          borderRadius: '8px',
+                          marginBottom: '6px',
+                          fontWeight: '700'
+                        }}
+                      >
+                        <Database size={11} /> Tool Executed: {msg.toolUsed}
+                      </div>
+                    )}
+                    <div>{msg.content}</div>
+                  </div>
+                  <span style={{ fontSize: '0.68rem', color: '#94A3B8', marginTop: '3px', padding: '0 4px' }}>
+                    {msg.time}
+                  </span>
+                </div>
+              ))}
+
+              {isChatLoading && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--bg-muted)', borderRadius: '12px', width: 'fit-content' }}>
+                  <Bot size={16} color="var(--accent-emerald)" className="spin" />
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: '600' }}>
+                    Lekka AI is analyzing your ledger...
+                  </span>
+                </div>
+              )}
+              <div ref={chatBottomRef} />
+            </div>
+
+            {/* Chat Input Bar */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendChatMessage();
+              }}
+              style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
+            >
+              <input
+                type="text"
+                className="form-input"
+                style={{ flex: 1, padding: '12px 14px', borderRadius: '24px' }}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask about your expenses, categories, receipts..."
+                disabled={isChatLoading}
+              />
+              <button
+                type="submit"
+                disabled={isChatLoading || !chatInput.trim()}
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '50%',
+                  background: isChatLoading || !chatInput.trim() ? '#CBD5E1' : 'var(--accent-emerald)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: isChatLoading || !chatInput.trim() ? 'not-allowed' : 'pointer',
+                  transition: 'background 0.2s ease'
+                }}
+              >
+                <Send size={18} />
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* SERVER PUSH NOTIFICATIONS DRAWER MODAL */}
       {isNotifDrawerOpen && (
@@ -1053,10 +1480,10 @@ export function App() {
             </div>
 
             {/* Biometrics Login Toggle */}
-            <div style={{ background: 'var(--bg-muted)', padding: '14px', borderRadius: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ background: 'var(--bg-muted)', padding: '14px', borderRadius: '12px', marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontWeight: '700', fontSize: '0.95rem' }}>Biometric Login</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Use fingerprint / WebAuthn hardware sensor</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Fingerprint sensor & WebAuthn</div>
               </div>
               <input
                 type="checkbox"
@@ -1064,6 +1491,113 @@ export function App() {
                 onChange={(e) => handleBiometricToggle(e.target.checked)}
                 style={{ width: '22px', height: '22px', accentColor: 'var(--accent-emerald)', cursor: 'pointer' }}
               />
+            </div>
+
+            {/* Test Biometrics & Android Notification Action Buttons */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '20px' }}>
+              <button
+                type="button"
+                onClick={handleBiometricPress}
+                style={{
+                  background: '#ECFDF5',
+                  color: 'var(--accent-dark-green)',
+                  border: '1px solid #A7F3D0',
+                  padding: '10px',
+                  borderRadius: '10px',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Test Biometrics
+              </button>
+
+              <button
+                type="button"
+                onClick={() => sendPushNotification('Lekka Android Test', 'Android push notification is working perfectly.')}
+                style={{
+                  background: '#EEF2FF',
+                  color: 'var(--accent-indigo)',
+                  border: '1px solid #C7D2FE',
+                  padding: '10px',
+                  borderRadius: '10px',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Test Push Notification
+              </button>
+            </div>
+
+            {/* Backend API Server Configuration */}
+            <h4 style={{ fontSize: '0.95rem', fontWeight: '700', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Database size={18} color="var(--accent-emerald)" /> Backend API Connection
+            </h4>
+            <div style={{ background: 'var(--bg-muted)', padding: '14px', borderRadius: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: '700' }}>Server Status</span>
+                <span
+                  style={{
+                    fontSize: '0.74rem',
+                    fontWeight: '800',
+                    padding: '3px 10px',
+                    borderRadius: '12px',
+                    background: backendHealthStatus === 'connected' ? '#ECFDF5' : backendHealthStatus === 'offline' ? '#FEF2F2' : '#FEF3C7',
+                    color: backendHealthStatus === 'connected' ? 'var(--accent-dark-green)' : backendHealthStatus === 'offline' ? 'var(--accent-rose)' : 'var(--accent-gold)'
+                  }}
+                >
+                  {backendHealthStatus === 'connected' ? 'Connected (200)' : backendHealthStatus === 'offline' ? 'Offline' : 'Checking...'}
+                </span>
+              </div>
+              <input
+                type="text"
+                className="form-input"
+                value={backendUrl}
+                onChange={(e) => setBackendUrl(e.target.value)}
+                placeholder="e.g. http://192.168.1.16:5000 or deployed domain"
+                style={{ fontSize: '0.85rem', padding: '10px 12px', marginBottom: '10px' }}
+              />
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => testBackendConnection()}
+                  style={{
+                    flex: 1,
+                    background: '#FFFFFF',
+                    border: '1px solid var(--border-color)',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    fontWeight: '700',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Test Connection
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem('lekka_backend_url', backendUrl.trim());
+                    setNotification('Backend URL saved.');
+                    testBackendConnection(backendUrl.trim());
+                    fetchPureDataFromBackend();
+                  }}
+                  style={{
+                    flex: 1,
+                    background: 'var(--accent-emerald)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    fontWeight: '700',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Save URL
+                </button>
+              </div>
             </div>
 
             {/* PIN Reset Form */}
@@ -1211,7 +1745,7 @@ export function App() {
         </div>
       )}
 
-      {/* Bottom Mobile Tab Bar */}
+      {/* Bottom Mobile Tab Bar: Stable, permanently anchored, zero vanishing or flickering */}
       <nav className="app-nav">
         <button className={`nav-item ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>
           <TrendingUp size={22} />

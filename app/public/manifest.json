@@ -1,0 +1,17 @@
+{
+  "name": "Lekka Wallet",
+  "short_name": "Lekka",
+  "description": "Offline-First Smart Email Management and Financial Ledger Engine",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#059669",
+  "icons": [
+    {
+      "src": "/assets/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
