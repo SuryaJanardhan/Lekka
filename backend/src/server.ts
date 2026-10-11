@@ -122,7 +122,7 @@ app.use((error: any, _req: express.Request, res: express.Response, _next: expres
   });
 });
 
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+if (!process.env.VERCEL) {
   connectDatabase().then(() => {
     CronService.initCronJobs();
     app.listen(PORT, () => {
