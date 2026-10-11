@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { EmailModel } from '../models/Email';
 import { CategoryModel } from '../models/Category';
 import { RuleModel } from '../models/Rule';
+import { LedgerReportService } from './ledgerReportService';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -16,7 +17,7 @@ export class ChatService {
   private static getClient(): Groq | null {
     if (!this.groqClient) {
       const apiKey = process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_1 || process.env.GROQ_API_KEY_2;
-      if (apiKey && apiKey !== 'mock_groq_key') {
+      if (apiKey) {
         this.groqClient = new Groq({ apiKey });
       }
     }
@@ -34,14 +35,7 @@ export class ChatService {
     const limit = Math.min(args.limit || 10, 25);
 
     if (!isMongoReady) {
-      // Graceful fallback to clientState when database is offline or buffering
-      return {
-        notice: 'Database is currently operating in offline cache mode.',
-        clientSummary: clientState || {
-          totalSpend: 0,
-          categories: ['Invoices & Receipts', 'Alerts & Security', 'Orders & Delivery', 'General']
-        }
-      };
+      throw new Error('Database is not connected.');
     }
 
     try {
@@ -86,22 +80,17 @@ export class ChatService {
         }
 
         case 'get_financial_summary': {
-          const allEmails = await EmailModel.find({}).maxTimeMS(3000).lean();
-          const total = allEmails.reduce((acc, curr) => acc + (curr.parsedJson?.detectedAmount || 0), 0);
-          const cash = allEmails
-            .filter((e) => e.parsedJson?.paymentMode === 'CASH')
-            .reduce((acc, curr) => acc + (curr.parsedJson?.detectedAmount || 0), 0);
-          const friend = allEmails
-            .filter((e) => e.parsedJson?.paymentMode === 'FRIEND_PAID')
-            .reduce((acc, curr) => acc + (curr.parsedJson?.detectedAmount || 0), 0);
-          const online = total - cash - friend;
-
+          const report = await LedgerReportService.getDashboardStats();
+          const cash = report.paymentModeBreakdown.find((item) => item.mode === 'CASH')?.totalAmount || 0;
+          const friend = report.paymentModeBreakdown.find((item) => item.mode === 'FRIEND_PAID')?.totalAmount || 0;
+          const total = report.summary.totalFinancialAmount;
           return {
             totalSpend: total,
             cashSpend: cash,
             friendPaidSpend: friend,
-            onlineSpend: online,
-            totalTransactions: allEmails.length
+            onlineSpend: total - cash - friend,
+            totalTransactions: report.summary.totalEmails,
+            period: report.period
           };
         }
 
@@ -178,10 +167,7 @@ Keep responses concise, helpful, friendly, and structured. Use INR (₹) for mon
     }
 
     if (!client) {
-      const fallbackReply = `I am Lekka AI Assistant. Currently running in offline mode. Your ledger has ${transactionCount || params.clientState?.transactionCount || 0} tracked records totaling ₹${(params.clientState?.totalSpend || 0).toFixed(2)}. Configure GROQ_API_KEY in backend/.env for live LLM inference.`;
-      sessionHistory.push({ role: 'assistant', content: fallbackReply });
-      this.conversationHistory.set(params.sessionId, sessionHistory);
-      return { reply: fallbackReply };
+      throw new Error('GROQ_API_KEY is required for Lekka AI chat.');
     }
 
     try {

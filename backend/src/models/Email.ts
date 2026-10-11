@@ -23,12 +23,12 @@ const EmailSchema = new Schema<IEmail>(
   {
     messageId: { type: String, required: true, unique: true, index: true },
     sender: { type: String, required: true, index: true },
-    subject: { type: String, required: true },
+    subject: { type: String, required: true, index: true },
     rawTextBody: { type: String, default: '' },
     parsedJson: { type: Schema.Types.Mixed, default: {} },
     hasAttachments: { type: Boolean, default: false },
     ocrExtractedText: { type: String },
-    categoryId: { type: Schema.Types.ObjectId, ref: 'Category' },
+    categoryId: { type: Schema.Types.ObjectId, ref: 'Category', index: true },
     categorySource: {
       type: String,
       enum: ['RULE', 'GROQ_AI', 'USER_MANUAL', 'UNASSIGNED'],
@@ -41,10 +41,13 @@ const EmailSchema = new Schema<IEmail>(
       enum: ['PENDING', 'APPROVED', 'REASSIGNED'],
       default: 'APPROVED'
     },
-    receivedAt: { type: Date, required: true },
+    receivedAt: { type: Date, required: true, index: true },
     processedAt: { type: Date, default: Date.now }
   },
   { timestamps: true }
 );
+
+EmailSchema.index({ receivedAt: -1, categoryId: 1 });
+EmailSchema.index({ needsUserReview: 1, receivedAt: -1 });
 
 export const EmailModel = model<IEmail>('Email', EmailSchema);

@@ -1,70 +1,70 @@
 import { Request, Response } from 'express';
+import { NotificationModel, NotificationType } from '../models/Notification';
 
 export interface NotificationLog {
   id: string;
   title: string;
   message: string;
-  type: 'SYNC' | 'TRANSACTION' | 'REMINDER' | 'SECURITY';
+  type: NotificationType;
   createdAt: string;
   read: boolean;
 }
 
 class NotificationService {
-  private notifications: NotificationLog[] = [
-    {
-      id: 'n1',
-      title: 'Post-12 PM Sync Ready',
-      message: 'Gmail email ingestion service is scheduled daily post 12:00 PM.',
-      type: 'SYNC',
-      createdAt: new Date().toISOString(),
-      read: false
-    }
-  ];
-
-  public getNotifications(): NotificationLog[] {
-    return this.notifications;
+  public async getNotifications(): Promise<NotificationLog[]> {
+    const notifications = await NotificationModel.find({}).sort({ createdAt: -1 }).limit(50).lean();
+    return notifications.map((notification) => ({
+      id: String(notification._id),
+      title: notification.title,
+      message: notification.message,
+      type: notification.type,
+      createdAt: notification.createdAt.toISOString(),
+      read: notification.read
+    }));
   }
 
-  public addNotification(title: string, message: string, type: NotificationLog['type']): NotificationLog {
-    const newNotif: NotificationLog = {
-      id: `n_${Date.now()}`,
+  public async addNotification(
+    title: string,
+    message: string,
+    type: NotificationType,
+    metadata: Record<string, any> = {}
+  ): Promise<NotificationLog> {
+    const notification = await NotificationModel.create({
       title,
       message,
       type,
-      createdAt: new Date().toISOString(),
-      read: false
+      metadata
+    });
+
+    return {
+      id: String(notification._id),
+      title: notification.title,
+      message: notification.message,
+      type: notification.type,
+      createdAt: notification.createdAt.toISOString(),
+      read: notification.read
     };
-    this.notifications.unshift(newNotif);
-    // Keep max 50 log items
-    if (this.notifications.length > 50) {
-      this.notifications.pop();
-    }
-    return newNotif;
   }
 
-  public markAsRead(id: string): boolean {
-    const found = this.notifications.find((n) => n.id === id);
-    if (found) {
-      found.read = true;
-      return true;
-    }
-    return false;
+  public async markAsRead(id: string): Promise<boolean> {
+    const result = await NotificationModel.findByIdAndUpdate(id, { read: true });
+    return Boolean(result);
   }
 }
 
 export const notificationService = new NotificationService();
 
 export class NotificationController {
-  public static getNotifications = (_req: Request, res: Response): void => {
+  public static getNotifications = async (_req: Request, res: Response): Promise<void> => {
     res.json({
       success: true,
-      data: notificationService.getNotifications()
+      data: await notificationService.getNotifications()
     });
   };
 
-  public static triggerReminder = (req: Request, res: Response): void => {
+  public static triggerReminder = async (req: Request, res: Response): Promise<void> => {
     const { title, message } = req.body || {};
-    const notif = notificationService.addNotification(
+    const notif = await notificationService.addNotification(
       title || 'Daily Financial Reminder',
       message || 'Check your post-12 PM email receipts and expense sync in Lekka.',
       'REMINDER'
@@ -76,9 +76,9 @@ export class NotificationController {
     });
   };
 
-  public static markRead = (req: Request, res: Response): void => {
+  public static markRead = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    const ok = notificationService.markAsRead(id);
+    const ok = await notificationService.markAsRead(id);
     res.json({ success: ok });
   };
 }

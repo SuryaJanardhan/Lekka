@@ -34,4 +34,6 @@ const RuleSchema = new Schema<IRule>(
   { timestamps: true }
 );
 
+RuleSchema.index({ priority: -1, categoryId: 1 });
+
 export const RuleModel = model<IRule>('Rule', RuleSchema);

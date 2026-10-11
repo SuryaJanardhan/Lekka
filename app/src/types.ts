@@ -37,10 +37,15 @@ export interface Rule {
 }
 
 export interface DashboardStats {
+  period?: {
+    startDate: string;
+    endDate: string;
+  };
   summary: {
     totalEmails: number;
     pendingReviews: number;
     totalFinancialAmount: number;
+    averageAmount?: number;
     sources: {
       rule: number;
       ai: number;
@@ -52,6 +57,7 @@ export interface DashboardStats {
     categoryName: string;
     colorCode: string;
     count: number;
+    totalAmount?: number;
   }>;
   paymentModeBreakdown?: Array<{
     mode: string;

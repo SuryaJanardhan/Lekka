@@ -1,9 +1,10 @@
 import cron from 'node-cron';
 import { GmailService } from './gmailService';
+import { runtimeConfig } from '../config/runtimeConfig';
 
 export class CronService {
   public static initCronJobs() {
-    const cronExpression = process.env.INGESTION_CRON_SCHEDULE || '0 12 * * *';
+    const cronExpression = runtimeConfig.ingestionCronSchedule;
 
     console.log(`[Scheduler] Initializing daily ingestion job with cron pattern: ${cronExpression}`);
 

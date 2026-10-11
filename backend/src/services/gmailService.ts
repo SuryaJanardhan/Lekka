@@ -6,245 +6,209 @@ import { RuleEngine } from './ruleEngine';
 import { GroqService } from './groqService';
 import { CategoryModel } from '../models/Category';
 import { ParserService } from './parserService';
+import { SyncStateModel } from '../models/SyncState';
+import { notificationService } from './notificationService';
+import { assertIngestionConfigured, runtimeConfig } from '../config/runtimeConfig';
 
 export interface IngestionResult {
   totalProcessed: number;
   newIngested: number;
   duplicatesSkipped: number;
   needsReviewCount: number;
+  notificationOnlyCount: number;
+}
+
+interface IncomingMail {
+  messageId: string;
+  sender: string;
+  subject: string;
+  body: string;
+  receivedAt: Date;
+  attachments?: Array<{ contentType: string; content: Buffer }>;
 }
 
 export class GmailService {
   public static async processIngestionPipeline(): Promise<IngestionResult> {
-    const imapUser = process.env.GMAIL_USER;
-    const imapPass = process.env.GMAIL_APP_PASSWORD;
+    assertIngestionConfigured();
 
-    // 1. Direct Gmail App Password IMAP Ingestion Path
-    if (imapUser && imapPass && imapPass !== 'your_16_character_app_password' && imapPass !== 'mock_app_password') {
-      console.log(`[GmailService] Connecting via IMAP for ${imapUser}...`);
-      return this.processImapIngestion(imapUser, imapPass);
+    const syncState = await SyncStateModel.findOneAndUpdate(
+      { key: 'gmail' },
+      { lastAttemptedSyncAt: new Date(), $unset: { lastError: '' } },
+      { upsert: true, new: true }
+    );
+
+    try {
+      const result = runtimeConfig.gmail.user && runtimeConfig.gmail.appPassword
+        ? await this.processImapIngestion(syncState.lastSuccessfulSyncAt)
+        : await this.processOAuth2Ingestion(syncState.lastSuccessfulSyncAt);
+
+      await SyncStateModel.updateOne(
+        { key: 'gmail' },
+        { lastSuccessfulSyncAt: new Date(), lastAttemptedSyncAt: new Date(), $unset: { lastError: '' } }
+      );
+
+      await notificationService.addNotification(
+        'Gmail sync complete',
+        `${result.newIngested} expenses added, ${result.notificationOnlyCount} selected-sender emails flagged for manual check.`,
+        'SYNC',
+        result
+      );
+
+      return result;
+    } catch (error: any) {
+      await SyncStateModel.updateOne(
+        { key: 'gmail' },
+        { lastAttemptedSyncAt: new Date(), lastError: error.message || String(error) },
+        { upsert: true }
+      );
+      throw error;
     }
-
-    // 2. OAuth2 Ingestion Path
-    const oauth2Client = this.getOAuth2Client();
-    if (oauth2Client) {
-      console.log('[GmailService] Connecting via Google OAuth2 API...');
-      return this.processOAuth2Ingestion(oauth2Client);
-    }
-
-    // 3. Mock Batch Fallback
-    console.log('[GmailService] No live credentials found. Executing mock ingestion batch...');
-    return this.executeMockIngestionBatch();
   }
 
-  private static async processImapIngestion(user: string, pass: string): Promise<IngestionResult> {
+  private static async processImapIngestion(lastSuccessfulSyncAt?: Date): Promise<IngestionResult> {
     const client = new ImapFlow({
       host: 'imap.gmail.com',
       port: 993,
       secure: true,
-      auth: { user, pass },
+      auth: {
+        user: runtimeConfig.gmail.user,
+        pass: runtimeConfig.gmail.appPassword
+      },
       logger: false
     });
-
-    let totalProcessed = 0;
-    let newIngested = 0;
-    let duplicatesSkipped = 0;
-    let needsReviewCount = 0;
 
     try {
       await client.connect();
       const lock = await client.getMailboxLock('INBOX');
-
       try {
-        const targetSenders = (process.env.TARGET_SENDER_EMAILS || '')
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-
+        const mails: IncomingMail[] = [];
         for await (const message of client.fetch('1:*', { envelope: true, source: true })) {
           if (!message.source) continue;
-          totalProcessed++;
-
           const parsed: ParsedMail = await simpleParser(message.source);
-          const messageIdHeader = parsed.messageId || `imap_msg_${message.uid}`;
-          const sender = parsed.from?.value[0]?.address || 'unknown@domain.com';
-          const subject = parsed.subject || 'No Subject';
           const receivedAt = parsed.date || new Date();
+          if (lastSuccessfulSyncAt && receivedAt <= lastSuccessfulSyncAt) continue;
 
-          // Filter by target senders if configured
-          if (targetSenders.length > 0) {
-            const senderMatch = targetSenders.some((ts) => sender.toLowerCase().includes(ts.toLowerCase()));
-            if (!senderMatch) continue;
-          }
-
-          // Check deduplication index in MongoDB
-          const existing = await EmailModel.findOne({ messageId: messageIdHeader });
-          if (existing) {
-            duplicatesSkipped++;
-            continue;
-          }
-
-          // Body & Attachment text extraction
-          const bodyContent = parsed.text || parsed.html || subject;
-          const { cleanText, structuredJson } = await ParserService.parseEmailBody(bodyContent as string);
-
-          let ocrText = '';
-          if (parsed.attachments && parsed.attachments.length > 0) {
-            for (const att of parsed.attachments) {
-              if (att.contentType.startsWith('image/')) {
-                ocrText += await ParserService.processAttachmentImage(att.content);
-              }
-            }
-          }
-
-          const res = await this.classifyAndStoreEmail({
-            messageId: messageIdHeader,
-            sender,
-            subject,
-            rawTextBody: cleanText,
-            parsedJson: structuredJson,
-            ocrExtractedText: ocrText || undefined,
-            receivedAt
+          mails.push({
+            messageId: parsed.messageId || `imap_msg_${message.uid}`,
+            sender: parsed.from?.value[0]?.address || 'unknown@domain.com',
+            subject: parsed.subject || 'No Subject',
+            body: (parsed.text || parsed.html || parsed.subject || '') as string,
+            receivedAt,
+            attachments: parsed.attachments?.map((attachment) => ({
+              contentType: attachment.contentType,
+              content: attachment.content
+            }))
           });
-
-          if (res.needsUserReview) needsReviewCount++;
-          newIngested++;
         }
+
+        return this.processIncomingMails(mails);
       } finally {
         lock.release();
       }
-
-      await client.logout();
-    } catch (error) {
-      console.error('[GmailService] IMAP error:', error);
+    } finally {
+      await client.logout().catch(() => undefined);
     }
-
-    return { totalProcessed, newIngested, duplicatesSkipped, needsReviewCount };
   }
 
-  private static getOAuth2Client() {
-    const clientId = process.env.GMAIL_CLIENT_ID;
-    const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-    const redirectUri = process.env.GMAIL_REDIRECT_URI || 'https://developers.google.com/oauthplayground';
-    const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+  private static async processOAuth2Ingestion(lastSuccessfulSyncAt?: Date): Promise<IngestionResult> {
+    const oauth2Client = new google.auth.OAuth2(
+      runtimeConfig.gmail.clientId,
+      runtimeConfig.gmail.clientSecret,
+      runtimeConfig.gmail.redirectUri
+    );
+    oauth2Client.setCredentials({ refresh_token: runtimeConfig.gmail.refreshToken });
 
-    if (!clientId || clientId === 'mock_client_id' || !refreshToken || refreshToken === 'mock_refresh_token') {
-      return null;
-    }
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    const senderFilter = runtimeConfig.targetSenderEmails.map((sender) => `from:${sender}`).join(' OR ');
+    const afterFilter = lastSuccessfulSyncAt
+      ? ` after:${lastSuccessfulSyncAt.getFullYear()}/${lastSuccessfulSyncAt.getMonth() + 1}/${lastSuccessfulSyncAt.getDate()}`
+      : '';
 
-    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
-    oauth2Client.setCredentials({ refresh_token: refreshToken });
-    return oauth2Client;
-  }
+    const response = await gmail.users.messages.list({
+      userId: 'me',
+      q: `(${senderFilter})${afterFilter}`,
+      maxResults: 50
+    });
 
-  private static async processOAuth2Ingestion(oauth2Client: any): Promise<IngestionResult> {
-    try {
-      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-      const targetSenders = (process.env.TARGET_SENDER_EMAILS || '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
+    const messages = response.data.messages || [];
+    const mails: IncomingMail[] = [];
 
-      const queryFilter = targetSenders.length > 0
-        ? targetSenders.map((sender) => `from:${sender}`).join(' OR ')
-        : 'is:unread';
+    for (const msg of messages) {
+      if (!msg.id) continue;
+      const msgDetail = await gmail.users.messages.get({ userId: 'me', id: msg.id, format: 'full' });
+      const headers = msgDetail.data.payload?.headers || [];
+      const dateHeader = headers.find((h) => h.name?.toLowerCase() === 'date')?.value;
+      const receivedAt = dateHeader ? new Date(dateHeader) : new Date();
+      if (lastSuccessfulSyncAt && receivedAt <= lastSuccessfulSyncAt) continue;
 
-      const response = await gmail.users.messages.list({
-        userId: 'me',
-        q: queryFilter,
-        maxResults: 20
+      mails.push({
+        messageId: headers.find((h) => h.name?.toLowerCase() === 'message-id')?.value || msg.id,
+        sender: headers.find((h) => h.name?.toLowerCase() === 'from')?.value || 'unknown@domain.com',
+        subject: headers.find((h) => h.name?.toLowerCase() === 'subject')?.value || 'No Subject',
+        body: msgDetail.data.snippet || '',
+        receivedAt
       });
-
-      const messages = response.data.messages || [];
-      let newIngested = 0;
-      let duplicatesSkipped = 0;
-      let needsReviewCount = 0;
-
-      for (const msg of messages) {
-        if (!msg.id) continue;
-
-        const msgDetail = await gmail.users.messages.get({ userId: 'me', id: msg.id, format: 'full' });
-        const headers = msgDetail.data.payload?.headers || [];
-
-        const messageIdHeader = headers.find((h) => h.name?.toLowerCase() === 'message-id')?.value || msg.id;
-        const sender = headers.find((h) => h.name?.toLowerCase() === 'from')?.value || 'unknown@domain.com';
-        const subject = headers.find((h) => h.name?.toLowerCase() === 'subject')?.value || 'No Subject';
-        const dateHeader = headers.find((h) => h.name?.toLowerCase() === 'date')?.value;
-        const receivedAt = dateHeader ? new Date(dateHeader) : new Date();
-
-        const existing = await EmailModel.findOne({ messageId: messageIdHeader });
-        if (existing) {
-          duplicatesSkipped++;
-          continue;
-        }
-
-        const bodyData = msgDetail.data.snippet || subject;
-        const { cleanText, structuredJson } = await ParserService.parseEmailBody(bodyData);
-
-        const result = await this.classifyAndStoreEmail({
-          messageId: messageIdHeader,
-          sender,
-          subject,
-          rawTextBody: cleanText,
-          parsedJson: structuredJson,
-          receivedAt
-        });
-
-        if (result.needsUserReview) needsReviewCount++;
-        newIngested++;
-      }
-
-      return { totalProcessed: messages.length, newIngested, duplicatesSkipped, needsReviewCount };
-    } catch (error) {
-      console.error('[GmailService] OAuth2 Ingestion error:', error);
-      return this.executeMockIngestionBatch();
     }
+
+    return this.processIncomingMails(mails);
   }
 
-  private static async executeMockIngestionBatch(): Promise<IngestionResult> {
-    const mockEmails = [
-      {
-        messageId: `msg_mock_inv_${Date.now()}_1`,
-        sender: 'billing@aws.amazon.com',
-        subject: 'Your AWS Monthly Service Invoice #INV-98231',
-        body: 'Total Amount Due: $142.50 USD for AWS Cloud Infrastructure services. Reference ID: INV-98231. Date: 2026-09-20.',
-        date: new Date()
-      },
-      {
-        messageId: `msg_mock_alert_${Date.now()}_2`,
-        sender: 'security@github.com',
-        subject: 'Security Alert: New SSH key added to your account',
-        body: 'A new SSH key was added to account username surya from IP address 192.168.1.1. If this was not you, revoke it immediately.',
-        date: new Date()
-      }
-    ];
-
+  private static async processIncomingMails(mails: IncomingMail[]): Promise<IngestionResult> {
+    let totalProcessed = 0;
     let newIngested = 0;
     let duplicatesSkipped = 0;
     let needsReviewCount = 0;
+    let notificationOnlyCount = 0;
 
-    for (const mock of mockEmails) {
-      const existing = await EmailModel.findOne({ messageId: mock.messageId });
+    for (const mail of mails) {
+      if (!this.isSelectedSender(mail.sender)) continue;
+      totalProcessed++;
+
+      const existing = await EmailModel.findOne({ messageId: mail.messageId });
       if (existing) {
         duplicatesSkipped++;
         continue;
       }
 
-      const { cleanText, structuredJson } = await ParserService.parseEmailBody(mock.body);
-      const res = await this.classifyAndStoreEmail({
-        messageId: mock.messageId,
-        sender: mock.sender,
-        subject: mock.subject,
+      let { cleanText, structuredJson } = await ParserService.parseEmailBody(mail.body || mail.subject);
+      let ocrText = '';
+      for (const attachment of mail.attachments || []) {
+        if (attachment.contentType.startsWith('image/')) {
+          ocrText += await ParserService.processAttachmentImage(attachment.content);
+        }
+      }
+
+      if (ocrText) {
+        const reparsed = await ParserService.parseEmailBody(`${cleanText} ${ocrText}`);
+        cleanText = reparsed.cleanText;
+        structuredJson = { ...structuredJson, ...reparsed.structuredJson };
+      }
+
+      const result = await this.classifyAndStoreEmail({
+        messageId: mail.messageId,
+        sender: mail.sender,
+        subject: mail.subject,
         rawTextBody: cleanText,
         parsedJson: structuredJson,
-        receivedAt: mock.date
+        ocrExtractedText: ocrText || undefined,
+        receivedAt: mail.receivedAt
       });
 
-      if (res.needsUserReview) needsReviewCount++;
-      newIngested++;
+      if (result.notificationOnly) {
+        notificationOnlyCount++;
+      } else {
+        if (result.needsUserReview) needsReviewCount++;
+        newIngested++;
+      }
     }
 
-    return { totalProcessed: mockEmails.length, newIngested, duplicatesSkipped, needsReviewCount };
+    return { totalProcessed, newIngested, duplicatesSkipped, needsReviewCount, notificationOnlyCount };
+  }
+
+  private static isSelectedSender(sender: string): boolean {
+    return runtimeConfig.targetSenderEmails.some((selectedSender) =>
+      sender.toLowerCase().includes(selectedSender.toLowerCase())
+    );
   }
 
   private static async classifyAndStoreEmail(emailData: {
@@ -255,7 +219,32 @@ export class GmailService {
     parsedJson: Record<string, any>;
     ocrExtractedText?: string;
     receivedAt: Date;
-  }) {
+  }): Promise<{ needsUserReview: boolean; notificationOnly: boolean }> {
+    if (!emailData.parsedJson.detectedAmount) {
+      const aiFields = await GroqService.extractFinancialFields(
+        emailData.sender,
+        emailData.subject,
+        emailData.rawTextBody
+      );
+
+      if (aiFields?.detectedAmount) {
+        emailData.parsedJson = { ...emailData.parsedJson, ...aiFields };
+      } else {
+        await notificationService.addNotification(
+          'Selected sender email needs manual check',
+          `"${emailData.subject}" from ${emailData.sender} did not contain a detectable amount. Add it manually if it is an expense.`,
+          'REVIEW',
+          {
+            messageId: emailData.messageId,
+            sender: emailData.sender,
+            subject: emailData.subject,
+            receivedAt: emailData.receivedAt
+          }
+        );
+        return { needsUserReview: false, notificationOnly: true };
+      }
+    }
+
     let categoryId = await RuleEngine.evaluateEmail(emailData.sender, emailData.subject, emailData.rawTextBody);
     let categorySource: 'RULE' | 'GROQ_AI' | 'USER_MANUAL' | 'UNASSIGNED' = 'RULE';
     let needsReview = false;
@@ -282,7 +271,7 @@ export class GmailService {
       }
     }
 
-    const emailDoc = new EmailModel({
+    await EmailModel.create({
       messageId: emailData.messageId,
       sender: emailData.sender,
       subject: emailData.subject,
@@ -297,7 +286,6 @@ export class GmailService {
       receivedAt: emailData.receivedAt
     });
 
-    await emailDoc.save();
-    return { emailDoc, needsUserReview: needsReview };
+    return { needsUserReview: needsReview, notificationOnly: false };
   }
 }

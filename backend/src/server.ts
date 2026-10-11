@@ -6,24 +6,27 @@ import apiRouter from './routes/api';
 import { CronService } from './services/cronService';
 import { CategoryModel } from './models/Category';
 import { RuleModel } from './models/Rule';
+import { runtimeConfig } from './config/runtimeConfig';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/lekka_db';
+const PORT = runtimeConfig.port;
 
 app.use(cors({
-  origin: '*',
+  origin(origin, callback) {
+    if (!origin || runtimeConfig.corsOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error(`CORS blocked origin: ${origin}`));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-SECRET']
 }));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// API route middleware
-app.use('/api', apiRouter);
 
 // Health check endpoint
 app.get('/health', (_req, res) => {
@@ -87,11 +90,12 @@ export async function connectDatabase() {
   isDbConnecting = true;
   try {
     console.log('[Database] Connecting to MongoDB Atlas...');
-    await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
+    await mongoose.connect(runtimeConfig.mongodbUri, { serverSelectionTimeoutMS: 5000 });
     console.log('[Database] Connected to MongoDB Atlas.');
     await seedInitialCategoriesAndRules();
   } catch (err: any) {
-    console.warn('[Database] Connection warning:', err.message || err);
+    console.error('[Database] Connection failed:', err.message || err);
+    throw err;
   } finally {
     isDbConnecting = false;
   }
@@ -99,8 +103,23 @@ export async function connectDatabase() {
 
 // Middleware for serverless request DB connection
 app.use(async (_req, _res, next) => {
-  await connectDatabase();
-  next();
+  try {
+    await connectDatabase();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// API route middleware
+app.use('/api', apiRouter);
+
+app.use((error: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[Server] Request failed:', error);
+  res.status(500).json({
+    success: false,
+    error: error.message || 'Internal server error'
+  });
 });
 
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {

@@ -1,13 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
+import { runtimeConfig } from '../config/runtimeConfig';
 
 export function secureApiMiddleware(req: Request, res: Response, next: NextFunction) {
-  const secretKey = process.env.LEKKA_API_SECRET;
-
-  // If LEKKA_API_SECRET is not configured or set to default fallback, allow bypass for initial setup
-  if (!secretKey || secretKey === 'your_random_secret_token_here') {
-    return next();
-  }
+  const secretKey = runtimeConfig.apiSecret;
 
   const incomingSecret = req.headers['x-api-secret'] as string || req.headers['authorization']?.replace('Bearer ', '') || '';
 

@@ -115,7 +115,7 @@ export function App() {
   const [backendHealthStatus, setBackendHealthStatus] = useState<'checking' | 'connected' | 'offline'>('checking');
 
   const API_BASE = backendUrl.trim().replace(/\/+$/, '');
-  const API_SECRET = import.meta.env.VITE_LEKKA_API_SECRET || 'idkknowwhthehellitisbutsomehowwritingthisshithereasalongscretoflife';
+  const API_SECRET = import.meta.env.VITE_LEKKA_API_SECRET || '';
 
   const testBackendConnection = async (urlToCheck?: string) => {
     const base = (urlToCheck !== undefined ? urlToCheck : backendUrl).trim().replace(/\/+$/, '');
