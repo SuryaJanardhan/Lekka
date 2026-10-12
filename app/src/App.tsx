@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import {
   BarChart3,
   Bell,
@@ -18,7 +19,12 @@ import {
   Trash2,
   Wallet
 } from 'lucide-react';
-import { BiometricAuth } from '@aparajita/capacitor-biometric-auth';
+import {
+  AndroidBiometryStrength,
+  BiometricAuth,
+  BiometryError,
+  BiometryErrorType
+} from '@aparajita/capacitor-biometric-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { ApiClient } from './api';
 import { Category, DashboardStats, EmailRecord, NotificationItem, Rule } from './types';
@@ -26,9 +32,12 @@ import { amountOf, money, moneyExact, shortDate, timeAgo } from './format';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
+type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
 const apiSecret = import.meta.env.VITE_LEKKA_API_SECRET || '';
 const envBackendUrl = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '';
+const notificationChannelId = 'lekka_alerts';
+let notificationChannelReady = false;
 const defaultCategory: Category = {
   _id: 'all',
   name: 'All',
@@ -57,6 +66,9 @@ export function App() {
   const [selectedEntry, setSelectedEntry] = useState<EmailRecord | null>(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
 
   const [manual, setManual] = useState({
     title: '',
@@ -80,17 +92,64 @@ export function App() {
 
   const api = useMemo(() => new ApiClient({ baseUrl: backendUrl, apiSecret }), [backendUrl]);
 
-  const showToast = async (message: string, title = 'Lekka') => {
-    setToast(message);
-    try {
-      await LocalNotifications.schedule({
-        notifications: [{ title, body: message, id: Date.now() % 100000, schedule: { at: new Date(Date.now() + 100) } }]
+  const ensureLocalNotifications = async () => {
+    if (!Capacitor.isNativePlatform()) return false;
+
+    if (!notificationChannelReady) {
+      await LocalNotifications.createChannel({
+        id: notificationChannelId,
+        name: 'Lekka alerts',
+        description: 'Sync, review, and expense confirmations',
+        importance: 4,
+        visibility: 1,
+        vibration: true,
+        lights: true,
+        lightColor: '#14B8A6'
       });
-    } catch {
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, { body: message });
-      }
+      notificationChannelReady = true;
     }
+
+    let permissions = await LocalNotifications.checkPermissions();
+    if (permissions.display !== 'granted') {
+      permissions = await LocalNotifications.requestPermissions();
+    }
+
+    if (permissions.display !== 'granted') {
+      throw new Error('Android notification permission is not granted');
+    }
+
+    return true;
+  };
+
+  const sendDeviceNotification = async (title: string, message: string) => {
+    try {
+      if (await ensureLocalNotifications()) {
+        await LocalNotifications.schedule({
+          notifications: [{
+            title,
+            body: message,
+            id: Date.now() % 2147483647,
+            channelId: notificationChannelId,
+            smallIcon: 'ic_stat_lekka',
+            iconColor: '#14B8A6',
+            autoCancel: true
+          }]
+        });
+        return;
+      }
+
+      if ('Notification' in window) {
+        if (Notification.permission === 'default') await Notification.requestPermission();
+        if (Notification.permission === 'granted') new Notification(title, { body: message });
+      }
+    } catch (error: any) {
+      setToast(error.message || 'Notification failed');
+    }
+  };
+
+  const showToast = async (message: string, title = 'Lekka', notify = false) => {
+    setToast(message);
+    if (notify) await sendDeviceNotification(title, message);
   };
 
   const refresh = async () => {
@@ -130,8 +189,6 @@ export function App() {
 
   useEffect(() => {
     checkConnection();
-    LocalNotifications.requestPermissions().catch(() => undefined);
-    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
   }, []);
 
   useEffect(() => {
@@ -174,13 +231,70 @@ export function App() {
     }
     try {
       const check = await BiometricAuth.checkBiometry();
-      if (check.isAvailable) {
-        await BiometricAuth.authenticate({ reason: 'Unlock Lekka', allowDeviceCredential: true });
+      if (!check.isAvailable) {
+        showToast(check.reason || 'No enrolled biometric is available for this app');
+        return;
       }
+
+      await BiometricAuth.authenticate({
+        reason: 'Use your fingerprint or face to unlock Lekka',
+        cancelTitle: 'Cancel',
+        allowDeviceCredential: false,
+        androidTitle: 'Unlock Lekka',
+        androidSubtitle: 'Authenticate with biometrics',
+        androidConfirmationRequired: false,
+        androidBiometryStrength: AndroidBiometryStrength.weak
+      });
       setIsUnlocked(true);
-    } catch {
-      showToast('Biometric unlock cancelled');
+      setPin('');
+      showToast('Biometric unlock successful');
+    } catch (error) {
+      if (error instanceof BiometryError && error.code === BiometryErrorType.userCancel) return;
+      showToast(error instanceof Error ? error.message : 'Biometric unlock failed');
     }
+  };
+
+  const verifyBiometricForSettings = async () => {
+    if (!Capacitor.isNativePlatform()) {
+      showToast('Biometric tests only run inside the Android app');
+      return false;
+    }
+
+    try {
+      const check = await BiometricAuth.checkBiometry();
+      if (!check.isAvailable) {
+        showToast(check.reason || 'No enrolled biometric is available');
+        return false;
+      }
+
+      await BiometricAuth.authenticate({
+        reason: 'Confirm biometrics for Lekka',
+        cancelTitle: 'Cancel',
+        allowDeviceCredential: false,
+        androidTitle: 'Confirm Lekka biometrics',
+        androidSubtitle: 'Use enrolled biometric only',
+        androidConfirmationRequired: false,
+        androidBiometryStrength: AndroidBiometryStrength.weak
+      });
+
+      showToast('Biometric verification worked');
+      return true;
+    } catch (error) {
+      if (error instanceof BiometryError && error.code === BiometryErrorType.userCancel) return false;
+      showToast(error instanceof Error ? error.message : 'Biometric verification failed');
+      return false;
+    }
+  };
+
+  const setBiometricPreference = async (enabled: boolean) => {
+    if (enabled) {
+      const verified = await verifyBiometricForSettings();
+      if (!verified) return;
+    }
+
+    setBiometricEnabled(enabled);
+    localStorage.setItem('lekka_biometric_enabled', String(enabled));
+    showToast(enabled ? 'Biometric unlock enabled' : 'Biometric unlock disabled');
   };
 
   const sync = async () => {
@@ -188,7 +302,7 @@ export function App() {
     try {
       const result = await api.syncGmail();
       await refresh();
-      showToast(`${result.newIngested} expenses synced, ${result.notificationOnlyCount} emails flagged`, 'Gmail sync');
+      showToast(`${result.newIngested} expenses synced, ${result.notificationOnlyCount} emails flagged`, 'Gmail sync', true);
     } catch (error: any) {
       showToast(error.message || 'Gmail sync failed');
     } finally {
@@ -211,7 +325,7 @@ export function App() {
       setManual((prev) => ({ ...prev, title: '', amount: '', friendName: '', notes: '' }));
       setTab('today');
       await refresh();
-      showToast('Expense saved');
+      showToast('Expense saved', 'Lekka expense', true);
     } catch (error: any) {
       showToast(error.message || 'Could not save expense');
     }
@@ -269,6 +383,36 @@ export function App() {
       showToast('Export downloaded');
     } catch (error: any) {
       showToast(error.message || 'Export failed');
+    }
+  };
+
+  const askAssistant = async (preset?: string) => {
+    const message = (preset || chatInput).trim();
+    if (!message || chatLoading) return;
+
+    const nextHistory: ChatMessage[] = [...chatMessages, { role: 'user', content: message }];
+    setChatMessages(nextHistory);
+    setChatInput('');
+    setChatLoading(true);
+
+    try {
+      const response = await api.sendChatMessage({
+        message,
+        clientState: {
+          totalSpend: totals.monthTotal,
+          cashSpend: totals.cash,
+          friendPaidSpend: totals.friend,
+          transactionCount: entries.length,
+          pendingReviews: totals.pending,
+          categories: categories.filter((category) => category._id !== 'all').map((category) => category.name)
+        },
+        history: nextHistory.slice(-8)
+      });
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: response.reply }]);
+    } catch (error: any) {
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: error.message || 'AI request failed. Check backend URL, API secret, and GROQ_API_KEY.' }]);
+    } finally {
+      setChatLoading(false);
     }
   };
 
@@ -346,6 +490,29 @@ export function App() {
               <button onClick={() => setTab('review')}><Check size={18} /> Review</button>
               <button onClick={() => setTab('ledger')}><Search size={18} /> Search</button>
             </div>
+
+            <section className="assistant-card">
+              <div className="section-title">
+                <h2>Ask AI</h2>
+                {chatLoading && <span className="mini-status">thinking</span>}
+              </div>
+              <div className="chip-row">
+                {['Spend this month?', 'Cash vs online?', 'Pending reviews?'].map((prompt) => (
+                  <button className="chip" key={prompt} onClick={() => askAssistant(prompt)}>{prompt}</button>
+                ))}
+              </div>
+              {chatMessages.length > 0 && (
+                <div className="chat-log">
+                  {chatMessages.slice(-4).map((message, index) => (
+                    <p key={`${message.role}-${index}`} className={message.role}>{message.content}</p>
+                  ))}
+                </div>
+              )}
+              <div className="assistant-input">
+                <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask about your ledger" />
+                <button onClick={() => askAssistant()} disabled={chatLoading}>Ask</button>
+              </div>
+            </section>
 
             <SectionTitle title="Recent ledger" action="View all" onAction={() => setTab('ledger')} />
             <EntryList entries={entries.slice(0, 6)} onSelect={setSelectedEntry} empty="No expenses yet" />
@@ -451,8 +618,10 @@ export function App() {
             <div className="form-card">
               <label>Backend URL<input value={backendUrl} onChange={(event) => setBackendUrl(event.target.value)} onBlur={() => { localStorage.setItem('lekka_backend_url', backendUrl); checkConnection(); }} placeholder="https://api.example.com" /></label>
               <button className="secondary-button" onClick={checkConnection}>Check connection</button>
+              <button className="secondary-button" onClick={() => sendDeviceNotification('Lekka test', 'Notifications are working on this device')}>Send test notification</button>
+              <button className="secondary-button" onClick={verifyBiometricForSettings}>Test biometric prompt</button>
               <button className="secondary-button" onClick={exportContext}>Export LLM context</button>
-              <label className="toggle"><span>Biometric unlock</span><input type="checkbox" checked={biometricEnabled} onChange={(event) => { setBiometricEnabled(event.target.checked); localStorage.setItem('lekka_biometric_enabled', String(event.target.checked)); }} /></label>
+              <label className="toggle"><span>Biometric unlock</span><input type="checkbox" checked={biometricEnabled} onChange={(event) => setBiometricPreference(event.target.checked)} /></label>
             </div>
             <form className="form-card" onSubmit={updatePin}>
               <label>Current PIN<input inputMode="numeric" value={pinForm.current} onChange={(event) => setPinForm({ ...pinForm, current: event.target.value })} maxLength={4} /></label>

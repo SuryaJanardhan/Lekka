@@ -105,6 +105,16 @@ export class ApiClient {
     return this.request(`/api/rules/${id}`, { method: 'DELETE' });
   }
 
+  sendChatMessage(payload: { message: string; clientState?: Record<string, any>; history?: Array<{ role: string; content: string }> }) {
+    return this.request<{ reply: string; toolUsed?: string | null }>('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionId: 'android_user',
+        ...payload
+      })
+    });
+  }
+
   async exportContext() {
     return this.request<Record<string, any>>('/api/export');
   }

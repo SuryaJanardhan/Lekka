@@ -225,6 +225,51 @@ textarea { resize: vertical; min-height: 74px; }
 .mode-grid button.selected { background: #ccfbf1; color: #115e59; border-color: #5eead4; }
 
 .report-card { display: flex; flex-direction: column; gap: 12px; }
+.assistant-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mini-status { color: var(--green); font-size: 0.74rem; font-weight: 800; }
+.assistant-input {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+.assistant-input input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.assistant-input button {
+  border: 0;
+  border-radius: 12px;
+  background: var(--green);
+  color: white;
+  font-weight: 800;
+  padding: 0 14px;
+}
+.chat-log { display: flex; flex-direction: column; gap: 8px; }
+.chat-log p {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 12px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--panel-soft);
+}
+.chat-log p.user {
+  background: #ccfbf1;
+  color: #115e59;
+  align-self: flex-end;
+  max-width: 88%;
+}
 .bar-row { display: flex; flex-direction: column; gap: 6px; }
 .bar-row div { display: flex; justify-content: space-between; gap: 8px; font-size: 0.82rem; }
 .bar-row span { color: var(--muted); font-weight: 800; }
