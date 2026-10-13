@@ -35,7 +35,7 @@ type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
 const apiSecret = import.meta.env.VITE_LEKKA_API_SECRET || '';
-const envBackendUrl = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '';
+const backendUrl = (import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
 const notificationChannelId = 'lekka_alerts';
 let notificationChannelReady = false;
 const defaultCategory: Category = {
@@ -49,14 +49,16 @@ const defaultCategory: Category = {
 export function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pin, setPin] = useState('');
+  const [pinMood, setPinMood] = useState<'idle' | 'success' | 'error'>('idle');
   const [savedPin, setSavedPin] = useState(() => localStorage.getItem('lekka_app_pin') || '1234');
   const [biometricEnabled, setBiometricEnabled] = useState(() => localStorage.getItem('lekka_biometric_enabled') === 'true');
   const [tab, setTab] = useState<Tab>('today');
-  const [backendUrl, setBackendUrl] = useState(() => localStorage.getItem('lekka_backend_url') || envBackendUrl);
   const [connection, setConnection] = useState<'checking' | 'online' | 'offline'>('checking');
   const [toast, setToast] = useState('');
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
 
   const [entries, setEntries] = useState<EmailRecord[]>([]);
   const [categories, setCategories] = useState<Category[]>([defaultCategory]);
@@ -90,7 +92,7 @@ export function App() {
 
   const [pinForm, setPinForm] = useState({ current: '', next: '', confirm: '' });
 
-  const api = useMemo(() => new ApiClient({ baseUrl: backendUrl, apiSecret }), [backendUrl]);
+  const api = useMemo(() => new ApiClient({ baseUrl: backendUrl, apiSecret }), []);
 
   const ensureLocalNotifications = async () => {
     if (!Capacitor.isNativePlatform()) return false;
@@ -215,13 +217,28 @@ export function App() {
 
   const unlockWithPin = (value: string) => {
     if (value === savedPin) {
-      setIsUnlocked(true);
-      setPin('');
-      showToast('Wallet unlocked');
+      setPinMood('success');
+      setTimeout(() => {
+        setIsUnlocked(true);
+        setPin('');
+        setPinMood('idle');
+      }, 320);
+      showToast('Unlocked');
       return;
     }
-    setToast('Incorrect PIN');
-    setPin('');
+    setPinMood('error');
+    setToast('Wrong PIN');
+    setTimeout(() => {
+      setPin('');
+      setPinMood('idle');
+    }, 520);
+  };
+
+  const enterPin = (key: string) => {
+    if (pinMood !== 'idle') return;
+    const next = `${pin}${key}`;
+    setPin(next);
+    if (next.length === 4) unlockWithPin(next);
   };
 
   const biometricUnlock = async () => {
@@ -245,8 +262,12 @@ export function App() {
         androidConfirmationRequired: false,
         androidBiometryStrength: AndroidBiometryStrength.weak
       });
+      setPinMood('success');
+      setTimeout(() => {
       setIsUnlocked(true);
       setPin('');
+        setPinMood('idle');
+      }, 320);
       showToast('Biometric unlock successful');
     } catch (error) {
       if (error instanceof BiometryError && error.code === BiometryErrorType.userCancel) return;
@@ -430,25 +451,23 @@ export function App() {
   if (!isUnlocked) {
     return (
       <div className="phone-shell">
-        <main className="lock-view">
-          <div className="lock-mark"><Lock size={30} /></div>
-          <h1>Lekka</h1>
-          <p>Private expense ledger</p>
-          <div className="pin-dots">{[0, 1, 2, 3].map((dot) => <span key={dot} className={pin.length > dot ? 'filled' : ''} />)}</div>
+        <main className={`lock-view ${pinMood}`}>
+          <div className="lock-glow" />
+          <div className="lock-card">
+            <div className="lock-mark"><Lock size={30} /></div>
+            <h1>Lekka</h1>
+            <p>Private expense ledger</p>
+            <div className="lock-mood" aria-live="polite">
+              {pinMood === 'success' ? '✅' : pinMood === 'error' ? '❌' : '🔒'}
+            </div>
+            <div className="pin-dots">{[0, 1, 2, 3].map((dot) => <span key={dot} className={pin.length > dot ? 'filled' : ''} />)}</div>
+          </div>
           <div className="keypad">
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((key) => (
-              <button key={key} onClick={() => {
-                const next = `${pin}${key}`;
-                setPin(next);
-                if (next.length === 4) unlockWithPin(next);
-              }}>{key}</button>
+              <button key={key} onClick={() => enterPin(key)}>{key}</button>
             ))}
             <button onClick={biometricUnlock}><Fingerprint size={22} /></button>
-            <button onClick={() => {
-              const next = `${pin}0`;
-              setPin(next);
-              if (next.length === 4) unlockWithPin(next);
-            }}>0</button>
+            <button onClick={() => enterPin('0')}>0</button>
             <button onClick={() => setPin((prev) => prev.slice(0, -1))}>Del</button>
           </div>
           {toast && <div className="toast compact">{toast}</div>}
@@ -458,7 +477,15 @@ export function App() {
   }
 
   return (
-    <div className="phone-shell">
+    <div
+      className={`phone-shell ${isEditing ? 'keyboard-editing' : ''}`}
+      onFocusCapture={(event) => {
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) {
+          setIsEditing(true);
+        }
+      }}
+      onBlurCapture={() => setTimeout(() => setIsEditing(false), 80)}
+    >
       <header className="topbar">
         <div>
           <strong>Lekka</strong>
@@ -516,9 +543,6 @@ export function App() {
 
             <SectionTitle title="Recent ledger" action="View all" onAction={() => setTab('ledger')} />
             <EntryList entries={entries.slice(0, 6)} onSelect={setSelectedEntry} empty="No expenses yet" />
-
-            <SectionTitle title="Inbox notes" action="Settings" onAction={() => setTab('settings')} />
-            <NotificationList notifications={notifications.slice(0, 4)} />
           </section>
         )}
 
@@ -616,19 +640,31 @@ export function App() {
           <section className="stack">
             <h2>Settings</h2>
             <div className="form-card">
-              <label>Backend URL<input value={backendUrl} onChange={(event) => setBackendUrl(event.target.value)} onBlur={() => { localStorage.setItem('lekka_backend_url', backendUrl); checkConnection(); }} placeholder="https://api.example.com" /></label>
-              <button className="secondary-button" onClick={checkConnection}>Check connection</button>
-              <button className="secondary-button" onClick={() => sendDeviceNotification('Lekka test', 'Notifications are working on this device')}>Send test notification</button>
-              <button className="secondary-button" onClick={verifyBiometricForSettings}>Test biometric prompt</button>
-              <button className="secondary-button" onClick={exportContext}>Export LLM context</button>
+              <div className="settings-row">
+                <span>Backend</span>
+                <strong className={connection}>{connection}</strong>
+              </div>
+              <div className="settings-row">
+                <span>Notification channel</span>
+                <strong>Sync alerts</strong>
+              </div>
               <label className="toggle"><span>Biometric unlock</span><input type="checkbox" checked={biometricEnabled} onChange={(event) => setBiometricPreference(event.target.checked)} /></label>
+              <button className="secondary-button" onClick={exportContext}>Export LLM context</button>
             </div>
-            <form className="form-card" onSubmit={updatePin}>
-              <label>Current PIN<input inputMode="numeric" value={pinForm.current} onChange={(event) => setPinForm({ ...pinForm, current: event.target.value })} maxLength={4} /></label>
-              <label>New PIN<input inputMode="numeric" value={pinForm.next} onChange={(event) => setPinForm({ ...pinForm, next: event.target.value })} maxLength={4} /></label>
-              <label>Confirm PIN<input inputMode="numeric" value={pinForm.confirm} onChange={(event) => setPinForm({ ...pinForm, confirm: event.target.value })} maxLength={4} /></label>
-              <button className="primary-button" type="submit">Update PIN</button>
-            </form>
+            <section className="form-card collapsible">
+              <button className="collapse-head" type="button" onClick={() => setSecurityOpen((open) => !open)}>
+                <span>Security PIN</span>
+                <ChevronRight size={18} className={securityOpen ? 'open' : ''} />
+              </button>
+              {securityOpen && (
+                <form className="pin-form" onSubmit={updatePin}>
+                  <label>Current PIN<input inputMode="numeric" value={pinForm.current} onChange={(event) => setPinForm({ ...pinForm, current: event.target.value })} maxLength={4} /></label>
+                  <label>New PIN<input inputMode="numeric" value={pinForm.next} onChange={(event) => setPinForm({ ...pinForm, next: event.target.value })} maxLength={4} /></label>
+                  <label>Confirm PIN<input inputMode="numeric" value={pinForm.confirm} onChange={(event) => setPinForm({ ...pinForm, confirm: event.target.value })} maxLength={4} /></label>
+                  <button className="primary-button" type="submit">Update PIN</button>
+                </form>
+              )}
+            </section>
           </section>
         )}
       </main>

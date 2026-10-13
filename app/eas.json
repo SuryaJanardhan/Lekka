@@ -14,7 +14,7 @@
         "image": "latest"
       },
       "env": {
-        "VITE_BACKEND_URL": "http://100.81.211.86:5000",
+        "VITE_BACKEND_URL": "",
         "VITE_LEKKA_API_SECRET": "idkknowwhthehellitisbutsomehowwritingthisshithereasalongscretoflife"
       }
     },

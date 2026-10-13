@@ -34,8 +34,8 @@ const checks = [
     pass: appSource.includes('channelId: notificationChannelId')
   },
   {
-    name: 'settings exposes test notification action',
-    pass: appSource.includes('Send test notification')
+    name: 'real app flows can trigger device notifications',
+    pass: appSource.includes("'Gmail sync', true") && appSource.includes("'Lekka expense', true")
   },
   {
     name: 'settings verifies biometric before enabling preference',
