@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import {
   BarChart3,
   Bell,
-  Check,
+  Bot,
   ChevronRight,
   Fingerprint,
   ListFilter,
@@ -12,9 +12,7 @@ import {
   RefreshCw,
   Search,
   Settings,
-  ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
   Tag,
   Trash2,
   Wallet
@@ -30,7 +28,7 @@ import { ApiClient } from './api';
 import { Category, DashboardStats, EmailRecord, NotificationItem, Rule } from './types';
 import { amountOf, money, moneyExact, shortDate, timeAgo } from './format';
 
-type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings';
+type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -71,6 +69,13 @@ export function App() {
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('lekka_debug_logs') || '[]');
+    } catch {
+      return [];
+    }
+  });
 
   const [manual, setManual] = useState({
     title: '',
@@ -93,6 +98,15 @@ export function App() {
   const [pinForm, setPinForm] = useState({ current: '', next: '', confirm: '' });
 
   const api = useMemo(() => new ApiClient({ baseUrl: backendUrl, apiSecret }), []);
+
+  const logEvent = (label: string, detail = '') => {
+    const line = `${new Date().toISOString()} ${label}${detail ? `: ${detail}` : ''}`;
+    setDebugLogs((prev) => {
+      const next = [line, ...prev].slice(0, 80);
+      localStorage.setItem('lekka_debug_logs', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const ensureLocalNotifications = async () => {
     if (!Capacitor.isNativePlatform()) return false;
@@ -172,7 +186,9 @@ export function App() {
       setNotifications(notificationData);
       setManual((prev) => ({ ...prev, categoryId: prev.categoryId || categoryData[0]?._id || '' }));
       setRule((prev) => ({ ...prev, categoryId: prev.categoryId || categoryData[0]?._id || '' }));
+      logEvent('refresh ok', `${entryData.length} entries`);
     } catch (error: any) {
+      logEvent('refresh failed', error.message || 'unknown');
       showToast(error.message || 'Backend data refresh failed');
     } finally {
       setLoading(false);
@@ -184,8 +200,10 @@ export function App() {
     try {
       const health = await api.health();
       setConnection(health?.databaseConnected ? 'online' : 'offline');
+      logEvent('backend health', health?.databaseConnected ? 'online' : 'offline');
     } catch {
       setConnection('offline');
+      logEvent('backend health failed');
     }
   };
 
@@ -204,6 +222,28 @@ export function App() {
     const pending = entries.filter((entry) => entry.needsUserReview).length;
     return { monthTotal, cash, friend, online: monthTotal - cash - friend, pending };
   }, [analytics, entries]);
+
+  const periodTotals = useMemo(() => {
+    const now = new Date();
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startWeek = new Date(now);
+    startWeek.setDate(now.getDate() - 6);
+    startWeek.setHours(0, 0, 0, 0);
+    const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const startQuarter = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1).getTime();
+    const startYear = new Date(now.getFullYear(), 0, 1).getTime();
+    const sumFrom = (start: number) => entries.reduce((sum, entry) => {
+      const date = new Date(entry.receivedAt).getTime();
+      return date >= start ? sum + amountOf(entry) : sum;
+    }, 0);
+    return {
+      today: sumFrom(startToday),
+      week: sumFrom(startWeek.getTime()),
+      month: sumFrom(startMonth),
+      quarter: sumFrom(startQuarter),
+      year: sumFrom(startYear)
+    };
+  }, [entries]);
 
   const filteredEntries = entries.filter((entry) => {
     const matchesSearch = search.trim()
@@ -323,8 +363,10 @@ export function App() {
     try {
       const result = await api.syncGmail();
       await refresh();
+      logEvent('gmail ingestion ok', `${result.newIngested} synced`);
       showToast(`${result.newIngested} expenses synced, ${result.notificationOnlyCount} emails flagged`, 'Gmail sync', true);
     } catch (error: any) {
+      logEvent('gmail ingestion failed', error.message || 'unknown');
       showToast(error.message || 'Gmail sync failed');
     } finally {
       setSyncing(false);
@@ -394,15 +436,24 @@ export function App() {
   const exportContext = async () => {
     try {
       const bundle = await api.exportContext();
-      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        backendUrl,
+        bundle
+      };
+      const json = JSON.stringify(payload, null, 2);
+      localStorage.setItem('lekka_llm_context_export', json);
+      const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = `lekka_export_${Date.now()}.json`;
       link.click();
       URL.revokeObjectURL(url);
-      showToast('Export downloaded');
+      logEvent('llm export saved', `${json.length} chars`);
+      showToast('Export saved locally and downloaded');
     } catch (error: any) {
+      logEvent('llm export failed', error.message || 'unknown');
       showToast(error.message || 'Export failed');
     }
   };
@@ -430,7 +481,9 @@ export function App() {
         history: nextHistory.slice(-8)
       });
       setChatMessages((prev) => [...prev, { role: 'assistant', content: response.reply }]);
+      logEvent('ai ok', response.toolUsed ? `tool ${response.toolUsed}` : 'direct');
     } catch (error: any) {
+      logEvent('ai failed', error.message || 'unknown');
       setChatMessages((prev) => [...prev, { role: 'assistant', content: error.message || 'AI request failed. Check backend URL, API secret, and GROQ_API_KEY.' }]);
     } finally {
       setChatLoading(false);
@@ -493,7 +546,7 @@ export function App() {
         </div>
         <div className="top-actions">
           <button className="icon-button" onClick={refresh} title="Refresh"><RefreshCw size={18} className={loading ? 'spin' : ''} /></button>
-          <button className="icon-button accent" onClick={sync} title="Sync Gmail"><Sparkles size={18} className={syncing ? 'spin' : ''} /></button>
+          <button className="icon-button accent" onClick={() => setTab('ai')} title="Ask AI"><Bot size={19} /></button>
         </div>
       </header>
 
@@ -503,22 +556,23 @@ export function App() {
         {tab === 'today' && (
           <section className="stack">
             <div className="hero-panel">
-              <span>This month</span>
-              <strong>{money(totals.monthTotal)}</strong>
+              <span>Today</span>
+              <strong>{money(periodTotals.today)}</strong>
               <div className="hero-grid">
-                <Metric label="Cash" value={money(totals.cash)} />
-                <Metric label="Friend paid" value={money(totals.friend)} />
+                <Metric label="Week" value={money(periodTotals.week)} />
+                <Metric label="Month" value={money(periodTotals.month)} />
                 <Metric label="Pending" value={String(totals.pending)} />
               </div>
             </div>
 
-            <div className="quick-row">
-              <button onClick={() => setTab('add')}><Plus size={18} /> Add</button>
-              <button onClick={() => setTab('review')}><Check size={18} /> Review</button>
-              <button onClick={() => setTab('ledger')}><Search size={18} /> Search</button>
-            </div>
+            <SectionTitle title="Recent ledger" action="View all" onAction={() => setTab('ledger')} />
+            <EntryList entries={entries.slice(0, 6)} onSelect={setSelectedEntry} empty="No expenses yet" />
+          </section>
+        )}
 
-            <section className="assistant-card">
+        {tab === 'ai' && (
+          <section className="stack">
+            <div className="assistant-card ai-screen">
               <div className="section-title">
                 <h2>Ask AI</h2>
                 {chatLoading && <span className="mini-status">thinking</span>}
@@ -528,21 +582,16 @@ export function App() {
                   <button className="chip" key={prompt} onClick={() => askAssistant(prompt)}>{prompt}</button>
                 ))}
               </div>
-              {chatMessages.length > 0 && (
-                <div className="chat-log">
-                  {chatMessages.slice(-4).map((message, index) => (
-                    <p key={`${message.role}-${index}`} className={message.role}>{message.content}</p>
-                  ))}
-                </div>
-              )}
+              <div className="chat-log tall">
+                {chatMessages.length === 0 ? <div className="empty-state small">Ask about your ledger</div> : chatMessages.map((message, index) => (
+                  <p key={`${message.role}-${index}`} className={message.role}>{message.content}</p>
+                ))}
+              </div>
               <div className="assistant-input">
                 <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask about your ledger" />
                 <button onClick={() => askAssistant()} disabled={chatLoading}>Ask</button>
               </div>
-            </section>
-
-            <SectionTitle title="Recent ledger" action="View all" onAction={() => setTab('ledger')} />
-            <EntryList entries={entries.slice(0, 6)} onSelect={setSelectedEntry} empty="No expenses yet" />
+            </div>
           </section>
         )}
 
@@ -601,7 +650,11 @@ export function App() {
         {tab === 'insights' && (
           <section className="stack">
             <div className="stat-grid">
+              <Metric label="Today" value={money(periodTotals.today)} />
+              <Metric label="Week" value={money(periodTotals.week)} />
               <Metric label="Month total" value={money(totals.monthTotal)} />
+              <Metric label="Quarter" value={money(periodTotals.quarter)} />
+              <Metric label="Year" value={money(periodTotals.year)} />
               <Metric label="Avg entry" value={money(analytics?.summary.averageAmount || 0)} />
               <Metric label="Auto sorted" value={`${analytics?.summary.aiAccuracyPercentage || 100}%`} />
               <Metric label="Entries" value={String(analytics?.summary.totalEmails || 0)} />
@@ -652,6 +705,12 @@ export function App() {
               <button className="secondary-button" onClick={exportContext}>Export LLM context</button>
             </div>
             <section className="form-card collapsible">
+              <button className="collapse-head" type="button" onClick={sync}>
+                <span>{syncing ? 'Ingesting Gmail...' : 'Manual Gmail ingestion'}</span>
+                <RefreshCw size={18} className={syncing ? 'spin' : ''} />
+              </button>
+            </section>
+            <section className="form-card collapsible">
               <button className="collapse-head" type="button" onClick={() => setSecurityOpen((open) => !open)}>
                 <span>Security PIN</span>
                 <ChevronRight size={18} className={securityOpen ? 'open' : ''} />
@@ -664,6 +723,19 @@ export function App() {
                   <button className="primary-button" type="submit">Update PIN</button>
                 </form>
               )}
+            </section>
+            <section className="form-card collapsible">
+              <button className="collapse-head" type="button">
+                <span>APK logs</span>
+                <small>{debugLogs.length}</small>
+              </button>
+              <div className="log-box">
+                {debugLogs.length === 0 ? <span>No logs yet</span> : debugLogs.slice(0, 20).map((line) => <code key={line}>{line}</code>)}
+              </div>
+              <div className="two-col pad-inline">
+                <button className="secondary-button" onClick={() => navigator.clipboard?.writeText(debugLogs.join('\n')).then(() => showToast('Logs copied')).catch(() => showToast('Copy failed'))}>Copy logs</button>
+                <button className="secondary-button" onClick={() => { localStorage.removeItem('lekka_debug_logs'); setDebugLogs([]); showToast('Logs cleared'); }}>Clear</button>
+              </div>
             </section>
           </section>
         )}

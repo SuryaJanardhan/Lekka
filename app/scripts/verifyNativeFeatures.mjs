@@ -7,6 +7,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const appSource = readFileSync(resolve(root, 'src/App.tsx'), 'utf8');
 const apiSource = readFileSync(resolve(root, 'src/api.ts'), 'utf8');
 const capacitorConfig = readFileSync(resolve(root, 'capacitor.config.json'), 'utf8');
+const androidManifest = readFileSync(resolve(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
 
 const checks = [
   {
@@ -44,6 +45,10 @@ const checks = [
   {
     name: 'capacitor has local notification android config',
     pass: capacitorConfig.includes('"LocalNotifications"') && capacitorConfig.includes('"ic_stat_lekka"')
+  },
+  {
+    name: 'Android keyboard does not resize bottom navigation',
+    pass: capacitorConfig.includes('"Keyboard"') && capacitorConfig.includes('"resize": "none"') && androidManifest.includes('android:windowSoftInputMode="adjustNothing"')
   },
   {
     name: 'AI assistant calls backend chat endpoint',

@@ -31,6 +31,7 @@ button { cursor: pointer; }
   position: relative;
   overflow: hidden;
   box-shadow: var(--shadow);
+  isolation: isolate;
 }
 
 .topbar {
@@ -48,7 +49,7 @@ button { cursor: pointer; }
 }
 
 .topbar strong { display: block; font-size: 1.25rem; letter-spacing: 0; }
-.top-actions, .quick-row, .chip-row { display: flex; gap: 8px; align-items: center; }
+.top-actions, .chip-row { display: flex; gap: 8px; align-items: center; }
 .status-dot { font-size: 0.72rem; color: var(--muted); text-transform: capitalize; }
 .status-dot::before { content: ""; width: 7px; height: 7px; border-radius: 999px; display: inline-block; margin-right: 5px; background: #94a3b8; }
 .status-dot.online::before { background: var(--green-2); }
@@ -91,6 +92,9 @@ button { cursor: pointer; }
   padding: 14px 14px 92px;
   -webkit-overflow-scrolling: touch;
 }
+.phone-shell.keyboard-editing {
+  height: 100dvh;
+}
 .stack { display: flex; flex-direction: column; gap: 14px; }
 h1, h2, p { margin: 0; }
 h2 { font-size: 1.05rem; line-height: 1.2; }
@@ -121,7 +125,7 @@ h2 { font-size: 1.05rem; line-height: 1.2; }
 .hero-panel .metric span { color: rgba(255,255,255,0.76); }
 .metric strong { display: block; font-size: 0.95rem; overflow-wrap: anywhere; }
 
-.quick-row button, .secondary-button, .primary-button {
+.secondary-button, .primary-button {
   border: 0;
   border-radius: 12px;
   min-height: 44px;
@@ -132,7 +136,6 @@ h2 { font-size: 1.05rem; line-height: 1.2; }
   justify-content: center;
   gap: 8px;
 }
-.quick-row button { flex: 1; background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
 .primary-button { width: 100%; background: var(--green); color: white; }
 .secondary-button { width: 100%; background: var(--panel-soft); color: var(--ink); border: 1px solid var(--line); }
 
@@ -238,6 +241,9 @@ textarea { resize: vertical; min-height: 74px; }
   flex-direction: column;
   gap: 10px;
 }
+.ai-screen {
+  min-height: calc(100dvh - 180px);
+}
 .mini-status { color: var(--green); font-size: 0.74rem; font-weight: 800; }
 .assistant-input {
   display: grid;
@@ -259,6 +265,12 @@ textarea { resize: vertical; min-height: 74px; }
   padding: 0 14px;
 }
 .chat-log { display: flex; flex-direction: column; gap: 8px; }
+.chat-log.tall {
+  flex: 1;
+  min-height: 260px;
+  max-height: 52dvh;
+  overflow-y: auto;
+}
 .chat-log p {
   margin: 0;
   padding: 9px 10px;
@@ -295,10 +307,13 @@ textarea { resize: vertical; min-height: 74px; }
 .empty-state.small { padding: 10px; }
 
 .bottom-nav {
-  position: absolute;
+  position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
+  width: min(100%, 430px);
+  margin: 0 auto;
+  z-index: 15;
   height: 74px;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -337,9 +352,9 @@ textarea { resize: vertical; min-height: 74px; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 18px;
-  padding: 18px;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 6px 14px;
   overflow: hidden;
   background:
     radial-gradient(circle at 20% 20%, rgba(20, 184, 166, 0.22), transparent 28%),
@@ -348,24 +363,38 @@ textarea { resize: vertical; min-height: 74px; }
 }
 .lock-glow {
   position: absolute;
-  width: 260px;
-  height: 260px;
+  width: 340px;
+  height: 340px;
   border-radius: 999px;
   background: conic-gradient(from 0deg, rgba(15,118,110,0.2), rgba(20,184,166,0.08), rgba(37,99,235,0.15), rgba(15,118,110,0.2));
   filter: blur(4px);
   animation: lockOrbit 9s linear infinite;
 }
+.lock-view::before,
+.lock-view::after {
+  content: "";
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  border-radius: 42% 58% 54% 46%;
+  background: rgba(20, 184, 166, 0.12);
+  filter: blur(2px);
+  animation: lockDrift 7s ease-in-out infinite;
+}
+.lock-view::before { top: 20px; left: -86px; }
+.lock-view::after { right: -78px; bottom: 108px; animation-delay: -3s; background: rgba(37, 99, 235, 0.1); }
 .lock-card {
   position: relative;
-  width: min(100%, 310px);
-  padding: 24px 18px 20px;
-  background: rgba(255,255,255,0.75);
+  width: min(100%, 406px);
+  margin-top: 16px;
+  padding: 22px 12px 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.84), rgba(236,253,245,0.7));
   border: 1px solid rgba(255,255,255,0.8);
-  border-radius: 28px;
+  border-radius: 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
   backdrop-filter: blur(18px);
   animation: lockFloat 4.6s ease-in-out infinite;
@@ -392,19 +421,20 @@ textarea { resize: vertical; min-height: 74px; }
   color: white;
   box-shadow: 0 14px 35px rgba(15, 118, 110, 0.35);
 }
-.lock-view h1 { font-size: 2rem; }
+.lock-view h1 { font-size: 2.35rem; }
 .lock-view p { color: var(--muted); font-weight: 700; }
 .pin-dots { display: flex; gap: 10px; margin: 8px 0; }
 .pin-dots span { width: 12px; height: 12px; border-radius: 99px; border: 1px solid #94a3b8; background: transparent; }
 .pin-dots span.filled { background: var(--green); border-color: var(--green); }
 .keypad {
   position: relative;
+  width: min(100%, 406px);
   display: grid;
-  grid-template-columns: repeat(3, 72px);
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 .keypad button {
-  height: 58px;
+  height: 60px;
   border: 1px solid rgba(255,255,255,0.9);
   background: rgba(255,255,255,0.82);
   border-radius: 18px;
@@ -450,6 +480,24 @@ textarea { resize: vertical; min-height: 74px; }
   gap: 12px;
   animation: expandIn 0.18s ease;
 }
+.log-box {
+  max-height: 230px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--muted);
+}
+.log-box code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #0f172a;
+}
+.pad-inline { padding: 0 12px 12px; }
 
 .sheet-backdrop {
   position: absolute;
@@ -479,6 +527,10 @@ textarea { resize: vertical; min-height: 74px; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes lockOrbit { to { transform: rotate(360deg); } }
+@keyframes lockDrift {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(18px, -14px, 0) rotate(14deg); }
+}
 @keyframes lockFloat {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-7px); }
