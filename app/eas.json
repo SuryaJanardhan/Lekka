@@ -14,7 +14,7 @@
         "image": "latest"
       },
       "env": {
-        "VITE_BACKEND_URL": "",
+        "VITE_BACKEND_URL": "https://lekka-suryas-projects-f3f7a1b9.vercel.app",
         "VITE_LEKKA_API_SECRET": "idkknowwhthehellitisbutsomehowwritingthisshithereasalongscretoflife"
       }
     },
