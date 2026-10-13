@@ -29,14 +29,19 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check endpoint
-app.get('/health', (_req, res) => {
-  const isMongoConnected = mongoose.connection.readyState === 1;
-  res.json({
-    status: 'ok',
-    service: 'Lekka Backend API',
-    databaseConnected: isMongoConnected,
-    timestamp: new Date()
-  });
+app.get('/health', async (_req, res, next) => {
+  try {
+    await connectDatabase();
+    const isMongoConnected = mongoose.connection.readyState === 1;
+    res.json({
+      status: 'ok',
+      service: 'Lekka Backend API',
+      databaseConnected: isMongoConnected,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get('/', (_req, res) => {
@@ -84,21 +89,25 @@ async function seedInitialCategoriesAndRules() {
 }
 
 // Database Connection Helper for Serverless
-let isDbConnecting = false;
+let dbConnectionPromise: Promise<void> | null = null;
 export async function connectDatabase() {
-  if (mongoose.connection.readyState === 1 || isDbConnecting) return;
-  isDbConnecting = true;
-  try {
-    console.log('[Database] Connecting to MongoDB Atlas...');
-    await mongoose.connect(runtimeConfig.mongodbUri, { serverSelectionTimeoutMS: 5000 });
-    console.log('[Database] Connected to MongoDB Atlas.');
-    await seedInitialCategoriesAndRules();
-  } catch (err: any) {
-    console.error('[Database] Connection failed:', err.message || err);
-    throw err;
-  } finally {
-    isDbConnecting = false;
+  if (mongoose.connection.readyState === 1) return;
+  if (!dbConnectionPromise) {
+    dbConnectionPromise = (async () => {
+      try {
+        console.log('[Database] Connecting to MongoDB Atlas...');
+        await mongoose.connect(runtimeConfig.mongodbUri, { serverSelectionTimeoutMS: 5000 });
+        console.log('[Database] Connected to MongoDB Atlas.');
+        await seedInitialCategoriesAndRules();
+      } catch (err: any) {
+        console.error('[Database] Connection failed:', err.message || err);
+        throw err;
+      } finally {
+        dbConnectionPromise = null;
+      }
+    })();
   }
+  await dbConnectionPromise;
 }
 
 // Middleware for serverless request DB connection
