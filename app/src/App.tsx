@@ -509,7 +509,6 @@ export function App() {
           <div className="lock-orbit one" />
           <div className="lock-orbit two" />
           <div className="lock-card">
-            <div className="lock-rail"><span /><span /><span /></div>
             <div className="lock-mark"><Lock size={30} /></div>
             <h1>Lekka</h1>
             <p>Private expense ledger</p>
