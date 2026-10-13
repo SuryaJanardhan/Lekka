@@ -140,6 +140,8 @@ GMAIL_USER=...
 GMAIL_APP_PASSWORD=...
 TARGET_SENDER_EMAILS=...
 INGESTION_CRON_SCHEDULE=0 0 * * *
+GMAIL_IMAP_SCAN_LIMIT=300
+GMAIL_INGEST_LIMIT=50
 PORT=5000
 ```
 
@@ -147,7 +149,9 @@ Do not commit real secrets. Keep them in `backend/.env` locally and Vercel envir
 
 ### Ingestion
 
-Lekka only ingests email from the configured `TARGET_SENDER_EMAILS` allowlist. Emails that do not contain an amount are stored as notifications/review signals instead of expenses.
+Lekka only ingests email from the configured `TARGET_SENDER_EMAILS` allowlist. IMAP ingestion scans lightweight message headers first, filters to the selected senders, then downloads full message bodies only for matching candidates. `GMAIL_IMAP_SCAN_LIMIT` bounds the recent inbox window and `GMAIL_INGEST_LIMIT` bounds full message processing per run so Vercel does not time out on a large inbox.
+
+Emails that do not contain an amount are stored as notifications/review signals instead of expenses.
 
 Automatic ingestion runs from the backend cron schedule. Manual ingestion is available in the app under Settings as `Manual Gmail ingestion`; it is intentionally not placed on Home because it can pull inbox data.
 

@@ -15,6 +15,11 @@ function optionalCsv(name: string): string[] {
     .filter(Boolean);
 }
 
+function optionalPositiveInteger(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
 const defaultCorsOrigins = [
   'capacitor://localhost',
   'ionic://localhost',
@@ -29,6 +34,8 @@ export const runtimeConfig = {
   apiSecret: requiredEnv('LEKKA_API_SECRET'),
   corsOrigins: Array.from(new Set([...defaultCorsOrigins, ...optionalCsv('CORS_ORIGINS')])),
   ingestionCronSchedule: process.env.INGESTION_CRON_SCHEDULE || '0 0 * * *',
+  gmailImapScanLimit: optionalPositiveInteger('GMAIL_IMAP_SCAN_LIMIT', 300),
+  gmailIngestLimit: optionalPositiveInteger('GMAIL_INGEST_LIMIT', 50),
   targetSenderEmails: optionalCsv('TARGET_SENDER_EMAILS'),
   gmail: {
     user: process.env.GMAIL_USER?.trim() || '',

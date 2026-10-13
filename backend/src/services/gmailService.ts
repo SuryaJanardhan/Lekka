@@ -27,6 +27,15 @@ interface IncomingMail {
   attachments?: Array<{ contentType: string; content: Buffer }>;
 }
 
+interface CandidateMail {
+  seq: number;
+  uid: number;
+  messageId: string;
+  sender: string;
+  subject: string;
+  receivedAt: Date;
+}
+
 export class GmailService {
   public static async processIngestionPipeline(): Promise<IngestionResult> {
     assertIngestionConfigured();
@@ -81,19 +90,39 @@ export class GmailService {
       await client.connect();
       const lock = await client.getMailboxLock('INBOX');
       try {
-        const mails: IncomingMail[] = [];
-        for await (const message of client.fetch('1:*', { envelope: true, source: true })) {
-          if (!message.source) continue;
-          const parsed: ParsedMail = await simpleParser(message.source);
-          const receivedAt = parsed.date || new Date();
-          if (lastSuccessfulSyncAt && receivedAt <= lastSuccessfulSyncAt) continue;
+        const mailboxMessageCount = client.mailbox ? client.mailbox.exists : 0;
+        const startSeq = Math.max(1, mailboxMessageCount - runtimeConfig.gmailImapScanLimit + 1);
+        const fetchRange = mailboxMessageCount > 0 ? `${startSeq}:*` : '1:*';
+        const candidates: CandidateMail[] = [];
 
+        for await (const message of client.fetch(fetchRange, { envelope: true })) {
+          const sender = message.envelope?.from?.[0]?.address || message.envelope?.sender?.[0]?.address || '';
+          const receivedAt = this.toDate(message.envelope?.date) || new Date();
+          if (lastSuccessfulSyncAt && receivedAt <= lastSuccessfulSyncAt) continue;
+          if (!sender || !this.isSelectedSender(sender)) continue;
+
+          candidates.push({
+            seq: message.seq,
+            uid: message.uid,
+            messageId: message.envelope?.messageId || `imap_msg_${message.uid}`,
+            sender,
+            subject: message.envelope?.subject || 'No Subject',
+            receivedAt
+          });
+        }
+
+        const mails: IncomingMail[] = [];
+        for (const candidate of candidates.slice(-runtimeConfig.gmailIngestLimit)) {
+          const sourceMessage = await client.fetchOne(candidate.seq, { source: true });
+          if (!sourceMessage || !sourceMessage.source) continue;
+
+          const parsed: ParsedMail = await simpleParser(sourceMessage.source);
           mails.push({
-            messageId: parsed.messageId || `imap_msg_${message.uid}`,
-            sender: parsed.from?.value[0]?.address || 'unknown@domain.com',
-            subject: parsed.subject || 'No Subject',
-            body: (parsed.text || parsed.html || parsed.subject || '') as string,
-            receivedAt,
+            messageId: parsed.messageId || candidate.messageId,
+            sender: parsed.from?.value[0]?.address || candidate.sender,
+            subject: parsed.subject || candidate.subject,
+            body: (parsed.text || parsed.html || parsed.subject || candidate.subject || '') as string,
+            receivedAt: parsed.date || candidate.receivedAt,
             attachments: parsed.attachments?.map((attachment) => ({
               contentType: attachment.contentType,
               content: attachment.content
@@ -209,6 +238,12 @@ export class GmailService {
     return runtimeConfig.targetSenderEmails.some((selectedSender) =>
       sender.toLowerCase().includes(selectedSender.toLowerCase())
     );
+  }
+
+  private static toDate(value: Date | string | undefined): Date | undefined {
+    if (!value) return undefined;
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date;
   }
 
   private static async classifyAndStoreEmail(emailData: {
