@@ -506,7 +506,10 @@ export function App() {
       <div className="phone-shell">
         <main className={`lock-view ${pinMood}`}>
           <div className="lock-glow" />
+          <div className="lock-orbit one" />
+          <div className="lock-orbit two" />
           <div className="lock-card">
+            <div className="lock-rail"><span /><span /><span /></div>
             <div className="lock-mark"><Lock size={30} /></div>
             <h1>Lekka</h1>
             <p>Private expense ledger</p>
@@ -519,7 +522,7 @@ export function App() {
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((key) => (
               <button key={key} onClick={() => enterPin(key)}>{key}</button>
             ))}
-            <button onClick={biometricUnlock}><Fingerprint size={22} /></button>
+            <button className="bio-key" onClick={biometricUnlock}><Fingerprint size={22} /></button>
             <button onClick={() => enterPin('0')}>0</button>
             <button onClick={() => setPin((prev) => prev.slice(0, -1))}>Del</button>
           </div>
