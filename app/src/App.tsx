@@ -186,6 +186,7 @@ export function App() {
       setNotifications(notificationData);
       setManual((prev) => ({ ...prev, categoryId: prev.categoryId || categoryData[0]?._id || '' }));
       setRule((prev) => ({ ...prev, categoryId: prev.categoryId || categoryData[0]?._id || '' }));
+      setConnection('online');
       logEvent('refresh ok', `${entryData.length} entries`);
     } catch (error: any) {
       logEvent('refresh failed', error.message || 'unknown');
@@ -472,12 +473,41 @@ export function App() {
       const response = await api.sendChatMessage({
         message,
         clientState: {
-          totalSpend: totals.monthTotal,
-          cashSpend: totals.cash,
-          friendPaidSpend: totals.friend,
-          transactionCount: entries.length,
-          pendingReviews: totals.pending,
-          categories: categories.filter((category) => category._id !== 'all').map((category) => category.name)
+          backendUrl: api.getBaseUrl(),
+          totals: {
+            today: periodTotals.today,
+            week: periodTotals.week,
+            month: periodTotals.month,
+            quarter: periodTotals.quarter,
+            year: periodTotals.year,
+            cash: totals.cash,
+            friendPaid: totals.friend,
+            online: totals.online,
+            pendingReviews: totals.pending,
+            transactionCount: entries.length
+          },
+          analytics,
+          categories: categories.filter((category) => category._id !== 'all'),
+          recentEntries: entries.slice(0, 25).map((entry) => ({
+            id: entry._id,
+            title: entry.parsedJson?.merchantName || entry.subject,
+            sender: entry.sender,
+            amount: amountOf(entry),
+            category: entry.categoryId?.name || 'Unassigned',
+            paymentMode: entry.parsedJson?.paymentMode || entry.categorySource,
+            date: entry.receivedAt,
+            needsReview: entry.needsUserReview
+          })),
+          reviewEntries: reviewEntries.slice(0, 20).map((entry) => ({
+            id: entry._id,
+            title: entry.parsedJson?.merchantName || entry.subject,
+            amount: amountOf(entry),
+            sender: entry.sender,
+            date: entry.receivedAt
+          })),
+          rules: rules.slice(0, 30),
+          notifications: notifications.slice(0, 20),
+          responseStyle: 'Use short plain text. Do not use markdown markers like **. Use simple lines when useful.'
         },
         history: nextHistory.slice(-8)
       });
@@ -587,8 +617,9 @@ export function App() {
               </div>
               <div className="chat-log tall">
                 {chatMessages.length === 0 ? <div className="empty-state small">Ask about your ledger</div> : chatMessages.map((message, index) => (
-                  <p key={`${message.role}-${index}`} className={message.role}>{message.content}</p>
+                  <AssistantMessage key={`${message.role}-${index}`} message={message} />
                 ))}
+                {chatLoading && <TypingDots />}
               </div>
               <div className="assistant-input">
                 <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask about your ledger" />
@@ -772,6 +803,41 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function SectionTitle({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   return <div className="section-title"><h2>{title}</h2>{action && <button onClick={onAction}>{action}<ChevronRight size={16} /></button>}</div>;
+}
+
+function AssistantMessage({ message }: { message: ChatMessage }) {
+  const renderInline = (text: string) => {
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={index}>{part.slice(2, -2)}</strong>;
+      }
+      return <React.Fragment key={index}>{part}</React.Fragment>;
+    });
+  };
+
+  return (
+    <div className={`chat-message ${message.role}`}>
+      {message.content
+        .replace(/\*\*/g, '**')
+        .split('\n')
+        .map((line, index) => {
+          const clean = line.trim().replace(/^[-*]\s+/, '');
+          if (!clean) return null;
+          return <p key={`${message.role}-line-${index}`}>{renderInline(clean)}</p>;
+        })}
+    </div>
+  );
+}
+
+function TypingDots() {
+  return (
+    <div className="chat-message assistant typing" aria-label="AI is thinking">
+      <i />
+      <i />
+      <i />
+    </div>
+  );
 }
 
 function EntryList({ entries, onSelect, empty }: { entries: EmailRecord[]; onSelect: (entry: EmailRecord) => void; empty: string }) {
