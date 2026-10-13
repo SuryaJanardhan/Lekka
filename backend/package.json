@@ -7,7 +7,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "test": "ts-node-dev --transpile-only src/testApi.ts"
+    "test": "ts-node-dev --transpile-only src/testApi.ts",
+    "smoke:api": "node dist/testApi.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

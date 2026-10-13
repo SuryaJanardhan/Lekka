@@ -15,11 +15,18 @@ function optionalCsv(name: string): string[] {
     .filter(Boolean);
 }
 
+const defaultCorsOrigins = [
+  'capacitor://localhost',
+  'ionic://localhost',
+  'http://localhost',
+  'http://localhost:5173'
+];
+
 export const runtimeConfig = {
   port: process.env.PORT || '5000',
   mongodbUri: requiredEnv('MONGODB_URI'),
   apiSecret: requiredEnv('LEKKA_API_SECRET'),
-  corsOrigins: optionalCsv('CORS_ORIGINS'),
+  corsOrigins: Array.from(new Set([...defaultCorsOrigins, ...optionalCsv('CORS_ORIGINS')])),
   ingestionCronSchedule: process.env.INGESTION_CRON_SCHEDULE || '0 12 * * *',
   targetSenderEmails: optionalCsv('TARGET_SENDER_EMAILS'),
   gmail: {
