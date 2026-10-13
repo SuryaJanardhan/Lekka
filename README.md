@@ -4,7 +4,7 @@ Most people track expenses by typing each payment into an app by hand. Lekka aut
 
 ```mermaid
 graph LR
-    A["Gmail Ingestion"] -->|"Daily post 12 PM"| B["Backend Parser & OCR"]
+    A["Gmail Ingestion"] -->|"Daily midnight cron or Settings manual run"| B["Backend Parser & OCR"]
     B -->|"Auto Tag"| C["Groq AI & Rule Engine"]
     C -->|"Store"| D["MongoDB Ledger"]
     D <-->|"REST API"| E["Mobile Android App"]
@@ -15,7 +15,7 @@ graph LR
 
 ## What Lekka Does
 
-* **Automated Email Ingestion**: Reads receipts and invoice emails from your inbox every day after 12:00 PM. No manual copy-pasting.
+* **Automated Email Ingestion**: Reads selected receipt, bank, investment, and policy emails from Gmail on the backend schedule. Manual ingestion exists only in Settings because it can pull new inbox data.
 * **Smart Parsing & OCR**: Extracts merchant names, billed amounts, dates, and payment modes from raw HTML and receipt attachments using Tesseract OCR.
 * **Hybrid Category Classifier**: Matches receipts against custom keyword rules first. If no rule matches, it asks Groq AI to classify the merchant with low latency.
 * **Cash & Manual Expense Tracking**: Log physical cash payments, friend splits, and UPI spends in two taps so your offline cash flow stays in sync with your digital receipts.
@@ -54,9 +54,7 @@ Lekka/
 │   ├── src/models/       # Mongoose data schemas
 │   ├── src/services/     # Groq AI, Gmail IMAP, OCR, Rule engine
 │   └── src/server.ts     # Express server entry point
-├── api/                  # Vercel serverless function entry
 ├── docker-compose.yml    # MongoDB container configuration
-├── vercel.json           # Vercel deployment routes and crons
 └── README.md
 ```
 
@@ -77,13 +75,32 @@ Edit `backend/.env` with your credentials:
 PORT=5000
 MONGODB_URI=mongodb://localhost:27017/lekka_db
 GROQ_API_KEY=your_groq_api_key_here
+GROQ_API_KEY_1=optional_backup_groq_key
+GROQ_API_KEY_2=optional_backup_groq_key
 
-# Gmail App Password for Receipt Fetching
+# API security secret used by the app and smoke tests
+LEKKA_API_SECRET=your_secure_api_secret_here
+
+# Gmail App Password for receipt fetching
 GMAIL_USER=your_email@gmail.com
 GMAIL_APP_PASSWORD=your_app_password_here
 TARGET_SENDER_EMAILS=target_merchants@example.com
 
-LEKKA_API_SECRET=your_secure_api_secret_here
+# Cron schedule for backend ingestion
+INGESTION_CRON_SCHEDULE=0 0 * * *
+```
+
+Current production sender allowlist:
+```text
+axismf@kfintech.com
+noreply@groww.in
+noreply@phonepe.com
+alerts@axis.bank.in
+no-reply@razorpay.com
+nse-direct@nse.co.in
+policynoreply@service.uiic.co.in
+samf@kfintech.com
+enq_k@camsonline.com
 ```
 
 ### 3. Run Backend Server
@@ -101,6 +118,67 @@ npm install
 npm run dev
 ```
 The app will run locally on `http://localhost:5173`.
+
+---
+
+## Production Flow
+
+### Backend
+
+The production backend is deployed on Vercel:
+```text
+https://lekka-suryas-projects-f3f7a1b9.vercel.app
+```
+
+Required Vercel env vars:
+```env
+MONGODB_URI=...
+GROQ_API_KEY_1=...
+GROQ_API_KEY_2=...
+LEKKA_API_SECRET=...
+GMAIL_USER=...
+GMAIL_APP_PASSWORD=...
+TARGET_SENDER_EMAILS=...
+INGESTION_CRON_SCHEDULE=0 0 * * *
+PORT=5000
+```
+
+Do not commit real secrets. Keep them in `backend/.env` locally and Vercel environment variables in production.
+
+### Ingestion
+
+Lekka only ingests email from the configured `TARGET_SENDER_EMAILS` allowlist. Emails that do not contain an amount are stored as notifications/review signals instead of expenses.
+
+Automatic ingestion runs from the backend cron schedule. Manual ingestion is available in the app under Settings as `Manual Gmail ingestion`; it is intentionally not placed on Home because it can pull inbox data.
+
+### Mobile App
+
+The Android app uses the production backend from `app/eas.json`:
+```env
+VITE_BACKEND_URL=https://lekka-suryas-projects-f3f7a1b9.vercel.app
+VITE_LEKKA_API_SECRET=...
+```
+
+Capacitor Android uses the WebView origin `https://localhost`, so backend CORS must allow:
+```text
+https://localhost
+capacitor://localhost
+```
+
+### Verification
+
+Before building an APK, run:
+```bash
+cd backend
+npm run build
+
+cd ../app
+npm run test:prod-config
+npm run test:native-features
+npm run build
+```
+
+`test:prod-config` checks production backend compatibility, API auth, AI chat, and Android WebView CORS.
 
 ---
 
