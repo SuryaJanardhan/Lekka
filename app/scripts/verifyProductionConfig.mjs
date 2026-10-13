@@ -58,6 +58,20 @@ async function checkEndpoint(path, options = {}) {
   return { status: response.status, text: await response.text() };
 }
 
+async function checkCorsOrigin(origin) {
+  const response = await fetch(`${backendUrl.replace(/\/+$/, '')}/api/categories`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-SECRET': secret,
+      Origin: origin
+    }
+  });
+  const allowedOrigin = response.headers.get('access-control-allow-origin');
+  if (allowedOrigin !== origin) {
+    failures.push(`CORS origin ${origin} is not allowed. Header: ${allowedOrigin || '<missing>'}`);
+  }
+}
+
 if (failures.length === 0) {
   try {
     const health = await fetch(`${backendUrl.replace(/\/+$/, '')}/health`, { signal: AbortSignal.timeout(8000) });
@@ -80,6 +94,9 @@ if (failures.length === 0) {
     if (chat.status !== 200 || !chat.text.includes('"reply"')) {
       failures.push(`/api/chat is not compatible. Status ${chat.status}`);
     }
+
+    await checkCorsOrigin('capacitor://localhost');
+    await checkCorsOrigin('https://localhost');
   } catch (error) {
     failures.push(error instanceof Error ? error.message : 'Production backend check failed.');
   }

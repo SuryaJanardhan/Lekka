@@ -200,14 +200,15 @@ export function App() {
     try {
       const health = await api.health();
       setConnection(health?.databaseConnected ? 'online' : 'offline');
-      logEvent('backend health', health?.databaseConnected ? 'online' : 'offline');
-    } catch {
+      logEvent('backend health', `${health?.databaseConnected ? 'online' : 'offline'} ${health?.status ? `status ${health.status}` : ''}`.trim());
+    } catch (error: any) {
       setConnection('offline');
-      logEvent('backend health failed');
+      logEvent('backend health failed', error.message || 'unknown');
     }
   };
 
   useEffect(() => {
+    logEvent('app backend url', api.getBaseUrl() || '<empty>');
     checkConnection();
   }, []);
 

@@ -14,6 +14,10 @@ export class ApiClient {
     this.apiSecret = config.apiSecret;
   }
 
+  getBaseUrl() {
+    return this.baseUrl;
+  }
+
   private headers() {
     return {
       'Content-Type': 'application/json',
@@ -26,13 +30,23 @@ export class ApiClient {
       throw new Error('Backend URL is not configured');
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers: {
-        ...this.headers(),
-        ...(options.headers || {})
-      }
-    });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          ...this.headers(),
+          ...(options.headers || {})
+        }
+      });
+    } catch (error: any) {
+      throw new Error(`${path} network failed: ${error?.name === 'AbortError' ? 'timeout' : error?.message || 'Failed to fetch'}`);
+    } finally {
+      window.clearTimeout(timeout);
+    }
 
     const json = await response.json().catch(() => ({}));
     if (!response.ok || json.success === false) {
@@ -44,9 +58,17 @@ export class ApiClient {
 
   async health() {
     if (!this.baseUrl) return { connected: false };
-    const response = await fetch(`${this.baseUrl}/health`, { signal: AbortSignal.timeout(4000) });
-    if (!response.ok) return { connected: false };
-    return response.json();
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch(`${this.baseUrl}/health`, { signal: controller.signal });
+      if (!response.ok) return { connected: false, status: response.status };
+      return response.json();
+    } catch (error: any) {
+      throw new Error(`/health network failed: ${error?.name === 'AbortError' ? 'timeout' : error?.message || 'Failed to fetch'}`);
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
   getCategories() {

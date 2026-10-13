@@ -18,6 +18,7 @@ function optionalCsv(name: string): string[] {
 const defaultCorsOrigins = [
   'capacitor://localhost',
   'ionic://localhost',
+  'https://localhost',
   'http://localhost',
   'http://localhost:5173'
 ];
