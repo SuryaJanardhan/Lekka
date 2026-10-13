@@ -400,8 +400,8 @@ textarea { resize: vertical; min-height: 74px; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 3px;
+  gap: 5px;
+  padding: 2px;
   overflow: hidden;
   background:
     radial-gradient(circle at 18% 16%, rgba(20, 184, 166, 0.28), transparent 26%),
@@ -451,14 +451,14 @@ textarea { resize: vertical; min-height: 74px; }
 .lock-card {
   position: relative;
   width: 100%;
-  padding: 16px 6px 12px;
+  padding: 10px 2px 8px;
   background: transparent;
   border: 0;
   border-radius: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 9px;
+  gap: 6px;
   box-shadow: none;
   backdrop-filter: none;
   animation: lockFloat 4.6s ease-in-out infinite, riseIn 0.38s ease both;
@@ -487,26 +487,26 @@ textarea { resize: vertical; min-height: 74px; }
   box-shadow: 0 14px 35px rgba(15, 118, 110, 0.35);
   animation: markGlow 2.8s ease-in-out infinite;
 }
-.lock-view h1 { font-size: 2.35rem; }
+.lock-view h1 { font-size: 2.18rem; }
 .lock-view p { color: var(--muted); font-weight: 700; }
-.pin-dots { display: flex; gap: 10px; margin: 8px 0; }
-.pin-dots span { width: 12px; height: 12px; border-radius: 99px; border: 1px solid #94a3b8; background: transparent; }
+.pin-dots { display: flex; gap: 8px; margin: 4px 0; }
+.pin-dots span { width: 10px; height: 10px; border-radius: 99px; border: 1px solid #94a3b8; background: transparent; }
 .pin-dots span.filled { background: var(--green); border-color: var(--green); animation: dotFill 0.18s ease both; }
 .keypad {
   position: relative;
   width: 100%;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
   animation: riseIn 0.42s ease 0.08s both;
 }
 .keypad button {
-  height: 61px;
+  height: 53px;
   border: 1px solid rgba(255,255,255,0.9);
   background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(248,250,252,0.78));
-  border-radius: 22px;
+  border-radius: 17px;
   font-weight: 800;
-  font-size: 1.08rem;
+  font-size: 1rem;
   display: grid;
   place-items: center;
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.09);
