@@ -5,9 +5,7 @@ import {
   Bell,
   Bot,
   ChevronRight,
-  Fingerprint,
   ListFilter,
-  Lock,
   Plus,
   RefreshCw,
   Search,
@@ -27,6 +25,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { ApiClient } from './api';
 import { Category, DashboardStats, EmailRecord, NotificationItem, Rule } from './types';
 import { amountOf, money, moneyExact, shortDate, timeAgo } from './format';
+import { LockScreen } from './LockScreen';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
@@ -557,31 +556,14 @@ export function App() {
 
   if (!isUnlocked) {
     return (
-      <div className="phone-shell lock-shell">
-        <main className={`lock-view ${pinMood}`}>
-          <div className="lock-glow" />
-          <div className="lock-orbit one" />
-          <div className="lock-orbit two" />
-          <div className="lock-card">
-            <div className="lock-mark"><Lock size={30} /></div>
-            <h1>Lekka</h1>
-            <p>Private expense ledger</p>
-            <div className="lock-mood" aria-live="polite">
-              {pinMood === 'success' ? '✅' : pinMood === 'error' ? '❌' : '🔒'}
-            </div>
-            <div className="pin-dots">{[0, 1, 2, 3].map((dot) => <span key={dot} className={pin.length > dot ? 'filled' : ''} />)}</div>
-          </div>
-          <div className="keypad">
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((key) => (
-              <button key={key} onClick={() => enterPin(key)}>{key}</button>
-            ))}
-            <button className="bio-key" onClick={biometricUnlock}><Fingerprint size={22} /></button>
-            <button onClick={() => enterPin('0')}>0</button>
-            <button onClick={() => setPin((prev) => prev.slice(0, -1))}>Del</button>
-          </div>
-          {toast && <div className="toast compact">{toast}</div>}
-        </main>
-      </div>
+      <LockScreen
+        pin={pin}
+        mood={pinMood}
+        toast={toast}
+        onDigit={enterPin}
+        onDelete={() => setPin((prev) => prev.slice(0, -1))}
+        onBiometric={biometricUnlock}
+      />
     );
   }
 
