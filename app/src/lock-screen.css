@@ -21,22 +21,22 @@
 .unlock-body {
   width: 100%;
   margin: auto 0;
-  padding: 24px 0 0;
+  padding: 12px 0 0;
   animation: unlock-appear 260ms ease both;
 }
 .unlock-heading { text-align: center; }
 .unlock-expression {
   width: 64px;
-  height: 64px;
-  font-size: 42px;
-  line-height: 64px;
+  height: 48px;
+  font-size: 32px;
+  line-height: 48px;
   margin: 0 auto 12px;
   transform-origin: center bottom;
   animation: unlock-greet 650ms ease both;
 }
-.unlock-heading h1 { margin: 0; font-size: 26px; line-height: 1.3; font-weight: 800; }
+.unlock-heading h1 { margin: 0; font-size: 22px; line-height: 1.3; font-weight: 800; }
 .unlock-heading p { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
-.unlock-pin { display: flex; justify-content: center; gap: 14px; margin: 28px 0; height: 12px; }
+.unlock-pin { display: flex; justify-content: center; gap: 14px; margin: 20px 0; height: 12px; }
 .unlock-pin span { width: 12px; height: 12px; border: 1.5px solid #8aa69f; border-radius: 50%; transition: background 120ms ease; }
 .unlock-pin .is-filled { background: var(--green); border-color: var(--green); animation: unlock-dot 160ms ease; }
 .unlock-keypad {
@@ -47,13 +47,13 @@
 }
 .unlock-keypad button {
   min-width: 0;
-  height: 60px;
+  height: 52px;
   padding: 0;
   border: 0;
   border-radius: 8px;
   background: #fff;
   color: var(--ink);
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 500;
   display: grid;
   place-items: center;
