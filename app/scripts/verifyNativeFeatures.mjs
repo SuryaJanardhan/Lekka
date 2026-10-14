@@ -47,8 +47,8 @@ const checks = [
     pass: capacitorConfig.includes('"LocalNotifications"') && capacitorConfig.includes('"ic_stat_lekka"')
   },
   {
-    name: 'Android keyboard does not resize bottom navigation',
-    pass: capacitorConfig.includes('"Keyboard"') && capacitorConfig.includes('"resize": "none"') && androidManifest.includes('android:windowSoftInputMode="adjustNothing"')
+    name: 'Android keyboard resizes content and hides bottom navigation',
+    pass: androidManifest.includes('android:windowSoftInputMode="adjustResize"') && appSource.includes('window.visualViewport') && appSource.includes('keyboard-editing')
   },
   {
     name: 'AI assistant calls backend chat endpoint',

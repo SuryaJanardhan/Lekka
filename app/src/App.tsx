@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import {
   BarChart3,
+  ArrowUp,
+  History,
   Bell,
   Bot,
   ChevronRight,
@@ -26,10 +28,10 @@ import { ApiClient } from './api';
 import { Category, DashboardStats, EmailRecord, NotificationItem, Rule } from './types';
 import { amountOf, money, moneyExact, shortDate, timeAgo } from './format';
 import { LockScreen } from './LockScreen';
+import { ChatMessage, Conversation, loadConversations, saveConversations, newConversationId } from './chatHistory';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
-type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
 const apiSecret = import.meta.env.VITE_LEKKA_API_SECRET || '';
 const backendUrl = (import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
@@ -51,7 +53,14 @@ export function App() {
   const [biometricEnabled, setBiometricEnabled] = useState(() => localStorage.getItem('lekka_biometric_enabled') === 'true');
   const [tab, setTab] = useState<Tab>('today');
   const [connection, setConnection] = useState<'checking' | 'online' | 'offline'>('checking');
-  const [toast, setToast] = useState('');
+  const [toast, setToastValue] = useState('');
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  const setToast = useCallback((message: string) => {
+    clearTimeout(toastTimer.current);
+    setToastValue(message);
+    if (message) toastTimer.current = setTimeout(() => setToastValue(''), 3000);
+  }, []);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -66,8 +75,36 @@ export function App() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>(loadConversations);
+  const [conversationId, setConversationId] = useState(() => conversations[0]?.id || newConversationId());
+  const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
+  const chatMessages = conversations.find((item) => item.id === conversationId)?.messages || [];
+  const chatLog = useRef<HTMLDivElement>(null);
+  const chatComposer = useRef<HTMLTextAreaElement>(null);
+  const [viewportHeight, setViewportHeight] = useState(() => window.visualViewport?.height || window.innerHeight);
   const [chatLoading, setChatLoading] = useState(false);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const resize = () => setViewportHeight(viewport?.height || window.innerHeight);
+    viewport?.addEventListener('resize', resize);
+    window.addEventListener('resize', resize);
+    return () => {
+      viewport?.removeEventListener('resize', resize);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+  useEffect(() => {
+    try { saveConversations(conversations); }
+    catch { setToast('Chat history could not be saved. Device storage may be full.'); }
+  }, [conversations, setToast]);
+  useEffect(() => {
+    if (chatLog.current) chatLog.current.scrollTop = chatLog.current.scrollHeight;
+  }, [conversations, chatLoading, viewportHeight, tab]);
+  useEffect(() => {
+    if (!chatComposer.current) return;
+    chatComposer.current.style.height = 'auto';
+    chatComposer.current.style.height = `${Math.min(chatComposer.current.scrollHeight, 120)}px`;
+  }, [chatInput, tab]);
   const [debugLogs, setDebugLogs] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('lekka_debug_logs') || '[]');
@@ -487,12 +524,20 @@ export function App() {
     if (!message || chatLoading) return;
 
     const nextHistory: ChatMessage[] = [...chatMessages, { role: 'user', content: message }];
-    setChatMessages(nextHistory);
+    const requestConversationId = conversationId;
+    setConversations((previous) => {
+      const existing = previous.find((item) => item.id === requestConversationId);
+      return [{ id: requestConversationId, title: existing?.title || message.slice(0, 60), messages: nextHistory, updatedAt: new Date().toISOString() }, ...previous.filter((item) => item.id !== requestConversationId)];
+    });
     setChatInput('');
     setChatLoading(true);
+    const appendReply = (content: string) => setConversations((previous) => previous.map((item) =>
+      item.id === requestConversationId ? { ...item, messages: [...item.messages, { role: 'assistant', content }], updatedAt: new Date().toISOString() } : item
+    ));
 
     try {
       const response = await api.sendChatMessage({
+        sessionId: requestConversationId,
         message,
         clientState: {
           backendUrl: api.getBaseUrl(),
@@ -533,11 +578,11 @@ export function App() {
         },
         history: nextHistory.slice(-8)
       });
-      setChatMessages((prev) => [...prev, { role: 'assistant', content: response.reply }]);
+      appendReply(response.reply);
       logEvent('ai ok', response.toolUsed ? `tool ${response.toolUsed}` : 'direct');
     } catch (error: any) {
       logEvent('ai failed', error.message || 'unknown');
-      setChatMessages((prev) => [...prev, { role: 'assistant', content: error.message || 'AI request failed. Check backend URL, API secret, and GROQ_API_KEY.' }]);
+      appendReply(error.message || 'AI request failed. Please try again.');
     } finally {
       setChatLoading(false);
     }
@@ -569,7 +614,8 @@ export function App() {
 
   return (
     <div
-      className={`phone-shell ${isEditing ? 'keyboard-editing' : ''}`}
+      className={`phone-shell ${isEditing ? 'keyboard-editing' : ''} ${tab === 'ai' ? 'chat-screen-shell' : ''}`}
+      style={{ height: `${Math.min(viewportHeight, 920)}px` }}
       onFocusCapture={(event) => {
         if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) {
           setIsEditing(true);
@@ -590,7 +636,7 @@ export function App() {
 
       {toast && <div className="toast"><span>{toast}</span><button onClick={() => setToast('')}>×</button></div>}
 
-      <main className="content">
+      <main className={`content ${tab === 'ai' ? 'chat-content' : ''}`}>
         {tab === 'today' && (
           <section className="stack">
             <div className="hero-panel">
@@ -609,28 +655,36 @@ export function App() {
         )}
 
         {tab === 'ai' && (
-          <section className="stack">
-            <div className="assistant-card ai-screen">
+          <section className="ai-conversation">
               <div className="section-title">
                 <h2>Ask AI</h2>
-                {chatLoading && <span className="mini-status">thinking</span>}
+                <div className="top-actions">
+                  <button className="icon-button" title="Chat history" aria-label="Chat history" aria-expanded={chatHistoryOpen} onClick={() => setChatHistoryOpen((open) => !open)}><History size={18} /></button>
+                  <button className="icon-button" title="New chat" aria-label="New chat" disabled={chatLoading} onClick={() => { setConversationId(newConversationId()); setChatInput(''); setChatHistoryOpen(false); }}><Plus size={18} /></button>
+                </div>
               </div>
-              <div className="chip-row">
+              {chatHistoryOpen && <div className="conversation-history">
+                {conversations.length === 0 && <p>No saved chats yet</p>}
+                {conversations.map((item) => <div key={item.id}>
+                  <button disabled={chatLoading} className={item.id === conversationId ? 'selected' : ''} onClick={() => { setConversationId(item.id); setChatInput(''); setChatHistoryOpen(false); }}><strong>{item.title}</strong><small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>
+                  <button disabled={chatLoading} className="icon-button danger" title="Delete conversation" aria-label={`Delete ${item.title}`} onClick={() => { if (!window.confirm('Delete this conversation?')) return; setConversations((previous) => previous.filter((chat) => chat.id !== item.id)); if (item.id === conversationId) setConversationId(newConversationId()); }}><Trash2 size={16} /></button>
+                </div>)}
+              </div>}
+              {chatMessages.length === 0 && <div className="chip-row">
                 {['Spend this month?', 'Cash vs online?', 'Pending reviews?'].map((prompt) => (
                   <button className="chip" key={prompt} onClick={() => askAssistant(prompt)}>{prompt}</button>
                 ))}
-              </div>
-              <div className="chat-log tall">
+              </div>}
+              <div className="chat-log conversation-messages" ref={chatLog}>
                 {chatMessages.length === 0 ? <div className="empty-state small">Ask about your ledger</div> : chatMessages.map((message, index) => (
                   <AssistantMessage key={`${message.role}-${index}`} message={message} />
                 ))}
                 {chatLoading && <TypingDots />}
               </div>
-              <div className="assistant-input">
-                <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask about your ledger" />
-                <button onClick={() => askAssistant()} disabled={chatLoading}>Ask</button>
-              </div>
-            </div>
+              <form className="assistant-input conversation-composer" onSubmit={(event) => { event.preventDefault(); askAssistant(); }}>
+                <textarea ref={chatComposer} rows={1} aria-label="Message AI" value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask about your ledger" />
+                <button type="submit" aria-label="Send message" title="Send message" disabled={chatLoading || !chatInput.trim()}><ArrowUp size={20} /></button>
+              </form>
           </section>
         )}
 
