@@ -8,6 +8,7 @@ import { IngestController } from '../controllers/ingestController';
 import { NotificationController } from '../services/notificationService';
 import { ChatController } from '../controllers/chatController';
 import { SystemController } from '../controllers/systemController';
+import { PushController } from '../controllers/pushController';
 import { secureApiMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -47,6 +48,9 @@ router.post('/ingest', IngestController.triggerManualIngestion);
 
 // Notification & Server Push routes
 router.get('/notifications', NotificationController.getNotifications);
+router.get('/notifications/push-status', PushController.status);
+router.post('/notifications/devices', PushController.register);
+router.get('/notifications/digest', PushController.digest);
 router.post('/notifications/reminder', NotificationController.triggerReminder);
 router.post('/notifications/:id/read', NotificationController.markRead);
 
