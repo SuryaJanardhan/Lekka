@@ -70,6 +70,19 @@ async function checkCorsOrigin(origin) {
   if (allowedOrigin !== origin) {
     failures.push(`CORS origin ${origin} is not allowed. Header: ${allowedOrigin || '<missing>'}`);
   }
+
+  const patchPreflight = await fetch(`${backendUrl.replace(/\/+$/, '')}/api/emails/preflight-check`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: origin,
+      'Access-Control-Request-Method': 'PATCH',
+      'Access-Control-Request-Headers': 'content-type,x-api-secret'
+    }
+  });
+  const allowedMethods = patchPreflight.headers.get('access-control-allow-methods') || '';
+  if (!patchPreflight.ok || !allowedMethods.split(',').map((method) => method.trim()).includes('PATCH')) {
+    failures.push(`CORS origin ${origin} does not allow PATCH. Header: ${allowedMethods || '<missing>'}`);
+  }
 }
 
 if (failures.length === 0) {
