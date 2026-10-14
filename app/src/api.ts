@@ -96,6 +96,18 @@ export class ApiClient {
     return this.request<NotificationItem[]>('/api/notifications');
   }
 
+  pushStatus(installationId: string) {
+    return this.request<{ configured: boolean; registered: boolean }>(`/api/notifications/push-status?installationId=${encodeURIComponent(installationId)}`);
+  }
+
+  registerPushDevice(installationId: string, token: string) {
+    return this.request('/api/notifications/devices', { method: 'POST', body: JSON.stringify({ installationId, token }) });
+  }
+
+  unregisterPushDevice(installationId: string) {
+    return this.request(`/api/notifications/devices/${encodeURIComponent(installationId)}`, { method: 'DELETE' });
+  }
+
   syncGmail() {
     return this.request<{ newIngested: number; notificationOnlyCount: number; duplicatesSkipped: number }>('/api/ingest', {
       method: 'POST'

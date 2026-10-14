@@ -26,10 +26,11 @@
 }
 .unlock-heading { text-align: center; }
 .unlock-expression {
+  width: 64px;
   height: 64px;
   font-size: 42px;
   line-height: 64px;
-  margin-bottom: 12px;
+  margin: 0 auto 12px;
   transform-origin: center bottom;
   animation: unlock-greet 650ms ease both;
 }

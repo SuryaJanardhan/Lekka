@@ -428,6 +428,8 @@ textarea { resize: vertical; min-height: 74px; }
   animation: navRise 0.34s ease both;
 }
 .keyboard-editing .bottom-nav {
+  display: none;
+  animation: none;
   transform: translateY(110%);
   opacity: 0;
   pointer-events: none;
@@ -435,6 +437,7 @@ textarea { resize: vertical; min-height: 74px; }
 .keyboard-editing .content {
   padding-bottom: 18px;
 }
+.keyboard-editing .chat-content { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
 .bottom-nav button {
   border: 0;
   background: transparent;

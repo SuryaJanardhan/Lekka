@@ -29,6 +29,7 @@ import { Category, DashboardStats, EmailRecord, NotificationItem, Rule } from '.
 import { amountOf, money, moneyExact, shortDate, timeAgo } from './format';
 import { LockScreen } from './LockScreen';
 import { ChatMessage, Conversation, loadConversations, saveConversations, newConversationId } from './chatHistory';
+import { startRemotePush, stopRemotePush } from './remotePush';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
@@ -51,6 +52,8 @@ export function App() {
   const [pinMood, setPinMood] = useState<'idle' | 'success' | 'error'>('idle');
   const [savedPin, setSavedPin] = useState(() => localStorage.getItem('lekka_app_pin') || '1234');
   const [biometricEnabled, setBiometricEnabled] = useState(() => localStorage.getItem('lekka_biometric_enabled') === 'true');
+  const [remotePushEnabled, setRemotePushEnabled] = useState(() => localStorage.getItem('lekka_remote_push_enabled') !== 'false');
+  const [remotePushStatus, setRemotePushStatus] = useState('Not connected');
   const [tab, setTab] = useState<Tab>('today');
   const [connection, setConnection] = useState<'checking' | 'online' | 'offline'>('checking');
   const [toast, setToastValue] = useState('');
@@ -252,6 +255,25 @@ export function App() {
   useEffect(() => {
     if (isUnlocked) refresh();
   }, [isUnlocked]);
+
+  useEffect(() => {
+    if (!isUnlocked || !remotePushEnabled) return;
+    return startRemotePush(api, {
+      status: setRemotePushStatus,
+      received: (title) => { setToast(title); refresh(); },
+      opened: (screen) => { setTab(screen === 'insights' ? 'insights' : 'review'); refresh(); },
+      error: (detail) => logEvent('remote push', detail)
+    });
+  }, [isUnlocked, remotePushEnabled]);
+
+  const setRemotePushPreference = async (enabled: boolean) => {
+    try {
+      if (!enabled) await stopRemotePush(api);
+      localStorage.setItem('lekka_remote_push_enabled', String(enabled));
+      setRemotePushEnabled(enabled);
+      setRemotePushStatus(enabled ? 'Connecting' : 'Disabled');
+    } catch (error: any) { setToast(error.message || 'Could not update notifications'); }
+  };
 
   const totals = useMemo(() => {
     const monthTotal = analytics?.summary.totalFinancialAmount || 0;
@@ -621,7 +643,10 @@ export function App() {
           setIsEditing(true);
         }
       }}
-      onBlurCapture={() => setTimeout(() => setIsEditing(false), 80)}
+      onBlurCapture={() => setTimeout(() => {
+        const active = document.activeElement;
+        setIsEditing(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement);
+      }, 80)}
     >
       <header className="topbar">
         <div>
@@ -795,9 +820,10 @@ export function App() {
                 <strong className={connection}>{connection}</strong>
               </div>
               <div className="settings-row">
-                <span>Notification channel</span>
-                <strong>Sync alerts</strong>
+                <span>Remote notifications</span>
+                <strong>{remotePushEnabled ? remotePushStatus : 'Disabled'}</strong>
               </div>
+              <label className="toggle"><span>Daily summaries & review alerts</span><input type="checkbox" checked={remotePushEnabled} onChange={(event) => setRemotePushPreference(event.target.checked)} /></label>
               <label className="toggle"><span>Biometric unlock</span><input type="checkbox" checked={biometricEnabled} onChange={(event) => setBiometricPreference(event.target.checked)} /></label>
               <button className="secondary-button" onClick={exportContext}>Export LLM context</button>
             </div>
