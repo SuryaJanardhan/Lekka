@@ -1,14 +1,23 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import { PushDeviceModel } from '../models/PushDevice';
 import { PushService } from '../services/pushService';
 
 export class PushController {
-  static status = async (req: Request, res: Response) => {
+  static status = async (req: Request, res: Response, next: NextFunction) => {
+    try {
     const installationId = req.query.installationId;
     res.json({ success: true, data: {
       configured: PushService.isConfigured(),
       registered: typeof installationId === 'string' && Boolean(await PushDeviceModel.exists({ installationId }))
     } });
+    } catch (error) { next(error); }
+  };
+
+  static unregister = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await PushDeviceModel.deleteOne({ installationId: req.params.installationId });
+      res.json({ success: true });
+    } catch (error) { next(error); }
   };
 
   static register = async (req: Request, res: Response) => {
@@ -17,6 +26,7 @@ export class PushController {
       return res.status(400).json({ success: false, error: 'Valid installation ID and FCM token required' });
     }
     try {
+      await PushDeviceModel.init();
       await PushDeviceModel.findOneAndUpdate({ installationId }, { token, lastSeenAt: new Date() }, { upsert: true, new: true });
       res.json({ success: true, data: { registered: true } });
     } catch {

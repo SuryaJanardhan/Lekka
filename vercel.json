@@ -10,6 +10,14 @@
     {
       "path": "/api/ingest",
       "schedule": "30 18 * * *"
+    },
+    {
+      "path": "/api/notifications/digest?kind=morning",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/notifications/digest?kind=evening",
+      "schedule": "30 15 * * *"
     }
   ]
 }

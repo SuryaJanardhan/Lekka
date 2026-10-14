@@ -50,6 +50,7 @@ router.post('/ingest', IngestController.triggerManualIngestion);
 router.get('/notifications', NotificationController.getNotifications);
 router.get('/notifications/push-status', PushController.status);
 router.post('/notifications/devices', PushController.register);
+router.delete('/notifications/devices/:installationId', PushController.unregister);
 router.get('/notifications/digest', PushController.digest);
 router.post('/notifications/reminder', NotificationController.triggerReminder);
 router.post('/notifications/:id/read', NotificationController.markRead);

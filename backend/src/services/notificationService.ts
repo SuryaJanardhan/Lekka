@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { NotificationModel, NotificationType } from '../models/Notification';
+import { PushService } from './pushService';
 
 export interface NotificationLog {
   id: string;
@@ -35,6 +36,14 @@ class NotificationService {
       type,
       metadata
     });
+
+    if (type === 'REVIEW' && PushService.isConfigured()) {
+      try {
+        await PushService.send(title, message, `review-${notification._id}`, 'review');
+      } catch {
+        console.error('[Push] Review alert failed; the in-app notification is saved');
+      }
+    }
 
     return {
       id: String(notification._id),

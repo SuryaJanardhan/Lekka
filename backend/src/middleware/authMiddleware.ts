@@ -3,7 +3,9 @@ import crypto from 'crypto';
 import { runtimeConfig } from '../config/runtimeConfig';
 
 export function secureApiMiddleware(req: Request, res: Response, next: NextFunction) {
-  const secretKey = runtimeConfig.apiSecret;
+  const isCronRoute = req.method === 'GET' && ['/ingest', '/notifications/digest'].includes(req.path);
+  const secrets = [runtimeConfig.apiSecret];
+  if (isCronRoute && process.env.CRON_SECRET && !req.headers['x-api-secret']) secrets.push(process.env.CRON_SECRET);
 
   const incomingSecret = req.headers['x-api-secret'] as string || req.headers['authorization']?.replace('Bearer ', '') || '';
 
@@ -16,13 +18,12 @@ export function secureApiMiddleware(req: Request, res: Response, next: NextFunct
 
   try {
     // Cryptographic SHA-256 hash comparison with constant-time equality check
-    const expectedHash = crypto.createHash('sha256').update(secretKey).digest('hex');
     const incomingHash = crypto.createHash('sha256').update(incomingSecret).digest('hex');
-
-    const expectedBuffer = Buffer.from(expectedHash, 'hex');
     const incomingBuffer = Buffer.from(incomingHash, 'hex');
-
-    if (expectedBuffer.length === incomingBuffer.length && crypto.timingSafeEqual(expectedBuffer, incomingBuffer)) {
+    if (secrets.some((secret) => {
+      const expectedBuffer = crypto.createHash('sha256').update(secret).digest();
+      return expectedBuffer.length === incomingBuffer.length && crypto.timingSafeEqual(expectedBuffer, incomingBuffer);
+    })) {
       return next();
     }
   } catch (error) {

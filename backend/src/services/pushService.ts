@@ -56,6 +56,7 @@ export class PushService {
     if (!this.isConfigured()) throw new Error('Firebase Cloud Messaging is not configured');
     if (!await PushDeviceModel.exists({})) return { skipped: 'No registered phones', sent: 0 };
     const period = digestPeriod(kind, now);
+    await PushDispatchModel.init();
     const key = `digest-${period.key}`;
     let claim;
     try {
