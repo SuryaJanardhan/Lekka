@@ -22,7 +22,10 @@ graph LR
 * **Stats that actually help**: See today, week, month, quarter, yearly totals, charts, categories, modes, and trends.
 * **AI assistant**: Ask questions against your real ledger context. The AI can read, not mutate.
 * **Rules**: Category rules run before AI so repeat merchants stay predictable.
-* **Android-native bits**: PIN lock, fingerprint unlock, and local notifications.
+* **Android-native bits**: compact PIN lock, fingerprint unlock, local confirmations, and FCM remote notifications once Firebase is configured.
+* **AI chats**: separate saved conversations, chat history, and a composer that fits above the keyboard.
+
+Remote push setup and the daily notification plan: [the Firebase guide](docs/push-notifications.md).
 * **LLM export**: Save a local JSON context bundle for deeper review elsewhere.
 
 ---
@@ -32,7 +35,7 @@ graph LR
 | Layer | Tools | What it handles |
 | :--- | :--- | :--- |
 | Mobile App | React, Vite, Capacitor 6, TypeScript | Android APK and web client |
-| Mobile Security | Hardware Biometrics, LocalNotifications | Fingerprint sensor prompt and native push alerts |
+| Mobile Security | Hardware Biometrics, LocalNotifications, FCM | Fingerprint prompt, local confirmations, remote alerts |
 | Backend Server | Node.js, Express, TypeScript | REST APIs, ingestion pipeline, cron jobs |
 | Database | MongoDB | Stores emails, categories, rules, and notifications |
 | AI Intelligence | Groq API (`qwen/qwen3.8-27b`) | Merchant classification and chat assistant tool calling |

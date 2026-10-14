@@ -13,6 +13,8 @@ app/dist/
 backend/.env
 app/.env
 *.env.local
+app/android/app/google-services.json
+*firebase-adminsdk*.json
 
 # IDE & OS files
 .DS_Store
