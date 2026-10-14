@@ -2,9 +2,9 @@ import { Request, Response } from 'express';
 import { GmailService } from '../services/gmailService';
 
 export class IngestController {
-  public static async triggerManualIngestion(_req: Request, res: Response) {
+  public static async triggerManualIngestion(req: Request, res: Response) {
     try {
-      const result = await GmailService.processIngestionPipeline();
+      const result = await GmailService.processIngestionPipeline(req.method === 'POST' ? 'manual' : 'automatic');
       res.json({
         success: true,
         message: 'Email ingestion pipeline executed successfully',

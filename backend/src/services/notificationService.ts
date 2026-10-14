@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { NotificationModel, NotificationType } from '../models/Notification';
 import { PushService } from './pushService';
+import { remoteNotificationTarget } from './pushPolicy';
 
 export interface NotificationLog {
   id: string;
@@ -9,6 +10,7 @@ export interface NotificationLog {
   type: NotificationType;
   createdAt: string;
   read: boolean;
+  remoteDelivery?: { sent: number; failed: number; registered: number };
 }
 
 class NotificationService {
@@ -37,11 +39,13 @@ class NotificationService {
       metadata
     });
 
-    if (type === 'REVIEW' && PushService.isConfigured()) {
+    const screen = remoteNotificationTarget(type, metadata);
+    let remoteDelivery;
+    if (screen && PushService.isConfigured()) {
       try {
-        await PushService.send(title, message, `review-${notification._id}`, 'review');
+        remoteDelivery = await PushService.send(title, message, `notification-${notification._id}`, screen);
       } catch {
-        console.error('[Push] Review alert failed; the in-app notification is saved');
+        console.error('[Push] Remote alert failed; the in-app notification is saved');
       }
     }
 
@@ -51,7 +55,8 @@ class NotificationService {
       message: notification.message,
       type: notification.type,
       createdAt: notification.createdAt.toISOString(),
-      read: notification.read
+      read: notification.read,
+      ...(remoteDelivery ? { remoteDelivery } : {})
     };
   }
 
@@ -75,7 +80,7 @@ export class NotificationController {
     const { title, message } = req.body || {};
     const notif = await notificationService.addNotification(
       title || 'Daily Financial Reminder',
-      message || 'Check your post-12 PM email receipts and expense sync in Lekka.',
+      message || 'Review your latest expenses and pending receipts in Lekka.',
       'REMINDER'
     );
     res.json({

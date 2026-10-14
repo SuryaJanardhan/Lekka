@@ -37,7 +37,7 @@ interface CandidateMail {
 }
 
 export class GmailService {
-  public static async processIngestionPipeline(): Promise<IngestionResult> {
+  public static async processIngestionPipeline(source: 'manual' | 'automatic' = 'automatic'): Promise<IngestionResult> {
     assertIngestionConfigured();
 
     const syncState = await SyncStateModel.findOneAndUpdate(
@@ -60,7 +60,7 @@ export class GmailService {
         'Gmail sync complete',
         `${result.newIngested} expenses added, ${result.notificationOnlyCount} selected-sender emails flagged for manual check.`,
         'SYNC',
-        result
+        { ...result, source }
       );
 
       return result;
@@ -70,6 +70,18 @@ export class GmailService {
         { lastAttemptedSyncAt: new Date(), lastError: error.message || String(error) },
         { upsert: true }
       );
+      if (source === 'automatic') {
+        try {
+          await notificationService.addNotification(
+            'Gmail sync needs attention',
+            'Automatic email sync could not finish. Open Settings to check sync status.',
+            'SYNC',
+            { source, status: 'failed' }
+          );
+        } catch {
+          console.error('[Push] Could not record the automatic sync failure alert');
+        }
+      }
       throw error;
     }
   }
