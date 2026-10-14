@@ -13,7 +13,7 @@ type LockScreenProps = {
 export function LockScreen({ pin, mood, toast, onDigit, onDelete, onBiometric }: LockScreenProps) {
   const busy = mood !== 'idle';
   return (
-    <main className={`unlock-screen unlock-${mood}`}>
+    <main className={`phone-shell unlock-screen unlock-${mood}`}>
       <header className="unlock-brand">
         <Wallet size={22} aria-hidden="true" />
         <span>Lekka</span>

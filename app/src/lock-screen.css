@@ -1,6 +1,6 @@
-.unlock-screen {
-  width: 100%;
-  min-height: 100dvh;
+.phone-shell.unlock-screen {
+  height: min(100dvh, 920px);
+  min-height: 0;
   padding: max(12px, env(safe-area-inset-top)) 3px max(12px, env(safe-area-inset-bottom));
   background: var(--bg);
   display: flex;

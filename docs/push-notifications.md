@@ -44,6 +44,6 @@ Close the app normally and invoke the protected digest endpoint with the existin
 
 Opening the received notification should open Stats after PIN/biometric unlock. Check the evening summary and ingestion review alert as well. Repeating the same digest on the same date should return Already sent or in progress. Android force-stop and disabled notification permission can prevent delivery.
 
-Current verification covers compilation, summary date boundaries, browser layout, saved chat history, and production AI calls. Phone delivery cannot be verified until Firebase credentials and a registered APK are available.
+Current verification covers compilation, summary date boundaries, browser layout, saved chat history, production AI calls, and an authenticated FCM payload validation with no notification sent. Firebase credentials have been configured in Vercel and EAS. Final phone delivery still needs a registered APK.
 
 References: [Capacitor 6 push notifications](https://capacitorjs.com/docs/v6/apis/push-notifications), [FCM Android delivery](https://firebase.google.com/docs/cloud-messaging/android/receive-messages), [Vercel scheduling limits](https://vercel.com/docs/cron-jobs/usage-and-pricing).
