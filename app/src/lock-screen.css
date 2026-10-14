@@ -9,6 +9,8 @@
 }
 
 .unlock-brand {
+  margin: 6px 9px 0;
+  padding: 6px 0;
   display: flex;
   align-items: center;
   gap: 8px;

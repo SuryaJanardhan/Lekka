@@ -260,8 +260,11 @@ export function App() {
     if (!isUnlocked || !remotePushEnabled) return;
     return startRemotePush(api, {
       status: setRemotePushStatus,
-      received: (title) => { setToast(title); refresh(); },
-      opened: (screen) => { setTab(screen === 'insights' ? 'insights' : 'review'); refresh(); },
+      received: (title) => { logEvent('remote notification received', title); refresh(); },
+      opened: (screen) => {
+        setTab(screen === 'insights' ? 'insights' : screen === 'ledger' ? 'ledger' : screen === 'settings' ? 'settings' : 'review');
+        refresh();
+      },
       error: (detail) => logEvent('remote push', detail)
     });
   }, [isUnlocked, remotePushEnabled]);

@@ -27,10 +27,15 @@ Both files must belong to the same Firebase project. Never commit the service-ac
 | Morning, 9 AM IST | Yesterday's expenses, month total, pending reviews | Stats |
 | Evening, 9 PM IST | Today's expenses, month total, pending reviews | Stats |
 | Ingestion finds no amount, including after AI parsing | Selected sender's email needs manual review | Review |
+| Automatic ingestion adds expenses | New expenses and pending-review count | Ledger or Review |
+| Automatic ingestion fails | Sync needs attention | Settings |
+| Backend reminder API | Requested financial reminder | Stats |
 | Manual expense saved | Existing local confirmation | No navigation |
 | Manual Gmail sync finishes | Existing local sync confirmation | No navigation |
 
 Summaries use the real ledger, including a truthful zero-spend summary on quiet days. Daily dispatch keys prevent duplicate scheduled summaries. Invalid FCM tokens are removed. Remote notifications can be disabled in Settings; this removes the phone from backend delivery.
+
+Android native foreground presentation is enabled, so pushes display as system notifications when Lekka is open as well as when it is in the background. Receiving a push refreshes the in-app list without showing a duplicate toast. Empty automatic syncs and biometric/PIN feedback do not generate remote alerts. Manual sync keeps its existing local confirmation without a duplicate remote sync alert.
 
 The morning and evening schedules are separate daily cron jobs at `30 3 * * *` and `30 15 * * *` UTC. The ingestion schedule remains `30 18 * * *` UTC. Vercel Hobby scheduling may run within the scheduled hour rather than at the exact minute.
 
