@@ -42,6 +42,7 @@ router.get('/system/sync-status', SystemController.getSyncStatus);
 router.get('/export', ExportController.getLLMContextBundle);
 
 // Ingestion trigger route
+router.get('/ingest', IngestController.triggerManualIngestion);
 router.post('/ingest', IngestController.triggerManualIngestion);
 
 // Notification & Server Push routes
