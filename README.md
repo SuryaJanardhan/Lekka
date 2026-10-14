@@ -1,6 +1,6 @@
-# Lekka: Smart Automated Ledger and Expense Tracker
+# Lekka
 
-Most people track expenses by typing each payment into an app by hand. Lekka automates the whole thing by connecting directly to your transactional emails, reading invoice receipts, categorizing spend with local rules and Groq AI, and keeping a clean financial ledger right on your phone.
+Personal expense tracking without the spreadsheet drama. Lekka reads selected finance emails, pulls useful spend data, lets you add cash/friend-paid expenses manually, and gives you one clean Android ledger with AI help when you want answers fast.
 
 ```mermaid
 graph LR
@@ -15,15 +15,15 @@ graph LR
 
 ## What Lekka Does
 
-* **Automated Email Ingestion**: Reads selected receipt, bank, investment, and policy emails from Gmail on the backend schedule. Manual ingestion exists only in Settings because it can pull new inbox data.
-* **Smart Parsing & OCR**: Extracts merchant names, billed amounts, dates, and payment modes from raw HTML and receipt attachments using Tesseract OCR.
-* **Hybrid Category Classifier**: Matches receipts against custom keyword rules first. If no rule matches, it asks Groq AI to classify the merchant with low latency.
-* **Cash & Manual Expense Tracking**: Log physical cash payments, friend splits, and UPI spends in two taps so your offline cash flow stays in sync with your digital receipts.
-* **Built-in Groq AI Assistant**: Chat with an in-app AI that has read-only access to your real database. Ask questions like "How much did I spend on food this month?" or "Find all Swiggy orders" and get immediate answers with live numbers.
-* **Rule Builder & Feedback Loop**: Create custom classification rules on the fly or type new custom categories. If you change a category on any receipt, Lekka can auto-train a new rule so future emails get categorized automatically.
-* **Hardware Biometrics & Security**: Lock your ledger with a 4-digit PIN code and native Android fingerprint sensors.
-* **Android Push Notifications**: Get push alerts for sync completions, pending approvals, and daily financial summaries.
-* **LLM Context Exporter**: Export your entire ledger, receipts, and rules into a clean structured JSON file ready to feed into any large language model.
+* **Email to ledger**: Pulls only selected bank, payment, investment, and policy emails from Gmail.
+* **No amount, no fake expense**: If a selected email has no clear amount, Lekka makes a review notification instead of inventing spend.
+* **Manual expenses**: Add cash, UPI, card, and friend-paid entries from the app.
+* **Edit and delete**: Fix transactions later when the amount, date, category, or notes need cleanup.
+* **Stats that actually help**: See today, week, month, quarter, yearly totals, charts, categories, modes, and trends.
+* **AI assistant**: Ask questions against your real ledger context. The AI can read, not mutate.
+* **Rules**: Category rules run before AI so repeat merchants stay predictable.
+* **Android-native bits**: PIN lock, fingerprint unlock, and local notifications.
+* **LLM export**: Save a local JSON context bundle for deeper review elsewhere.
 
 ---
 
@@ -86,8 +86,9 @@ GMAIL_USER=your_email@gmail.com
 GMAIL_APP_PASSWORD=your_app_password_here
 TARGET_SENDER_EMAILS=target_merchants@example.com
 
-# Cron schedule for backend ingestion
-INGESTION_CRON_SCHEDULE=0 0 * * *
+# Cron schedule for backend ingestion.
+# Vercel evaluates cron in UTC, so this is 12:00 AM IST.
+INGESTION_CRON_SCHEDULE=30 18 * * *
 ```
 
 Current production sender allowlist:
@@ -139,7 +140,7 @@ LEKKA_API_SECRET=...
 GMAIL_USER=...
 GMAIL_APP_PASSWORD=...
 TARGET_SENDER_EMAILS=...
-INGESTION_CRON_SCHEDULE=0 0 * * *
+INGESTION_CRON_SCHEDULE=30 18 * * *
 GMAIL_IMAP_SCAN_LIMIT=300
 GMAIL_INGEST_LIMIT=50
 PORT=5000
@@ -149,11 +150,11 @@ Do not commit real secrets. Keep them in `backend/.env` locally and Vercel envir
 
 ### Ingestion
 
-Lekka only ingests email from the configured `TARGET_SENDER_EMAILS` allowlist. IMAP ingestion scans lightweight message headers first, filters to the selected senders, then downloads full message bodies only for matching candidates. `GMAIL_IMAP_SCAN_LIMIT` bounds the recent inbox window and `GMAIL_INGEST_LIMIT` bounds full message processing per run so Vercel does not time out on a large inbox.
+Lekka only ingests email from the configured `TARGET_SENDER_EMAILS` allowlist. IMAP ingestion scans lightweight message headers first, filters to selected senders, then downloads full message bodies only for matching candidates. `GMAIL_IMAP_SCAN_LIMIT` bounds the recent inbox window and `GMAIL_INGEST_LIMIT` bounds full message processing per run so Vercel does not time out on a huge inbox.
 
 Emails that do not contain an amount are stored as notifications/review signals instead of expenses.
 
-Automatic ingestion runs from the backend cron schedule. Manual ingestion is available in the app under Settings as `Manual Gmail ingestion`; it is intentionally not placed on Home because it can pull inbox data.
+Automatic ingestion runs from the backend cron schedule. Vercel cron is UTC-only, so midnight IST is configured as `30 18 * * *`. Manual ingestion lives under Settings as `Manual Gmail ingestion`; it is intentionally not on Home because it can pull inbox data.
 
 ### Mobile App
 

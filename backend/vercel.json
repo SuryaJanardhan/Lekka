@@ -23,7 +23,7 @@
   "crons": [
     {
       "path": "/api/ingest",
-      "schedule": "0 0 * * *"
+      "schedule": "30 18 * * *"
     }
   ]
 }

@@ -7,6 +7,7 @@ import { ExportController } from '../controllers/exportController';
 import { IngestController } from '../controllers/ingestController';
 import { NotificationController } from '../services/notificationService';
 import { ChatController } from '../controllers/chatController';
+import { SystemController } from '../controllers/systemController';
 import { secureApiMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -18,6 +19,8 @@ router.use(secureApiMiddleware);
 router.get('/emails', EmailController.getEmails);
 router.post('/emails/manual', EmailController.createManualTransaction);
 router.get('/emails/:id', EmailController.getEmailById);
+router.patch('/emails/:id', EmailController.updateTransaction);
+router.delete('/emails/:id', EmailController.deleteTransaction);
 router.post('/emails/:emailId/category', EmailController.assignCategory);
 
 // Category routes
@@ -31,6 +34,9 @@ router.delete('/rules/:id', RuleController.deleteRule);
 
 // Analytics routes
 router.get('/analytics', AnalyticsController.getDashboardStats);
+
+// System routes
+router.get('/system/sync-status', SystemController.getSyncStatus);
 
 // Export routes
 router.get('/export', ExportController.getLLMContextBundle);

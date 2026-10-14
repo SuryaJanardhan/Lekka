@@ -33,7 +33,7 @@ export const runtimeConfig = {
   mongodbUri: requiredEnv('MONGODB_URI'),
   apiSecret: requiredEnv('LEKKA_API_SECRET'),
   corsOrigins: Array.from(new Set([...defaultCorsOrigins, ...optionalCsv('CORS_ORIGINS')])),
-  ingestionCronSchedule: process.env.INGESTION_CRON_SCHEDULE || '0 0 * * *',
+  ingestionCronSchedule: process.env.INGESTION_CRON_SCHEDULE || '30 18 * * *',
   gmailImapScanLimit: optionalPositiveInteger('GMAIL_IMAP_SCAN_LIMIT', 300),
   gmailIngestLimit: optionalPositiveInteger('GMAIL_INGEST_LIMIT', 50),
   targetSenderEmails: optionalCsv('TARGET_SENDER_EMAILS'),

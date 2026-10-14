@@ -109,6 +109,17 @@ export class ApiClient {
     });
   }
 
+  updateEntry(entryId: string, payload: Record<string, any>) {
+    return this.request<EmailRecord>(`/api/emails/${entryId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  deleteEntry(entryId: string) {
+    return this.request(`/api/emails/${entryId}`, { method: 'DELETE' });
+  }
+
   assignCategory(entryId: string, categoryId: string) {
     return this.request<EmailRecord>(`/api/emails/${entryId}/category`, {
       method: 'POST',

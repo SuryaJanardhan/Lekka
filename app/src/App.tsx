@@ -407,6 +407,29 @@ export function App() {
     }
   };
 
+  const updateEntry = async (entry: EmailRecord, payload: Record<string, any>) => {
+    try {
+      await api.updateEntry(entry._id, payload);
+      setSelectedEntry(null);
+      await refresh();
+      showToast('Transaction updated');
+    } catch (error: any) {
+      showToast(error.message || 'Transaction update failed');
+    }
+  };
+
+  const deleteEntry = async (entry: EmailRecord) => {
+    try {
+      await api.deleteEntry(entry._id);
+      setSelectedEntry(null);
+      await refresh();
+      showToast('Transaction deleted');
+    } catch (error: any) {
+      showToast(error.message || 'Transaction delete failed');
+    }
+  };
+
+
   const saveRule = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
@@ -534,7 +557,7 @@ export function App() {
 
   if (!isUnlocked) {
     return (
-      <div className="phone-shell">
+      <div className="phone-shell lock-shell">
         <main className={`lock-view ${pinMood}`}>
           <div className="lock-glow" />
           <div className="lock-orbit one" />
@@ -693,9 +716,13 @@ export function App() {
               <Metric label="Auto sorted" value={`${analytics?.summary.aiAccuracyPercentage || 100}%`} />
               <Metric label="Entries" value={String(analytics?.summary.totalEmails || 0)} />
             </div>
-            <ReportBars title="Payment modes" rows={(analytics?.paymentModeBreakdown || []).map((item) => ({ label: item.mode, value: item.totalAmount }))} />
-            <ReportBars title="Categories" rows={(analytics?.categoryBreakdown || []).map((item) => ({ label: item.categoryName, value: item.totalAmount || item.count, color: item.colorCode }))} />
-            <ReportBars title="Daily trend" rows={(analytics?.dailyTrend || []).map((item) => ({ label: item.date.slice(8), value: item.totalAmount }))} />
+            <VisualSummary
+              total={analytics?.summary.totalFinancialAmount || 0}
+              categories={(analytics?.categoryBreakdown || []).map((item) => ({ label: item.categoryName, value: item.totalAmount || item.count, color: item.colorCode }))}
+              modes={(analytics?.paymentModeBreakdown || []).map((item, index) => ({ label: item.mode, value: item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))}
+            />
+            <ReportBars title="Daily trend" rows={(analytics?.dailyTrend || []).map((item, index) => ({ label: item.date.slice(8), value: item.totalAmount, color: ['#14b8a6', '#2563eb', '#f59e0b', '#ef4444'][index % 4] }))} />
+            <ReportBars title="Monthly trend" rows={(analytics?.monthlyTrend || []).map((item, index) => ({ label: item.month.slice(5), value: item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))} />
           </section>
         )}
 
@@ -781,6 +808,8 @@ export function App() {
           categories={categories.filter((category) => category._id !== 'all')}
           onClose={() => setSelectedEntry(null)}
           onReassign={(categoryId) => reassign(selectedEntry, categoryId)}
+          onUpdate={(payload) => updateEntry(selectedEntry, payload)}
+          onDelete={() => deleteEntry(selectedEntry)}
         />
       )}
 
@@ -876,6 +905,58 @@ function NotificationList({ notifications }: { notifications: NotificationItem[]
   );
 }
 
+function VisualSummary({
+  total,
+  categories,
+  modes
+}: {
+  total: number;
+  categories: Array<{ label: string; value: number; color?: string }>;
+  modes: Array<{ label: string; value: number; color?: string }>;
+}) {
+  const slices = categories.length ? categories.slice(0, 5) : [{ label: 'No data', value: 1, color: '#cbd5e1' }];
+  const sum = Math.max(1, slices.reduce((value, row) => value + row.value, 0));
+  let cursor = 0;
+
+  return (
+    <section className="chart-card">
+      <div>
+        <h2>Spend map</h2>
+        <span>{money(total)} this month</span>
+      </div>
+      <div className="chart-grid">
+        <svg className="donut" viewBox="0 0 42 42" aria-label="Category spend chart">
+          <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#e5e7eb" strokeWidth="7" />
+          {slices.map((slice) => {
+            const size = (slice.value / sum) * 100;
+            const dash = `${size} ${100 - size}`;
+            const offset = 25 - cursor;
+            cursor += size;
+            return <circle key={slice.label} cx="21" cy="21" r="15.9" fill="transparent" stroke={slice.color || '#0f766e'} strokeWidth="7" strokeDasharray={dash} strokeDashoffset={offset} />;
+          })}
+          <text x="21" y="20" textAnchor="middle">{categories.length}</text>
+          <text x="21" y="25" textAnchor="middle">cats</text>
+        </svg>
+        <div className="legend-list">
+          {categories.slice(0, 5).map((row) => (
+            <span key={row.label}><i style={{ background: row.color || '#0f766e' }} />{row.label}<b>{money(row.value)}</b></span>
+          ))}
+          {categories.length === 0 && <span><i />No category spend yet<b>{money(0)}</b></span>}
+        </div>
+      </div>
+      <div className="mode-chart">
+        {modes.length === 0 ? <div className="empty-state small">No payment mode data yet</div> : modes.map((mode) => (
+          <div key={mode.label}>
+            <strong>{mode.label.replace('_', ' ')}</strong>
+            <span>{money(mode.value)}</span>
+            <i><b style={{ height: `${Math.max(8, (mode.value / Math.max(...modes.map((item) => item.value), 1)) * 100)}%`, background: mode.color || '#0f766e' }} /></i>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ReportBars({ title, rows }: { title: string; rows: Array<{ label: string; value: number; color?: string }> }) {
   const max = Math.max(1, ...rows.map((row) => row.value));
   return (
@@ -891,8 +972,37 @@ function ReportBars({ title, rows }: { title: string; rows: Array<{ label: strin
   );
 }
 
-function EntrySheet({ entry, categories, onClose, onReassign }: { entry: EmailRecord; categories: Category[]; onClose: () => void; onReassign: (categoryId: string) => void }) {
+function EntrySheet({
+  entry,
+  categories,
+  onClose,
+  onReassign,
+  onUpdate,
+  onDelete
+}: {
+  entry: EmailRecord;
+  categories: Category[];
+  onClose: () => void;
+  onReassign: (categoryId: string) => void;
+  onUpdate: (payload: Record<string, any>) => void;
+  onDelete: () => void;
+}) {
   const [categoryId, setCategoryId] = useState(entry.categoryId?._id || categories[0]?._id || '');
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    title: entry.parsedJson?.merchantName || entry.subject,
+    amount: String(amountOf(entry) || ''),
+    paymentMode: (entry.parsedJson?.paymentMode || 'CASH') as PaymentMode,
+    friendName: entry.parsedJson?.friendName || '',
+    date: new Date(entry.receivedAt).toISOString().slice(0, 10),
+    notes: entry.parsedJson?.notes || entry.rawTextBody || ''
+  });
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    onUpdate({ ...form, amount: Number(form.amount), categoryId });
+  };
+
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <section className="sheet" onClick={(event) => event.stopPropagation()}>
@@ -903,14 +1013,34 @@ function EntrySheet({ entry, categories, onClose, onReassign }: { entry: EmailRe
         </div>
         <h2>{entry.parsedJson?.merchantName || entry.subject}</h2>
         <p>{entry.rawTextBody || 'No receipt text stored.'}</p>
-        <div className="detail-grid">
-          <Metric label="Sender" value={entry.sender} />
-          <Metric label="Date" value={shortDate(entry.receivedAt)} />
-          <Metric label="Mode" value={entry.parsedJson?.paymentMode || entry.categorySource} />
-          <Metric label="Source" value={entry.categorySource} />
-        </div>
-        <label>Category<select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>{categories.map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select></label>
-        <button className="primary-button" onClick={() => onReassign(categoryId)}><Tag size={18} /> Save category</button>
+        {!editing ? (
+          <>
+            <div className="detail-grid">
+              <Metric label="Sender" value={entry.sender} />
+              <Metric label="Date" value={shortDate(entry.receivedAt)} />
+              <Metric label="Mode" value={entry.parsedJson?.paymentMode || entry.categorySource} />
+              <Metric label="Source" value={entry.categorySource} />
+            </div>
+            <label>Category<select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>{categories.map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select></label>
+            <button className="primary-button" onClick={() => onReassign(categoryId)}><Tag size={18} /> Save category</button>
+            <div className="two-col">
+              <button className="secondary-button" onClick={() => setEditing(true)}>Edit</button>
+              <button className="secondary-button danger-text" onClick={onDelete}><Trash2 size={17} /> Delete</button>
+            </div>
+          </>
+        ) : (
+          <form className="pin-form sheet-form" onSubmit={submit}>
+            <label>Amount<input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} required /></label>
+            <label>Title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
+            <label>Mode<select value={form.paymentMode} onChange={(event) => setForm({ ...form, paymentMode: event.target.value as PaymentMode })}>{(['CASH', 'UPI', 'CARD', 'FRIEND_PAID'] as PaymentMode[]).map((mode) => <option key={mode} value={mode}>{mode.replace('_', ' ')}</option>)}</select></label>
+            {form.paymentMode === 'FRIEND_PAID' && <label>Friend name<input value={form.friendName} onChange={(event) => setForm({ ...form, friendName: event.target.value })} /></label>}
+            <label>Category<select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>{categories.map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select></label>
+            <label>Date<input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
+            <label>Notes<textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
+            <button className="primary-button" type="submit">Save changes</button>
+            <button className="secondary-button" type="button" onClick={() => setEditing(false)}>Cancel</button>
+          </form>
+        )}
       </section>
     </div>
   );

@@ -13,6 +13,8 @@ export interface CreateManualLedgerEntryInput {
   friendName?: string;
 }
 
+export interface UpdateLedgerEntryInput extends CreateManualLedgerEntryInput {}
+
 export class LedgerService {
   public static async listEntries(params: {
     categoryId?: string;
@@ -88,6 +90,55 @@ export class LedgerService {
 
     await email.save();
     return EmailModel.findById(email._id).populate('categoryId');
+  }
+
+  public static async updateEntry(id: string, input: UpdateLedgerEntryInput) {
+    const email = await EmailModel.findById(id);
+    if (!email) {
+      throw new Error('Ledger entry not found');
+    }
+
+    if (!input.title?.trim()) {
+      throw new Error('Title is required');
+    }
+
+    const amount = Math.abs(Number(input.amount));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error('Amount must be a positive number');
+    }
+
+    const transactionDate = input.date ? new Date(input.date) : new Date();
+    if (Number.isNaN(transactionDate.getTime())) {
+      throw new Error('Transaction date is invalid');
+    }
+
+    const paymentMode = input.paymentMode || 'CASH';
+    email.subject = input.title.trim();
+    email.rawTextBody = input.notes || `Manual transaction entry: ${input.title.trim()}`;
+    email.parsedJson = {
+      ...email.parsedJson,
+      detectedAmount: amount,
+      currency: 'INR',
+      paymentMode,
+      friendName: input.friendName || '',
+      notes: input.notes || '',
+      merchantName: input.title.trim()
+    };
+    email.categoryId = input.categoryId ? new Types.ObjectId(input.categoryId) : undefined;
+    email.categorySource = 'USER_MANUAL';
+    email.needsUserReview = false;
+    email.reviewStatus = 'APPROVED';
+    email.receivedAt = transactionDate;
+
+    await email.save();
+    return EmailModel.findById(email._id).populate('categoryId');
+  }
+
+  public static async deleteEntry(id: string) {
+    const result = await EmailModel.findByIdAndDelete(id);
+    if (!result) {
+      throw new Error('Ledger entry not found');
+    }
   }
 
   public static async assignCategory(params: {

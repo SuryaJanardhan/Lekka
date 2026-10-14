@@ -73,6 +73,16 @@ async function runApiVerification() {
     assert(created.status === 200 && created.data?.data?.subject === smokeTitle, `GET /api/emails/:id failed: ${created.status}`);
     console.log('[PASS] GET /api/emails/:id read created entry');
 
+    const updated = await makeRequest(`/api/emails/${smokeEntryId}`, 'PATCH', {
+      title: smokeTitle,
+      amount: 12,
+      paymentMode: 'UPI',
+      notes: 'Temporary smoke entry updated. Safe to delete.',
+      date: new Date().toISOString()
+    });
+    assert(updated.status === 200 && updated.data?.data?.parsedJson?.detectedAmount === 12, `PATCH /api/emails/:id failed: ${updated.status}`);
+    console.log('[PASS] PATCH /api/emails/:id updated entry');
+
     const analytics = await makeRequest('/api/analytics');
     assert(analytics.status === 200 && analytics.data?.success === true && analytics.data.data?.summary, `GET /api/analytics failed: ${analytics.status}`);
     console.log('[PASS] GET /api/analytics summary ok');
@@ -88,6 +98,11 @@ async function runApiVerification() {
     });
     assert(chat.status === 200 && chat.data?.success === true && chat.data.data?.reply, `POST /api/chat failed: ${chat.status}`);
     console.log('[PASS] POST /api/chat reply received');
+
+    const deleted = await makeRequest(`/api/emails/${smokeEntryId}`, 'DELETE');
+    assert(deleted.status === 200 && deleted.data?.success === true, `DELETE /api/emails/:id failed: ${deleted.status}`);
+    smokeEntryId = '';
+    console.log('[PASS] DELETE /api/emails/:id removed entry');
 
     console.log('--- Lekka API smoke completed successfully ---');
   } catch (err) {

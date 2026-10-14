@@ -55,4 +55,24 @@ export class EmailController {
       res.status(status).json({ success: false, error: error.message });
     }
   }
+
+  public static async updateTransaction(req: Request, res: Response) {
+    try {
+      const populated = await LedgerService.updateEntry(req.params.id, req.body);
+      res.json({ success: true, message: 'Transaction updated successfully', data: populated });
+    } catch (error: any) {
+      const status = /not found/i.test(error.message) ? 404 : /required|positive|invalid/i.test(error.message) ? 400 : 500;
+      res.status(status).json({ success: false, error: error.message });
+    }
+  }
+
+  public static async deleteTransaction(req: Request, res: Response) {
+    try {
+      await LedgerService.deleteEntry(req.params.id);
+      res.json({ success: true, message: 'Transaction deleted successfully' });
+    } catch (error: any) {
+      const status = /not found/i.test(error.message) ? 404 : 500;
+      res.status(status).json({ success: false, error: error.message });
+    }
+  }
 }
