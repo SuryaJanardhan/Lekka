@@ -31,6 +31,7 @@ import { amountOf, money, moneyExact, shortDate, timeAgo } from './format';
 import { LockScreen } from './LockScreen';
 import { ChatMessage, Conversation, loadConversations, saveConversations, newConversationId } from './chatHistory';
 import { startRemotePush, stopRemotePush } from './remotePush';
+import { CategorySettings } from './CategorySettings';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
@@ -832,6 +833,11 @@ export function App() {
         {tab === 'settings' && (
           <section className="stack">
             <h2>Settings</h2>
+            <CategorySettings categories={categories.filter((category) => category._id !== 'all')} onRename={async (id, name) => {
+              await api.renameCategory(id, name);
+              await refresh();
+              showToast('Category renamed');
+            }} />
             <div className="form-card">
               <div className="settings-row">
                 <span>Backend</span>

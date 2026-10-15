@@ -27,6 +27,7 @@ router.post('/emails/:emailId/category', EmailController.assignCategory);
 // Category routes
 router.get('/categories', CategoryController.getCategories);
 router.post('/categories', CategoryController.createCategory);
+router.patch('/categories/:id', CategoryController.renameCategory);
 
 // Rule routes
 router.get('/rules', RuleController.getRules);

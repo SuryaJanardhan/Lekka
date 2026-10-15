@@ -75,6 +75,10 @@ export class ApiClient {
     return this.request<Category[]>('/api/categories');
   }
 
+  renameCategory(id: string, name: string) {
+    return this.request<Category>(`/api/categories/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+  }
+
   getEntries(params: { needsReview?: boolean; search?: string; categoryId?: string } = {}) {
     const query = new URLSearchParams();
     if (params.needsReview) query.set('needsReview', 'true');
