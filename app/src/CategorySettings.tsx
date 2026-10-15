@@ -11,7 +11,7 @@ export function CategorySettings({ categories, onRename }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  return <details>
+  return <details className="category-settings">
     <summary>Categories</summary>
     <div className="list">
       {categories.map((category) => <div className="settings-row" key={category._id}>

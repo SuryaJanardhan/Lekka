@@ -22,6 +22,8 @@ graph LR
 * **Stats that actually help**: See today, week, month, quarter, yearly totals, charts, categories, modes, and trends.
 * **AI assistant**: Ask questions against your real ledger context. The AI can read, not mutate.
 * **Rules**: Category rules run before AI so repeat merchants stay predictable.
+* **Your categories, your call**: AI suggests the first category and learns narrow sender-plus-merchant rules for confident results. Your corrections take priority; rename categories in Settings without breaking their history.
+* **Debits only**: Credits, refunds and incoming money never become expenses. Unclear payments go to review, not your spending totals.
 * **Android-native bits**: compact PIN lock, fingerprint unlock, local confirmations, and FCM remote notifications once Firebase is configured.
 * **AI chats**: separate saved conversations, chat history, and a composer that fits above the keyboard.
 

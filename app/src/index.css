@@ -468,6 +468,15 @@ textarea { resize: vertical; min-height: 74px; }
 .settings-row strong { color: var(--ink); text-transform: capitalize; }
 .settings-row strong.online { color: var(--green); }
 .settings-row strong.offline { color: var(--red); }
+.category-settings summary { cursor: pointer; font-weight: 700; }
+.category-settings .list { margin-top: 10px; }
+.category-settings input {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
 .collapsible { padding: 0; overflow: hidden; }
 .collapse-head {
   width: 100%;
