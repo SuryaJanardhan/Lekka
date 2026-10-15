@@ -66,7 +66,7 @@ Respond ONLY with a valid JSON object in this format:
       const parsed = JSON.parse(responseContent);
 
       return {
-        categoryName: parsed.categoryName || 'General',
+        categoryName: typeof parsed.categoryName === 'string' ? parsed.categoryName.trim() : '',
         confidenceScore: typeof parsed.confidenceScore === 'number' ? parsed.confidenceScore : 0.75,
         reasoning: parsed.reasoning || 'Categorized via Groq LLM',
         merchantName: typeof parsed.merchantName === 'string' ? parsed.merchantName : undefined

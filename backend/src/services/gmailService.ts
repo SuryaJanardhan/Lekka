@@ -313,7 +313,7 @@ export class GmailService {
       confidenceScore = aiResult.confidenceScore;
 
       let category = await CategoryModel.findOne({ name: aiResult.categoryName });
-      if (!category && !await CategoryModel.exists({})) {
+      if (!category && aiResult.categoryName && !await CategoryModel.exists({})) {
         category = new CategoryModel({
           name: aiResult.categoryName,
           slug: aiResult.categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
