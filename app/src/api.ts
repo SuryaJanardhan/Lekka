@@ -96,6 +96,10 @@ export class ApiClient {
     return this.request<NotificationItem[]>('/api/notifications');
   }
 
+  markNotificationRead(id: string) {
+    return this.request(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' });
+  }
+
   pushStatus(installationId: string) {
     return this.request<{ configured: boolean; registered: boolean }>(`/api/notifications/push-status?installationId=${encodeURIComponent(installationId)}`);
   }

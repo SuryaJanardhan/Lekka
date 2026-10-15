@@ -161,6 +161,10 @@ Emails that do not contain an amount are stored as notifications/review signals 
 
 Automatic ingestion runs from the backend cron schedule. Vercel cron is UTC-only, so midnight IST is configured as `30 18 * * *`. Vercel calls cron paths with `GET` and sends `Authorization: Bearer CRON_SECRET`, so `/api/ingest` supports both cron `GET` and manual app `POST`. Manual ingestion lives under Settings as `Manual Gmail ingestion`; it is intentionally not on Home because it can pull inbox data.
 
+The notification schedule stays useful: a 9 AM IST check only sends when review or uncategorized work remains, Sunday 9 PM reports show recorded weekly spend, and the last-day-of-month 9 PM report shows recorded monthly spend with its actual cutoff. New ingestion, missing amounts, and automatic sync failures generate contextual alerts. Review emails can be marked reviewed in the app so they stop counting as pending.
+
+`GET /api/system/sync-status` exposes recent job start/finish times, results, and whether Vercel cron or a manual request invoked them. Vercel Hobby timing has hour-level precision, so a midnight schedule does not promise execution at exactly 00:00.
+
 ### Mobile App
 
 The Android app uses the production backend from `app/eas.json`:

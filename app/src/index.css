@@ -206,6 +206,8 @@ h2 { font-size: 1.05rem; line-height: 1.2; }
 .pill.warning { background: #fef3c7; color: var(--amber); }
 .note-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; }
 .note-row small { color: var(--muted); font-size: 0.72rem; }
+.note-row span { overflow-wrap: anywhere; }
+.note-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 
 .search-panel {
   display: grid;

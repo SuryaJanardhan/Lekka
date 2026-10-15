@@ -7,6 +7,7 @@ import {
   Bell,
   Bot,
   ChevronRight,
+  Check,
   ListFilter,
   Plus,
   RefreshCw,
@@ -45,6 +46,10 @@ const defaultCategory: Category = {
   colorCode: '#0f766e',
   createdSource: 'SYSTEM'
 };
+
+function requiresReview(entry: EmailRecord) {
+  return entry.needsUserReview || !entry.categoryId || entry.categorySource === 'UNASSIGNED';
+}
 
 export function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -282,7 +287,7 @@ export function App() {
     const monthTotal = analytics?.summary.totalFinancialAmount || 0;
     const cash = analytics?.paymentModeBreakdown?.find((item) => item.mode === 'CASH')?.totalAmount || 0;
     const friend = analytics?.paymentModeBreakdown?.find((item) => item.mode === 'FRIEND_PAID')?.totalAmount || 0;
-    const pending = entries.filter((entry) => entry.needsUserReview).length;
+    const pending = entries.filter(requiresReview).length;
     return { monthTotal, cash, friend, online: monthTotal - cash - friend, pending };
   }, [analytics, entries]);
 
@@ -316,7 +321,7 @@ export function App() {
     return matchesSearch && matchesCategory;
   });
 
-  const reviewEntries = entries.filter((entry) => entry.needsUserReview);
+  const reviewEntries = entries.filter(requiresReview);
 
   const unlockWithPin = (value: string) => {
     if (value === savedPin) {
@@ -516,6 +521,16 @@ export function App() {
       showToast('Rule deleted');
     } catch (error: any) {
       showToast(error.message || 'Rule delete failed');
+    }
+  };
+
+  const markNotificationReviewed = async (id: string) => {
+    try {
+      await api.markNotificationRead(id);
+      setNotifications((previous) => previous.map((item) => item.id === id ? { ...item, read: true } : item));
+      showToast('Marked reviewed');
+    } catch (error: any) {
+      showToast(error.message || 'Could not mark reviewed');
     }
   };
 
@@ -764,7 +779,7 @@ export function App() {
             <SectionTitle title="Review queue" action={`${reviewEntries.length} pending`} />
             <EntryList entries={reviewEntries} onSelect={setSelectedEntry} empty="No pending reviews" />
             <SectionTitle title="Notifications" />
-            <NotificationList notifications={notifications} />
+            <NotificationList notifications={notifications} onRead={markNotificationReviewed} />
           </section>
         )}
 
@@ -826,7 +841,7 @@ export function App() {
                 <span>Remote notifications</span>
                 <strong>{remotePushEnabled ? remotePushStatus : 'Disabled'}</strong>
               </div>
-              <label className="toggle"><span>Daily summaries & review alerts</span><input type="checkbox" checked={remotePushEnabled} onChange={(event) => setRemotePushPreference(event.target.checked)} /></label>
+              <label className="toggle"><span>Spending summaries & review alerts</span><input type="checkbox" checked={remotePushEnabled} onChange={(event) => setRemotePushPreference(event.target.checked)} /></label>
               <label className="toggle"><span>Biometric unlock</span><input type="checkbox" checked={biometricEnabled} onChange={(event) => setBiometricPreference(event.target.checked)} /></label>
               <button className="secondary-button" onClick={exportContext}>Export LLM context</button>
             </div>
@@ -955,7 +970,7 @@ function EntryList({ entries, onSelect, empty }: { entries: EmailRecord[]; onSel
   );
 }
 
-function NotificationList({ notifications }: { notifications: NotificationItem[] }) {
+function NotificationList({ notifications, onRead }: { notifications: NotificationItem[]; onRead: (id: string) => void }) {
   if (notifications.length === 0) return <div className="empty-state">No notifications</div>;
   return (
     <div className="list">
@@ -963,7 +978,10 @@ function NotificationList({ notifications }: { notifications: NotificationItem[]
         <article className="note-row" key={item.id}>
           <Bell size={16} />
           <div><strong>{item.title}</strong><span>{item.message}</span></div>
-          <small>{timeAgo(item.createdAt)}</small>
+          <div className="note-actions">
+            <small>{timeAgo(item.createdAt)}</small>
+            {item.type === 'REVIEW' && !item.read && <button className="icon-button" type="button" title="Mark reviewed" aria-label={`Mark reviewed: ${item.title}`} onClick={() => onRead(item.id)}><Check size={17} /></button>}
+          </div>
         </article>
       ))}
     </div>
