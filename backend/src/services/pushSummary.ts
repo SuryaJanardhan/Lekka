@@ -34,7 +34,7 @@ export function digestText(report: DigestReport, totals: DigestTotals, now = new
   const money = (amount: number) => `INR ${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
   if (report === 'review') {
     const details = [];
-    if (totals.pendingEntries) details.push(`${totals.pendingEntries} expenses need review or a category${totals.uncategorized ? ` (${totals.uncategorized} uncategorized)` : ''}.`);
+    if (totals.pendingEntries) details.push(`${totals.pendingEntries} ${totals.pendingEntries === 1 ? 'expense needs' : 'expenses need'} review or a category${totals.uncategorized ? ` (${totals.uncategorized} uncategorized)` : ''}.`);
     if (totals.emailReviews) details.push(`${totals.emailReviews} ${totals.emailReviews === 1 ? 'email needs' : 'emails need'} a manual amount check.`);
     if (totals.examples.length) details.push(totals.examples.slice(0, 2).join('; ') + '.');
     return { title: `${totals.pending} ${totals.pending === 1 ? 'item needs' : 'items need'} your review`, message: details.join(' ') };
@@ -46,7 +46,7 @@ export function digestText(report: DigestReport, totals: DigestTotals, now = new
   const parts = [`Recorded ${period}: ${money(totals.spend)} across ${totals.count} ${totals.count === 1 ? 'expense' : 'expenses'}.`];
   if (report === 'weekly') parts.push(`This month: ${money(totals.monthSpend)}.`);
   if (report === 'monthly' && totals.includeWeek) parts.push(`This week: ${money(totals.weekSpend)}.`);
-  if (totals.pending) parts.push(`${totals.pending} items still need review.`);
+  if (totals.pending) parts.push(`${totals.pending} ${totals.pending === 1 ? 'item still needs' : 'items still need'} review.`);
   parts.push(`As of ${cutoff} IST.`);
   return { title, message: parts.join(' ') };
 }
