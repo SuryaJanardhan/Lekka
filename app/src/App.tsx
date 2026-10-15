@@ -81,7 +81,8 @@ export function App() {
   const [analytics, setAnalytics] = useState<DashboardStats | null>(null);
   const [rules, setRules] = useState<Rule[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [dismissingNotifications, setDismissingNotifications] = useState<string[]>([]);
+  const [clearingNotifications, setClearingNotifications] = useState(false);
+  const [notificationExit, setNotificationExit] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<EmailRecord | null>(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -537,15 +538,19 @@ export function App() {
     }
   };
 
-  const dismissNotification = async (id: string) => {
-    setDismissingNotifications((previous) => [...previous, id]);
+  const clearNotifications = async () => {
+    if (clearingNotifications) return;
+    setClearingNotifications(true);
     try {
-      await api.dismissNotification(id);
-      setNotifications((previous) => previous.filter((item) => item.id !== id));
+      await api.clearNotifications();
+      setNotificationExit(true);
+      await new Promise((resolve) => setTimeout(resolve, 220));
+      setNotifications([]);
     } catch (error: any) {
-      showToast(error.message || 'Could not clear notification');
+      showToast(error.message || 'Could not clear notifications');
     } finally {
-      setDismissingNotifications((previous) => previous.filter((item) => item !== id));
+      setNotificationExit(false);
+      setClearingNotifications(false);
     }
   };
 
@@ -793,8 +798,13 @@ export function App() {
           <section className="stack">
             <SectionTitle title="Review queue" action={`${reviewEntries.length} pending`} />
             <EntryList entries={reviewEntries} onSelect={setSelectedEntry} empty="No pending reviews" />
-            <SectionTitle title="Notifications" />
-            <NotificationList notifications={notifications} onRead={markNotificationReviewed} onDismiss={dismissNotification} dismissing={dismissingNotifications} />
+            <div className="section-title">
+              <h2>Notifications</h2>
+              <button className="icon-button" type="button" title="Clear all notifications" aria-label="Clear all notifications" disabled={clearingNotifications || notifications.length === 0} onClick={clearNotifications}><X size={18} /></button>
+            </div>
+            <div className={`notification-list${notificationExit ? ' notification-list-exit' : ''}`}>
+              <NotificationList notifications={notifications} onRead={markNotificationReviewed} />
+            </div>
           </section>
         )}
 
@@ -990,7 +1000,7 @@ function EntryList({ entries, onSelect, empty }: { entries: EmailRecord[]; onSel
   );
 }
 
-function NotificationList({ notifications, onRead, onDismiss, dismissing }: { notifications: NotificationItem[]; onRead: (id: string) => void; onDismiss: (id: string) => void; dismissing: string[] }) {
+function NotificationList({ notifications, onRead }: { notifications: NotificationItem[]; onRead: (id: string) => void }) {
   if (notifications.length === 0) return <div className="empty-state">No notifications</div>;
   return (
     <div className="list">
@@ -1000,8 +1010,7 @@ function NotificationList({ notifications, onRead, onDismiss, dismissing }: { no
           <div><strong>{item.title}</strong><span>{item.message}</span></div>
           <div className="note-actions">
             <small>{timeAgo(item.createdAt)}</small>
-            {item.type === 'REVIEW' && !item.read && <button className="icon-button" type="button" disabled={dismissing.includes(item.id)} title="Mark reviewed" aria-label={`Mark reviewed: ${item.title}`} onClick={() => onRead(item.id)}><Check size={17} /></button>}
-            <button className="icon-button" type="button" disabled={dismissing.includes(item.id)} title="Clear notification" aria-label={`Clear notification: ${item.title}`} onClick={() => onDismiss(item.id)}><X size={17} /></button>
+            {item.type === 'REVIEW' && !item.read && <button className="icon-button" type="button" title="Mark reviewed" aria-label={`Mark reviewed: ${item.title}`} onClick={() => onRead(item.id)}><Check size={17} /></button>}
           </div>
         </article>
       ))}

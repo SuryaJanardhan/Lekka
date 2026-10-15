@@ -56,7 +56,7 @@ router.delete('/notifications/devices/:installationId', PushController.unregiste
 router.get('/notifications/digest', PushController.digest);
 router.post('/notifications/reminder', NotificationController.triggerReminder);
 router.post('/notifications/:id/read', NotificationController.markRead);
-router.post('/notifications/:id/dismiss', NotificationController.dismiss);
+router.post('/notifications/clear', NotificationController.clearAll);
 
 // Groq AI Chatbot routes (with Read-Only Database Tool Calling)
 router.post('/chat', ChatController.sendMessage);

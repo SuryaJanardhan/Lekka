@@ -104,8 +104,8 @@ export class ApiClient {
     return this.request(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' });
   }
 
-  dismissNotification(id: string) {
-    return this.request(`/api/notifications/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
+  clearNotifications() {
+    return this.request<{ cleared: number }>('/api/notifications/clear', { method: 'POST' });
   }
 
   pushStatus(installationId: string) {

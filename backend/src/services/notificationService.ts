@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { NotificationModel, NotificationType } from '../models/Notification';
 import { PushService } from './pushService';
 import { remoteNotificationTarget } from './pushPolicy';
-import { Types } from 'mongoose';
 
 export interface NotificationLog {
   id: string;
@@ -70,26 +69,21 @@ class NotificationService {
     return Boolean(result);
   }
 
-  public async dismiss(id: string): Promise<boolean> {
-    const result = await NotificationModel.findByIdAndUpdate(id, { $set: { read: true, dismissed: true } });
-    return Boolean(result);
+  public async clearAll(): Promise<number> {
+    const result = await NotificationModel.updateMany({ dismissed: { $ne: true } }, { $set: { read: true, dismissed: true } });
+    return result.modifiedCount;
   }
 }
 
 export const notificationService = new NotificationService();
 
 export class NotificationController {
-  public static dismiss = async (req: Request, res: Response): Promise<void> => {
-    if (!Types.ObjectId.isValid(req.params.id)) {
-      res.status(400).json({ success: false, error: 'Invalid notification ID' });
-      return;
-    }
+  public static clearAll = async (_req: Request, res: Response): Promise<void> => {
     try {
-      const ok = await notificationService.dismiss(req.params.id);
-      if (!ok) { res.status(404).json({ success: false, error: 'Notification not found' }); return; }
-      res.json({ success: true });
+      const cleared = await notificationService.clearAll();
+      res.json({ success: true, data: { cleared } });
     } catch {
-      res.status(500).json({ success: false, error: 'Could not clear notification' });
+      res.status(500).json({ success: false, error: 'Could not clear notifications' });
     }
   };
 
