@@ -58,7 +58,7 @@ export class GmailService {
 
       await notificationService.addNotification(
         'Gmail sync complete',
-        `${result.newIngested} expenses added, ${result.notificationOnlyCount} selected-sender emails flagged for manual check.`,
+        `${result.newIngested} expenses added, ${result.needsReviewCount} transactions need review, ${result.notificationOnlyCount} emails need a manual amount check.`,
         'SYNC',
         { ...result, source }
       );
@@ -278,7 +278,7 @@ export class GmailService {
         emailData.parsedJson = { ...emailData.parsedJson, ...aiFields };
       } else {
         await notificationService.addNotification(
-          'Selected sender email needs manual check',
+          `Amount missing: ${emailData.sender}`,
           `"${emailData.subject}" from ${emailData.sender} did not contain a detectable amount. Add it manually if it is an expense.`,
           'REVIEW',
           {

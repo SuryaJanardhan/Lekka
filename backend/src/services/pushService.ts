@@ -36,7 +36,7 @@ export class PushService {
           method: 'POST', timeout: 10000,
           data: { message: {
             token: device.token,
-            notification: { title, body },
+            notification: { title: Array.from(title).slice(0, 100).join(''), body: Array.from(body).slice(0, 500).join('') },
             data: { screen, notificationKey: key },
             android: { priority: 'high', ttl: '21600s', notification: { channel_id: 'lekka_alerts', icon: 'ic_stat_lekka', color: '#14B8A6', tag, visibility: 'PRIVATE' } }
           } }
@@ -53,9 +53,22 @@ export class PushService {
   }
 
   static async sendDigest(kind: DigestKind, now = new Date()) {
+    const period = digestPeriod(kind, now);
+    if (!period.report) return { skipped: 'No weekly or month-end report due', sent: 0 };
     if (!this.isConfigured()) throw new Error('Firebase Cloud Messaging is not configured');
     if (!await PushDeviceModel.exists({})) return { skipped: 'No registered phones', sent: 0 };
-    const period = digestPeriod(kind, now);
+    const uncategorizedQuery = { $or: [{ categoryId: null }, { categorySource: 'UNASSIGNED' }] };
+    const pendingQuery = { $or: [{ needsUserReview: true }, ...uncategorizedQuery.$or] };
+    const reviewEmailQuery = { type: 'REVIEW', read: false };
+    const [pendingEntries, uncategorized, emailReviews, entryExample, emailExample] = await Promise.all([
+      EmailModel.countDocuments(pendingQuery),
+      EmailModel.countDocuments(uncategorizedQuery),
+      NotificationModel.countDocuments(reviewEmailQuery),
+      EmailModel.findOne(pendingQuery).sort({ receivedAt: 1 }).select('subject parsedJson receivedAt').lean(),
+      NotificationModel.findOne(reviewEmailQuery).sort({ createdAt: 1 }).select('metadata title').lean()
+    ]);
+    const pending = pendingEntries + emailReviews;
+    if (period.report === 'review' && !pending) return { skipped: 'No items need review or categorization', sent: 0 };
     await PushDispatchModel.init();
     const key = `digest-${period.key}`;
     let claim;
@@ -78,16 +91,24 @@ export class PushService {
         ]);
         return row || { spend: 0, count: 0 };
       };
-      const [daily, monthly, reviewEntries, reviewEmails] = await Promise.all([
-        sum(period.start, period.end), sum(period.monthStart, now),
-        EmailModel.countDocuments({ needsUserReview: true }),
-        NotificationModel.countDocuments({ type: 'REVIEW', read: false })
+      const [spending, monthly, weekly] = await Promise.all([
+        sum(period.start, period.end), sum(period.monthStart, now), sum(period.weekStart, now)
       ]);
-      const { title, message } = digestText(kind, { ...daily, monthSpend: monthly.spend, pending: reviewEntries + reviewEmails });
-      const result = await this.send(title, message, key, 'insights');
+      const examples: string[] = [];
+      if (entryExample) {
+        const label = String(entryExample.parsedJson?.merchantName || entryExample.subject).slice(0, 55);
+        const amount = Number(entryExample.parsedJson?.detectedAmount);
+        examples.push(`${label}${amount > 0 ? `: INR ${amount.toLocaleString('en-IN')}` : ''}`);
+      }
+      if (emailExample) examples.push(`${String(emailExample.metadata?.sender || 'Email').slice(0, 40)}: ${String(emailExample.metadata?.subject || emailExample.title).slice(0, 55)} (amount missing)`);
+      const { title, message } = digestText(period.report, {
+        ...spending, monthSpend: monthly.spend, weekSpend: weekly.spend, pending,
+        pendingEntries, uncategorized, emailReviews, examples, includeWeek: period.weekEnd
+      }, now);
+      const result = await this.send(title, message, key, period.report === 'review' ? 'review' : 'insights');
       await PushDispatchModel.updateOne({ _id: claim._id }, { state: result.failed ? 'failed' : 'sent', sentCount: result.sent });
       if (result.failed) throw new Error('Some phones could not receive the daily summary');
-      await NotificationModel.create({ title, message, type: 'REMINDER', metadata: { key, remoteSent: result.sent } });
+      await NotificationModel.create({ title, message, type: 'REMINDER', metadata: { key, report: period.report, remoteSent: result.sent } });
       return result;
     } catch (error) {
       await PushDispatchModel.updateOne({ _id: claim._id }, { state: 'failed' });

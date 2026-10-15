@@ -15,7 +15,11 @@ export interface NotificationLog {
 
 class NotificationService {
   public async getNotifications(): Promise<NotificationLog[]> {
-    const notifications = await NotificationModel.find({}).sort({ createdAt: -1 }).limit(50).lean();
+    const [reviews, history] = await Promise.all([
+      NotificationModel.find({ type: 'REVIEW', read: false }).sort({ createdAt: 1 }).limit(50).lean(),
+      NotificationModel.find({ $or: [{ type: { $ne: 'REVIEW' } }, { read: true }] }).sort({ createdAt: -1 }).limit(30).lean()
+    ]);
+    const notifications = [...reviews, ...history];
     return notifications.map((notification) => ({
       id: String(notification._id),
       title: notification.title,
