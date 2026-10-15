@@ -63,6 +63,7 @@ export async function scanImapInbox(settings: InboxSettings, savedCursor?: Inbox
       let checkpoint = lastUid || 0;
       let bodiesRead = 0;
       let ignored = 0;
+      let recentHeadersRead = 0;
       for (const header of headers) {
         const sender = header.envelope?.from?.[0]?.address || '';
         const subject = header.envelope?.subject || 'No Subject';
@@ -98,6 +99,7 @@ export async function scanImapInbox(settings: InboxSettings, savedCursor?: Inbox
       }
       if (preview && mailbox.exists && samples.length < 10) {
         const recent = await client.fetchAll(`${Math.max(1, mailbox.exists - 9)}:*`, { uid: true, envelope: true, internalDate: true });
+        recentHeadersRead = recent.length;
         for (const header of recent.reverse()) {
           if (samples.some(sample => sample.uid === header.uid)) continue;
           samples.push({ uid: header.uid, sender: header.envelope?.from?.[0]?.address || '', subject: (header.envelope?.subject || '').slice(0, 160), reason: 'outside_selected_sender_or_test_recipient_search', arrivedAt: validDate(header.internalDate) });
@@ -110,7 +112,8 @@ export async function scanImapInbox(settings: InboxSettings, savedCursor?: Inbox
           mailbox: settings.user, folder: 'INBOX', inboxMessages: mailbox.exists,
           selectedSenders: settings.selectedSenders, trustedForwarders: settings.trustedForwarders,
           testRecipient: settings.testRecipient || null, testSubjectPrefix,
-          matchingSearchCount: uids.length, headersRead: headers.length, bodiesRead, admitted: mails.length, ignored,
+          matchingSearchCount: uids.length, headersRead: headers.length + recentHeadersRead,
+          candidateHeadersRead: headers.length, bodiesRead, admitted: mails.length, ignored,
           hasMore: uids.some(uid => uid > checkpoint),
           olderMatchesOutsideRecoveryWindow: lastUid === undefined ? Math.max(0, uids.length - batch.length) : 0,
           samples
