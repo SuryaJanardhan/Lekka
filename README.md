@@ -155,7 +155,11 @@ Do not commit real secrets. Keep them in `backend/.env` locally and Vercel envir
 
 ### Ingestion
 
-Lekka only ingests email from the configured `TARGET_SENDER_EMAILS` allowlist. IMAP ingestion scans lightweight message headers first, filters to selected senders, then downloads full message bodies only for matching candidates. `GMAIL_IMAP_SCAN_LIMIT` bounds the recent inbox window and `GMAIL_INGEST_LIMIT` bounds full message processing per run so Vercel does not time out on a huge inbox.
+Lekka matches complete sender addresses from `TARGET_SENDER_EMAILS`. IMAP searches matching messages across the Inbox, fetches lightweight headers first, and downloads only candidate bodies. UID checkpoints prevent an old forwarded date or a processing limit from silently skipping mail. Initial recovery is bounded by `GMAIL_IMAP_SCAN_LIMIT`; body downloads per run are bounded by `GMAIL_INGEST_LIMIT`.
+
+Trusted personal forwarders can be listed in `TRUSTED_FORWARDER_EMAILS`; the forwarded bank sender must still be selected. A private `INGESTION_TEST_RECIPIENT` plus-address and the `[LEKKA TEST]` subject prefix allow real test emails from another personal account without accepting ordinary personal mail.
+
+Use `cd backend` then `npm run mail:preview` for a read-only production filter check. For the two test messages and Google's forwarding setup, see [mail ingestion testing](docs/mail-ingestion.md). The backend never creates test expenses without receiving actual test emails.
 
 Emails that do not contain an amount are stored as notifications/review signals instead of expenses.
 
