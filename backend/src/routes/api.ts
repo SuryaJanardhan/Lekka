@@ -44,6 +44,7 @@ router.get('/export', ExportController.getLLMContextBundle);
 
 // Ingestion trigger route
 router.get('/ingest', IngestController.triggerManualIngestion);
+router.get('/ingest/preview', IngestController.previewIngestion);
 router.post('/ingest', IngestController.triggerManualIngestion);
 
 // Notification & Server Push routes

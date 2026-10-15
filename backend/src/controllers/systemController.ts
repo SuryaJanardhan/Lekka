@@ -23,8 +23,12 @@ export class SystemController {
             lastResult: lastSync ? {
               createdAt: lastSync.createdAt,
               newIngested: lastSync.metadata?.newIngested ?? null,
+              totalProcessed: lastSync.metadata?.totalProcessed ?? null,
+              duplicatesSkipped: lastSync.metadata?.duplicatesSkipped ?? null,
               notificationOnlyCount: lastSync.metadata?.notificationOnlyCount ?? null,
-              needsReviewCount: lastSync.metadata?.needsReviewCount ?? null
+              needsReviewCount: lastSync.metadata?.needsReviewCount ?? null,
+              diagnostics: lastSync.metadata?.diagnostics || null,
+              processedEmails: lastSync.metadata?.processedEmails || []
             } : null
           } : null,
           schedules: [
