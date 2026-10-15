@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { PushDeviceModel } from '../models/PushDevice';
 import { PushService } from '../services/pushService';
+import { recordJobRun, requestJobSource } from '../services/jobRunService';
 
 export class PushController {
   static status = async (req: Request, res: Response, next: NextFunction) => {
@@ -38,7 +39,8 @@ export class PushController {
     const kind = req.query.kind;
     if (kind !== 'morning' && kind !== 'evening') return res.status(400).json({ success: false, error: 'Choose morning or evening digest' });
     try {
-      res.json({ success: true, data: await PushService.sendDigest(kind) });
+      const result = await recordJobRun(`notifications-${kind}`, requestJobSource(req), () => PushService.sendDigest(kind));
+      res.json({ success: true, data: result });
     } catch (error: any) {
       res.status(PushService.isConfigured() ? 502 : 503).json({ success: false, error: error.message });
     }
