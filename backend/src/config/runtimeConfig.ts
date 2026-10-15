@@ -37,6 +37,8 @@ export const runtimeConfig = {
   gmailImapScanLimit: optionalPositiveInteger('GMAIL_IMAP_SCAN_LIMIT', 300),
   gmailIngestLimit: optionalPositiveInteger('GMAIL_INGEST_LIMIT', 50),
   targetSenderEmails: optionalCsv('TARGET_SENDER_EMAILS'),
+  trustedForwarderEmails: optionalCsv('TRUSTED_FORWARDER_EMAILS'),
+  ingestionTestRecipient: process.env.INGESTION_TEST_RECIPIENT?.trim().toLowerCase() || '',
   gmail: {
     user: process.env.GMAIL_USER?.trim() || '',
     appPassword: process.env.GMAIL_APP_PASSWORD?.trim() || '',
