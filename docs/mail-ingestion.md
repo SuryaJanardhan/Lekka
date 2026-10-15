@@ -45,6 +45,14 @@ Automatic forwarding and manual forwarding are different. Manual forwards usuall
 
 Sources: [Google forwarding setup](https://support.google.com/mail/answer/10957?hl=en), [Gmail plus-address aliases](https://support.google.com/mail/answer/22370?hl=en#zippy=%2Cfilter-using-your-gmail-alias).
 
+## Debit-only categories and learning
+
+After admission and duplicate checks, Lekka reads body text and OCR from attached images. Confirmed credits, refunds, cashback and reversals are recorded as ignored, never as spending. Unclear direction, unpaid bills, failed payments or missing amounts require review when AI cannot confirm a completed debit. Manual expense amounts must be positive; negative values are rejected.
+
+Category matching uses existing rules first. Without a match, AI sees the current category names and suggests an existing category or creates an initial expense category. High-confidence results (at least 0.9) learn only when a merchant name is actually present in the body: an exact sender plus merchant rule is saved. Low-confidence results (below 0.8) remain pending review. AI does not learn a whole bank sender as one category.
+
+Changing an entry's category trains a higher-priority user rule, scoped to sender plus merchant, or exact subject when no reliable merchant exists. Repeating a correction updates that learned rule. User-created rules have priority 10 by default, user corrections 20, AI learning 1. Legacy auto-generated keyword-only rules are ignored. Settings > Categories lets the user rename categories in place; transactions and rules keep the same category ID, and AI receives the updated names. AI never renames categories.
+
 ## Checkpoint and audit behavior
 
 IMAP searches matching senders/recipients across the Inbox before downloading bodies. Initial recovery is bounded to the newest `GMAIL_IMAP_SCAN_LIMIT` matching messages; subsequent runs resume older-first from the last handled UID. `GMAIL_INGEST_LIMIT` bounds body downloads per run. If `hasMore` is true, another manual ingestion continues the backlog. Older messages outside the initial recovery window are counted explicitly.

@@ -14,9 +14,12 @@ test('completed debits are spending, a credit card name alone is not a credit', 
   }
 });
 test('bills, balances, mixed statements and failures are not confirmed debits', () => {
-  for (const body of ['Available balance INR 100', 'Invoice total INR 200 due tomorrow', 'INR 200 debited and INR 50 refunded', 'Payment failed INR 100']) {
+  for (const body of ['Available balance INR 100', 'Invoice total INR 200 due tomorrow', 'INR 200 debited and INR 50 refunded', 'Payment failed INR 100', 'INR 200 will be debited tomorrow', 'Payment successful? No, payment failed INR 100']) {
     assert.equal(transactionDirection('Account information', body), 'UNKNOWN', body);
   }
+});
+test('refund policy text does not turn a completed purchase into a credit', () => {
+  assert.equal(transactionDirection('Receipt', 'You paid INR 200 to Shop. Refund policy: contact support.'), 'DEBIT');
 });
 test('learned categories always include exact sender and merchant or exact subject', () => {
   assert.deepEqual(learningConditions('BANK@example.com', 'Payment received', 'Shop', 'Paid INR 25 to Shop'), [

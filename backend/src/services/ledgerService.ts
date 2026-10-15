@@ -47,7 +47,7 @@ export class LedgerService {
       throw new Error('Title is required');
     }
 
-    const amount = Math.abs(Number(input.amount));
+    const amount = Number(input.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new Error('Amount must be a positive number');
     }
@@ -102,7 +102,7 @@ export class LedgerService {
       throw new Error('Title is required');
     }
 
-    const amount = Math.abs(Number(input.amount));
+    const amount = Number(input.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new Error('Amount must be a positive number');
     }
