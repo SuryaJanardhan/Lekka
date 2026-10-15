@@ -126,7 +126,7 @@ export class ChatService {
     const isMongoReady = mongoose.connection.readyState === 1;
 
     let transactionCount = 0;
-    let categoriesList = ['Invoices & Receipts', 'Alerts & Security', 'Orders & Delivery', 'General'];
+    let categoriesList: string[] = [];
 
     if (isMongoReady) {
       try {

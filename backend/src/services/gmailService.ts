@@ -313,7 +313,7 @@ export class GmailService {
       confidenceScore = aiResult.confidenceScore;
 
       let category = await CategoryModel.findOne({ name: aiResult.categoryName });
-      if (!category) {
+      if (!category && !await CategoryModel.exists({})) {
         category = new CategoryModel({
           name: aiResult.categoryName,
           slug: aiResult.categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
@@ -321,13 +321,14 @@ export class GmailService {
         });
         await category.save();
       }
-      categoryId = category._id as any;
+      categoryId = category ? category._id as any : null;
 
-      if (aiResult.confidenceScore < 0.8) {
+      if (!category || aiResult.confidenceScore < 0.8) {
         needsReview = true;
       }
+      if (!category) categorySource = 'UNASSIGNED';
       const conditions = learningConditions(emailData.sender, emailData.subject, emailData.parsedJson.merchantName, emailData.rawTextBody);
-      if (aiResult.confidenceScore >= 0.9 && conditions[1].field === 'body') {
+      if (category && aiResult.confidenceScore >= 0.9 && conditions[1].field === 'body') {
         await RuleEngine.autoGenerateRuleFromUserFeedback(emailData.subject, emailData.sender, categoryId!,
           emailData.parsedJson.merchantName, emailData.rawTextBody, 'AI');
       }

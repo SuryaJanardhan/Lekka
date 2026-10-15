@@ -208,6 +208,12 @@ h2 { font-size: 1.05rem; line-height: 1.2; }
 .note-row small { color: var(--muted); font-size: 0.72rem; }
 .note-row span { overflow-wrap: anywhere; }
 .note-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.notification-list { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 200ms ease, opacity 200ms ease, transform 200ms ease; }
+.notification-list > * { min-height: 0; overflow: hidden; }
+.notification-list-exit { grid-template-rows: 0fr; opacity: 0; transform: translateY(-6px); }
+@media (prefers-reduced-motion: reduce) {
+  .notification-list { transition: none; }
+}
 
 .search-panel {
   display: grid;

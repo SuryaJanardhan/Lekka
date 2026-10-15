@@ -67,3 +67,16 @@ test('low-confidence or invented merchants never create automatic rules', async 
   }
   assert.equal(learn.mock.callCount(), 0);
 });
+
+test('an AI category outside the user list is unassigned for review, never created', async (t) => {
+  t.mock.method(RuleEngine, 'evaluateEmail', async () => null);
+  t.mock.method(GroqService, 'classifyEmailContent', async () => ({ categoryName: 'Old Generic Category', confidenceScore: 0.95, reasoning: 'Test' }));
+  t.mock.method(CategoryModel, 'findOne', async () => null);
+  t.mock.method(CategoryModel, 'exists', async () => ({ _id: new Types.ObjectId() }));
+  let stored: any;
+  t.mock.method(EmailModel, 'create', async (data: any) => { stored = data; });
+  const result = await classify(mail('You paid INR 200 to Metro Cafe'));
+  assert.equal(result.needsUserReview, true);
+  assert.equal(stored.categoryId, null);
+  assert.equal(stored.categorySource, 'UNASSIGNED');
+});
