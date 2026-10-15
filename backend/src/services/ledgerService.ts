@@ -166,7 +166,9 @@ export class LedgerService {
       await RuleEngine.autoGenerateRuleFromUserFeedback(
         email.subject,
         email.sender,
-        new Types.ObjectId(params.categoryId)
+        new Types.ObjectId(params.categoryId),
+        email.parsedJson?.merchantName,
+        email.rawTextBody
       );
     }
 

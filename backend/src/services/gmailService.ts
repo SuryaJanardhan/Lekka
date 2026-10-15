@@ -13,6 +13,8 @@ import { NotificationModel } from '../models/Notification';
 import { ProcessedMailModel } from '../models/ProcessedMail';
 import { admitMail, exactSenderMatch } from './mailAdmission';
 import { InboxCursor, InboxMail, InboxSettings, scanImapInbox } from './imapInbox';
+import { transactionDirection } from './expensePolicy';
+import { learningConditions } from './categoryLearning';
 
 export interface IngestionResult {
   totalProcessed: number;
@@ -20,6 +22,7 @@ export interface IngestionResult {
   duplicatesSkipped: number;
   needsReviewCount: number;
   notificationOnlyCount: number;
+  creditsSkipped?: number;
   skipped?: string;
   diagnostics?: Record<string, unknown>;
   processedEmails?: Array<{ messageId: string; sender: string; subject: string; receivedAt: Date; result: string; isTest: boolean }>;
@@ -181,6 +184,7 @@ export class GmailService {
     let duplicatesSkipped = 0;
     let needsReviewCount = 0;
     let notificationOnlyCount = 0;
+    let creditsSkipped = 0;
     const processedEmails: NonNullable<IngestionResult['processedEmails']> = [];
 
     for (const mail of mails) {
@@ -231,19 +235,21 @@ export class GmailService {
       });
 
       await ProcessedMailModel.updateOne({ messageId: mail.messageId }, {
-        $setOnInsert: { messageId: mail.messageId, outcome: result.notificationOnly ? 'REVIEW' : 'EXPENSE', isTest: mail.isTest }
+        $setOnInsert: { messageId: mail.messageId, outcome: result.ignoredCredit ? 'IGNORED_CREDIT' : result.notificationOnly ? 'REVIEW' : 'EXPENSE', isTest: mail.isTest }
       }, { upsert: true });
 
-      if (result.notificationOnly) {
+      if (result.ignoredCredit) {
+        creditsSkipped++;
+      } else if (result.notificationOnly) {
         notificationOnlyCount++;
       } else {
         if (result.needsUserReview) needsReviewCount++;
         newIngested++;
       }
-      processedEmails.push({ messageId: mail.messageId, sender: mail.sender, subject: mail.subject, receivedAt: mail.receivedAt, result: result.notificationOnly ? 'review_notification' : 'expense_saved', isTest: mail.isTest });
+      processedEmails.push({ messageId: mail.messageId, sender: mail.sender, subject: mail.subject, receivedAt: mail.receivedAt, result: result.ignoredCredit ? 'ignored_credit' : result.notificationOnly ? 'review_notification' : 'expense_saved', isTest: mail.isTest });
     }
 
-    return { totalProcessed, newIngested, duplicatesSkipped, needsReviewCount, notificationOnlyCount, processedEmails };
+    return { totalProcessed, newIngested, duplicatesSkipped, needsReviewCount, notificationOnlyCount, creditsSkipped, processedEmails };
   }
 
   private static isSelectedSender(sender: string): boolean {
@@ -260,20 +266,24 @@ export class GmailService {
     receivedAt: Date;
     isTest: boolean;
     transportSender: string;
-  }): Promise<{ needsUserReview: boolean; notificationOnly: boolean }> {
-    if (!emailData.parsedJson.detectedAmount) {
+  }): Promise<{ needsUserReview: boolean; notificationOnly: boolean; ignoredCredit?: boolean }> {
+    let direction = transactionDirection(emailData.subject, emailData.rawTextBody);
+    if (direction === 'CREDIT') return { needsUserReview: false, notificationOnly: false, ignoredCredit: true };
+    if (direction === 'UNKNOWN' || !emailData.parsedJson.detectedAmount) {
       const aiFields = await GroqService.extractFinancialFields(
         emailData.sender,
         emailData.subject,
         emailData.rawTextBody
       );
 
-      if (aiFields?.detectedAmount) {
+      if (aiFields?.transactionDirection === 'CREDIT') return { needsUserReview: false, notificationOnly: false, ignoredCredit: true };
+      if (aiFields?.transactionDirection === 'DEBIT' && aiFields?.detectedAmount) {
         emailData.parsedJson = { ...emailData.parsedJson, ...aiFields };
+        direction = 'DEBIT';
       } else {
         await notificationService.addNotification(
-          `Amount missing: ${emailData.sender}`,
-          `"${emailData.subject}" from ${emailData.sender} did not contain a detectable amount. Add it manually if it is an expense.`,
+          `${emailData.parsedJson.detectedAmount ? 'Expense unclear' : 'Amount missing'}: ${emailData.sender}`,
+          `"${emailData.subject}" from ${emailData.sender} could not be confirmed as a completed debit with an amount. Review and add it manually only if it is an expense.`,
           'REVIEW',
           {
             messageId: emailData.messageId,
@@ -287,6 +297,7 @@ export class GmailService {
         return { needsUserReview: false, notificationOnly: true };
       }
     }
+    emailData.parsedJson.transactionDirection = direction;
 
     let categoryId = await RuleEngine.evaluateEmail(emailData.sender, emailData.subject, emailData.rawTextBody);
     emailData.parsedJson.ingestionTest = emailData.isTest;
@@ -297,6 +308,7 @@ export class GmailService {
 
     if (!categoryId) {
       const aiResult = await GroqService.classifyEmailContent(emailData.sender, emailData.subject, emailData.rawTextBody);
+      if (aiResult.merchantName) emailData.parsedJson.merchantName = aiResult.merchantName;
       categorySource = 'GROQ_AI';
       confidenceScore = aiResult.confidenceScore;
 
@@ -313,6 +325,11 @@ export class GmailService {
 
       if (aiResult.confidenceScore < 0.8) {
         needsReview = true;
+      }
+      const conditions = learningConditions(emailData.sender, emailData.subject, emailData.parsedJson.merchantName, emailData.rawTextBody);
+      if (aiResult.confidenceScore >= 0.9 && conditions[1].field === 'body') {
+        await RuleEngine.autoGenerateRuleFromUserFeedback(emailData.subject, emailData.sender, categoryId!,
+          emailData.parsedJson.merchantName, emailData.rawTextBody, 'AI');
       }
     }
 
