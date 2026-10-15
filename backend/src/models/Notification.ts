@@ -7,6 +7,7 @@ export interface INotification extends Document {
   message: string;
   type: NotificationType;
   read: boolean;
+  dismissed: boolean;
   metadata?: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
@@ -23,6 +24,7 @@ const NotificationSchema = new Schema<INotification>(
       index: true
     },
     read: { type: Boolean, default: false, index: true },
+    dismissed: { type: Boolean, default: false },
     metadata: { type: Schema.Types.Mixed, default: {} }
   },
   { timestamps: true }

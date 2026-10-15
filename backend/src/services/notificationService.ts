@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { NotificationModel, NotificationType } from '../models/Notification';
 import { PushService } from './pushService';
 import { remoteNotificationTarget } from './pushPolicy';
+import { Types } from 'mongoose';
 
 export interface NotificationLog {
   id: string;
@@ -16,8 +17,8 @@ export interface NotificationLog {
 class NotificationService {
   public async getNotifications(): Promise<NotificationLog[]> {
     const [reviews, history] = await Promise.all([
-      NotificationModel.find({ type: 'REVIEW', read: false }).sort({ createdAt: 1 }).limit(50).lean(),
-      NotificationModel.find({ $or: [{ type: { $ne: 'REVIEW' } }, { read: true }] }).sort({ createdAt: -1 }).limit(30).lean()
+      NotificationModel.find({ dismissed: { $ne: true }, type: 'REVIEW', read: false }).sort({ createdAt: 1 }).limit(50).lean(),
+      NotificationModel.find({ dismissed: { $ne: true }, $or: [{ type: { $ne: 'REVIEW' } }, { read: true }] }).sort({ createdAt: -1 }).limit(30).lean()
     ]);
     const notifications = [...reviews, ...history];
     return notifications.map((notification) => ({
@@ -68,11 +69,30 @@ class NotificationService {
     const result = await NotificationModel.findByIdAndUpdate(id, { read: true });
     return Boolean(result);
   }
+
+  public async dismiss(id: string): Promise<boolean> {
+    const result = await NotificationModel.findByIdAndUpdate(id, { $set: { read: true, dismissed: true } });
+    return Boolean(result);
+  }
 }
 
 export const notificationService = new NotificationService();
 
 export class NotificationController {
+  public static dismiss = async (req: Request, res: Response): Promise<void> => {
+    if (!Types.ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ success: false, error: 'Invalid notification ID' });
+      return;
+    }
+    try {
+      const ok = await notificationService.dismiss(req.params.id);
+      if (!ok) { res.status(404).json({ success: false, error: 'Notification not found' }); return; }
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ success: false, error: 'Could not clear notification' });
+    }
+  };
+
   public static getNotifications = async (_req: Request, res: Response): Promise<void> => {
     res.json({
       success: true,

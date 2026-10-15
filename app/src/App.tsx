@@ -16,7 +16,8 @@ import {
   SlidersHorizontal,
   Tag,
   Trash2,
-  Wallet
+  Wallet,
+  X
 } from 'lucide-react';
 import {
   AndroidBiometryStrength,
@@ -80,6 +81,7 @@ export function App() {
   const [analytics, setAnalytics] = useState<DashboardStats | null>(null);
   const [rules, setRules] = useState<Rule[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [dismissingNotifications, setDismissingNotifications] = useState<string[]>([]);
   const [selectedEntry, setSelectedEntry] = useState<EmailRecord | null>(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -535,6 +537,18 @@ export function App() {
     }
   };
 
+  const dismissNotification = async (id: string) => {
+    setDismissingNotifications((previous) => [...previous, id]);
+    try {
+      await api.dismissNotification(id);
+      setNotifications((previous) => previous.filter((item) => item.id !== id));
+    } catch (error: any) {
+      showToast(error.message || 'Could not clear notification');
+    } finally {
+      setDismissingNotifications((previous) => previous.filter((item) => item !== id));
+    }
+  };
+
   const exportContext = async () => {
     try {
       const bundle = await api.exportContext();
@@ -780,7 +794,7 @@ export function App() {
             <SectionTitle title="Review queue" action={`${reviewEntries.length} pending`} />
             <EntryList entries={reviewEntries} onSelect={setSelectedEntry} empty="No pending reviews" />
             <SectionTitle title="Notifications" />
-            <NotificationList notifications={notifications} onRead={markNotificationReviewed} />
+            <NotificationList notifications={notifications} onRead={markNotificationReviewed} onDismiss={dismissNotification} dismissing={dismissingNotifications} />
           </section>
         )}
 
@@ -976,7 +990,7 @@ function EntryList({ entries, onSelect, empty }: { entries: EmailRecord[]; onSel
   );
 }
 
-function NotificationList({ notifications, onRead }: { notifications: NotificationItem[]; onRead: (id: string) => void }) {
+function NotificationList({ notifications, onRead, onDismiss, dismissing }: { notifications: NotificationItem[]; onRead: (id: string) => void; onDismiss: (id: string) => void; dismissing: string[] }) {
   if (notifications.length === 0) return <div className="empty-state">No notifications</div>;
   return (
     <div className="list">
@@ -986,7 +1000,8 @@ function NotificationList({ notifications, onRead }: { notifications: Notificati
           <div><strong>{item.title}</strong><span>{item.message}</span></div>
           <div className="note-actions">
             <small>{timeAgo(item.createdAt)}</small>
-            {item.type === 'REVIEW' && !item.read && <button className="icon-button" type="button" title="Mark reviewed" aria-label={`Mark reviewed: ${item.title}`} onClick={() => onRead(item.id)}><Check size={17} /></button>}
+            {item.type === 'REVIEW' && !item.read && <button className="icon-button" type="button" disabled={dismissing.includes(item.id)} title="Mark reviewed" aria-label={`Mark reviewed: ${item.title}`} onClick={() => onRead(item.id)}><Check size={17} /></button>}
+            <button className="icon-button" type="button" disabled={dismissing.includes(item.id)} title="Clear notification" aria-label={`Clear notification: ${item.title}`} onClick={() => onDismiss(item.id)}><X size={17} /></button>
           </div>
         </article>
       ))}
