@@ -1,14 +1,18 @@
-import { ImapFlow } from 'imapflow';
-import { simpleParser, ParsedMail } from 'mailparser';
+import { createHash, randomUUID } from 'crypto';
+import { simpleParser } from 'mailparser';
 import { google } from 'googleapis';
 import { EmailModel } from '../models/Email';
 import { RuleEngine } from './ruleEngine';
 import { GroqService } from './groqService';
 import { CategoryModel } from '../models/Category';
 import { ParserService } from './parserService';
-import { SyncStateModel } from '../models/SyncState';
+import { ISyncState, SyncStateModel } from '../models/SyncState';
 import { notificationService } from './notificationService';
 import { assertIngestionConfigured, runtimeConfig } from '../config/runtimeConfig';
+import { NotificationModel } from '../models/Notification';
+import { ProcessedMailModel } from '../models/ProcessedMail';
+import { admitMail, exactSenderMatch } from './mailAdmission';
+import { InboxCursor, InboxMail, InboxSettings, scanImapInbox } from './imapInbox';
 
 export interface IngestionResult {
   totalProcessed: number;
@@ -16,182 +20,159 @@ export interface IngestionResult {
   duplicatesSkipped: number;
   needsReviewCount: number;
   notificationOnlyCount: number;
+  skipped?: string;
+  diagnostics?: Record<string, unknown>;
+  processedEmails?: Array<{ messageId: string; sender: string; subject: string; receivedAt: Date; result: string; isTest: boolean }>;
 }
 
-interface IncomingMail {
-  messageId: string;
-  sender: string;
-  subject: string;
-  body: string;
-  receivedAt: Date;
-  attachments?: Array<{ contentType: string; content: Buffer }>;
-}
-
-interface CandidateMail {
-  seq: number;
-  uid: number;
-  messageId: string;
-  sender: string;
-  subject: string;
-  receivedAt: Date;
-}
+type IncomingMail = InboxMail;
 
 export class GmailService {
-  public static async processIngestionPipeline(source: 'manual' | 'automatic' = 'automatic'): Promise<IngestionResult> {
+  private static inboxSettings(): InboxSettings {
+    return {
+      user: runtimeConfig.gmail.user, password: runtimeConfig.gmail.appPassword,
+      selectedSenders: runtimeConfig.targetSenderEmails,
+      trustedForwarders: runtimeConfig.trustedForwarderEmails,
+      testRecipient: runtimeConfig.ingestionTestRecipient,
+      scanLimit: runtimeConfig.gmailImapScanLimit, processLimit: runtimeConfig.gmailIngestLimit
+    };
+  }
+
+  public static async previewIngestion() {
     assertIngestionConfigured();
+    if (!runtimeConfig.gmail.user || !runtimeConfig.gmail.appPassword) {
+      throw new Error('Read-only mailbox preview requires the configured Gmail app-password connection.');
+    }
+    const scan = await scanImapInbox(this.inboxSettings(), undefined, true);
+    const matchedMessages = await Promise.all(scan.mails.map(async (mail) => {
+      const parsed = await ParserService.parseEmailBody(mail.body);
+      const [expense, review, processed] = await Promise.all([
+        EmailModel.exists({ messageId: mail.messageId }),
+        NotificationModel.exists({ type: 'REVIEW', 'metadata.messageId': mail.messageId }),
+        ProcessedMailModel.exists({ messageId: mail.messageId })
+      ]);
+      return {
+        messageId: mail.messageId, sender: mail.sender, transportSender: mail.transportSender,
+        subject: mail.subject, receivedAt: mail.receivedAt, arrivedAt: mail.arrivedAt, isTest: mail.isTest,
+        reason: mail.admissionReason, alreadyRecorded: Boolean(expense || review || processed),
+        detectedAmount: parsed.structuredJson.detectedAmount || null
+      };
+    }));
+    return { ...scan.diagnostics, readOnly: true, matchedMessages };
+  }
 
-    const syncState = await SyncStateModel.findOneAndUpdate(
-      { key: 'gmail' },
-      { lastAttemptedSyncAt: new Date(), $unset: { lastError: '' } },
-      { upsert: true, new: true }
-    );
-
+  public static async processIngestionPipeline(source: 'manual' | 'automatic' = 'automatic'): Promise<IngestionResult> {
+    const token = randomUUID();
+    const startedAt = new Date();
+    let syncState;
     try {
-      const result = runtimeConfig.gmail.user && runtimeConfig.gmail.appPassword
-        ? await this.processImapIngestion(syncState.lastSuccessfulSyncAt)
-        : await this.processOAuth2Ingestion(syncState.lastSuccessfulSyncAt);
-
-      await SyncStateModel.updateOne(
-        { key: 'gmail' },
-        { lastSuccessfulSyncAt: new Date(), lastAttemptedSyncAt: new Date(), $unset: { lastError: '' } }
+      syncState = await SyncStateModel.findOneAndUpdate({
+        key: 'gmail', $or: [{ ingestionLockUntil: { $exists: false } }, { ingestionLockUntil: { $lt: startedAt } }]
+      }, {
+        $set: { lastAttemptedSyncAt: startedAt, ingestionLockToken: token, ingestionLockUntil: new Date(startedAt.getTime() + 5 * 60 * 1000) },
+        $unset: { lastError: '' }
+      }, { upsert: true, new: true });
+    } catch (error: any) {
+      if (error.code === 11000) return { totalProcessed: 0, newIngested: 0, duplicatesSkipped: 0, needsReviewCount: 0, notificationOnlyCount: 0, skipped: 'A Gmail ingestion is already running' };
+      throw error;
+    }
+    if (!syncState) throw new Error('Gmail ingestion lock could not be acquired');
+    try {
+      assertIngestionConfigured();
+      let result: IngestionResult;
+      let nextCursor: InboxCursor | undefined;
+      let nextOAuthCursor: ISyncState['oauthCursor'];
+      if (runtimeConfig.gmail.user && runtimeConfig.gmail.appPassword) {
+        const scan = await scanImapInbox(this.inboxSettings(), syncState.imapCursor);
+        result = await this.processIncomingMails(scan.mails);
+        result.diagnostics = scan.diagnostics;
+        nextCursor = scan.cursor;
+      } else {
+        const page = await this.processOAuth2Ingestion(syncState.oauthCursor);
+        result = page.result;
+        nextOAuthCursor = page.cursor;
+      }
+      const saved = await SyncStateModel.updateOne(
+        { key: 'gmail', ingestionLockToken: token },
+        { $set: { lastSuccessfulSyncAt: new Date(), ...(nextCursor ? { imapCursor: nextCursor } : {}), ...(nextOAuthCursor ? { oauthCursor: nextOAuthCursor } : {}) }, $unset: { lastError: '' } }
       );
-
+      if (!saved.matchedCount) throw new Error('Gmail ingestion lease expired before progress was committed');
       await notificationService.addNotification(
         'Gmail sync complete',
-        `${result.newIngested} expenses added, ${result.needsReviewCount} transactions need review, ${result.notificationOnlyCount} emails need a manual amount check.`,
-        'SYNC',
-        { ...result, source }
+        result.newIngested + ' expenses added, ' + result.needsReviewCount + ' transactions need review, ' + result.notificationOnlyCount + ' emails need a manual amount check.',
+        'SYNC', { ...result, source }
       );
-
       return result;
     } catch (error: any) {
       await SyncStateModel.updateOne(
-        { key: 'gmail' },
-        { lastAttemptedSyncAt: new Date(), lastError: error.message || String(error) },
-        { upsert: true }
-      );
+        { key: 'gmail', ingestionLockToken: token }, { lastError: error.message || String(error) }
+      ).catch(() => console.error('[Ingestion] Could not record the sync error'));
       if (source === 'automatic') {
-        try {
-          await notificationService.addNotification(
-            'Gmail sync needs attention',
-            'Automatic email sync could not finish. Open Settings to check sync status.',
-            'SYNC',
-            { source, status: 'failed' }
-          );
-        } catch {
-          console.error('[Push] Could not record the automatic sync failure alert');
-        }
+        await notificationService.addNotification(
+          'Gmail sync needs attention',
+          'Automatic email sync could not finish. Open Settings to check sync status.',
+          'SYNC', { source, status: 'failed' }
+        ).catch(() => console.error('[Push] Could not record the automatic sync failure alert'));
       }
       throw error;
-    }
-  }
-
-  private static async processImapIngestion(lastSuccessfulSyncAt?: Date): Promise<IngestionResult> {
-    const client = new ImapFlow({
-      host: 'imap.gmail.com',
-      port: 993,
-      secure: true,
-      auth: {
-        user: runtimeConfig.gmail.user,
-        pass: runtimeConfig.gmail.appPassword
-      },
-      logger: false
-    });
-
-    try {
-      await client.connect();
-      const lock = await client.getMailboxLock('INBOX');
-      try {
-        const mailboxMessageCount = client.mailbox ? client.mailbox.exists : 0;
-        const startSeq = Math.max(1, mailboxMessageCount - runtimeConfig.gmailImapScanLimit + 1);
-        const fetchRange = mailboxMessageCount > 0 ? `${startSeq}:*` : '1:*';
-        const candidates: CandidateMail[] = [];
-
-        for await (const message of client.fetch(fetchRange, { envelope: true })) {
-          const sender = message.envelope?.from?.[0]?.address || message.envelope?.sender?.[0]?.address || '';
-          const receivedAt = this.toDate(message.envelope?.date) || new Date();
-          if (lastSuccessfulSyncAt && receivedAt <= lastSuccessfulSyncAt) continue;
-          if (!sender || !this.isSelectedSender(sender)) continue;
-
-          candidates.push({
-            seq: message.seq,
-            uid: message.uid,
-            messageId: message.envelope?.messageId || `imap_msg_${message.uid}`,
-            sender,
-            subject: message.envelope?.subject || 'No Subject',
-            receivedAt
-          });
-        }
-
-        const mails: IncomingMail[] = [];
-        for (const candidate of candidates.slice(-runtimeConfig.gmailIngestLimit)) {
-          const sourceMessage = await client.fetchOne(candidate.seq, { source: true });
-          if (!sourceMessage || !sourceMessage.source) continue;
-
-          const parsed: ParsedMail = await simpleParser(sourceMessage.source);
-          mails.push({
-            messageId: parsed.messageId || candidate.messageId,
-            sender: parsed.from?.value[0]?.address || candidate.sender,
-            subject: parsed.subject || candidate.subject,
-            body: (parsed.text || parsed.html || parsed.subject || candidate.subject || '') as string,
-            receivedAt: parsed.date || candidate.receivedAt,
-            attachments: parsed.attachments?.map((attachment) => ({
-              contentType: attachment.contentType,
-              content: attachment.content
-            }))
-          });
-        }
-
-        return this.processIncomingMails(mails);
-      } finally {
-        lock.release();
-      }
     } finally {
-      await client.logout().catch(() => undefined);
+      await SyncStateModel.updateOne(
+        { key: 'gmail', ingestionLockToken: token },
+        { $unset: { ingestionLockToken: '', ingestionLockUntil: '' } }
+      ).catch(() => console.error('[Ingestion] Could not release the sync lease'));
     }
   }
 
-  private static async processOAuth2Ingestion(lastSuccessfulSyncAt?: Date): Promise<IngestionResult> {
+  private static async processOAuth2Ingestion(saved?: ISyncState['oauthCursor']) {
     const oauth2Client = new google.auth.OAuth2(
-      runtimeConfig.gmail.clientId,
-      runtimeConfig.gmail.clientSecret,
-      runtimeConfig.gmail.redirectUri
+      runtimeConfig.gmail.clientId, runtimeConfig.gmail.clientSecret, runtimeConfig.gmail.redirectUri
     );
     oauth2Client.setCredentials({ refresh_token: runtimeConfig.gmail.refreshToken });
-
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-    const senderFilter = runtimeConfig.targetSenderEmails.map((sender) => `from:${sender}`).join(' OR ');
-    const afterFilter = lastSuccessfulSyncAt
-      ? ` after:${lastSuccessfulSyncAt.getFullYear()}/${lastSuccessfulSyncAt.getMonth() + 1}/${lastSuccessfulSyncAt.getDate()}`
-      : '';
-
+    const profile = await gmail.users.getProfile({ userId: 'me' });
+    const settings = this.inboxSettings();
+    const key = createHash('sha256').update(JSON.stringify({
+      mailbox: profile.data.emailAddress, senders: settings.selectedSenders,
+      forwarders: settings.trustedForwarders, testRecipient: settings.testRecipient
+    })).digest('hex');
+    const checkpoint = saved?.key === key ? saved : undefined;
+    const after = checkpoint?.after || 0;
+    const before = checkpoint?.before || Math.floor(Date.now() / 1000) + 1;
+    const conditions = [...settings.selectedSenders, ...settings.trustedForwarders].map(sender => 'from:' + sender);
+    if (settings.testRecipient) conditions.push('to:' + settings.testRecipient, 'deliveredto:' + settings.testRecipient);
+    const query = '(' + conditions.join(' OR ') + ') before:' + before + (after ? ' after:' + Math.max(0, after - 1) : '');
     const response = await gmail.users.messages.list({
-      userId: 'me',
-      q: `(${senderFilter})${afterFilter}`,
-      maxResults: 50
+      userId: 'me', labelIds: ['INBOX'], q: query,
+      maxResults: Math.min(500, runtimeConfig.gmailIngestLimit), pageToken: checkpoint?.pageToken
     });
-
-    const messages = response.data.messages || [];
     const mails: IncomingMail[] = [];
-
-    for (const msg of messages) {
-      if (!msg.id) continue;
-      const msgDetail = await gmail.users.messages.get({ userId: 'me', id: msg.id, format: 'full' });
-      const headers = msgDetail.data.payload?.headers || [];
-      const dateHeader = headers.find((h) => h.name?.toLowerCase() === 'date')?.value;
-      const receivedAt = dateHeader ? new Date(dateHeader) : new Date();
-      if (lastSuccessfulSyncAt && receivedAt <= lastSuccessfulSyncAt) continue;
-
+    let ignored = 0;
+    for (const message of response.data.messages || []) {
+      if (!message.id) continue;
+      const detail = await gmail.users.messages.get({ userId: 'me', id: message.id, format: 'raw' });
+      if (!detail.data.raw) continue;
+      const outer = await simpleParser(Buffer.from(detail.data.raw, 'base64url'));
+      const admission = await admitMail(outer, settings);
+      if (!admission.accepted) { ignored++; continue; }
+      const mail = admission.mail;
+      const arrived = Number(detail.data.internalDate);
+      const arrivedAt = Number.isFinite(arrived) && arrived > 0 ? new Date(arrived) : outer.date || new Date();
       mails.push({
-        messageId: headers.find((h) => h.name?.toLowerCase() === 'message-id')?.value || msg.id,
-        sender: headers.find((h) => h.name?.toLowerCase() === 'from')?.value || 'unknown@domain.com',
-        subject: headers.find((h) => h.name?.toLowerCase() === 'subject')?.value || 'No Subject',
-        body: msgDetail.data.snippet || '',
-        receivedAt
+        messageId: mail.messageId || outer.messageId || message.id,
+        sender: admission.sender, transportSender: admission.transportSender,
+        subject: mail.subject || outer.subject || 'No Subject',
+        body: mail.text || (typeof mail.html === 'string' ? mail.html : '') || mail.subject || '',
+        receivedAt: mail.date || arrivedAt, arrivedAt,
+        isTest: admission.isTest, admissionReason: admission.reason,
+        attachments: mail.attachments.map(attachment => ({ contentType: attachment.contentType, content: attachment.content }))
       });
     }
-
-    return this.processIncomingMails(mails);
+    const result = await this.processIncomingMails(mails);
+    result.diagnostics = { mailbox: profile.data.emailAddress, folder: 'INBOX', ignored, hasMore: Boolean(response.data.nextPageToken) };
+    const cursor: NonNullable<ISyncState['oauthCursor']> = response.data.nextPageToken
+      ? { key, after, before, pageToken: response.data.nextPageToken }
+      : { key, after: before };
+    return { result, cursor };
   }
 
   private static async processIncomingMails(mails: IncomingMail[]): Promise<IngestionResult> {
@@ -200,18 +181,30 @@ export class GmailService {
     let duplicatesSkipped = 0;
     let needsReviewCount = 0;
     let notificationOnlyCount = 0;
+    const processedEmails: NonNullable<IngestionResult['processedEmails']> = [];
 
     for (const mail of mails) {
-      if (!this.isSelectedSender(mail.sender)) continue;
+      if (!this.isSelectedSender(mail.sender) && !mail.isTest) continue;
       totalProcessed++;
 
-      const existing = await EmailModel.findOne({ messageId: mail.messageId });
-      if (existing) {
+      const [existing, reviewed, processed] = await Promise.all([
+        EmailModel.exists({ messageId: mail.messageId }),
+        NotificationModel.exists({ type: 'REVIEW', 'metadata.messageId': mail.messageId }),
+        ProcessedMailModel.exists({ messageId: mail.messageId })
+      ]);
+      if (existing || reviewed || processed) {
+        if (!processed) await ProcessedMailModel.updateOne({ messageId: mail.messageId }, {
+          $setOnInsert: { messageId: mail.messageId, outcome: existing ? 'EXPENSE' : 'REVIEW', isTest: mail.isTest }
+        }, { upsert: true });
         duplicatesSkipped++;
+        processedEmails.push({ messageId: mail.messageId, sender: mail.sender, subject: mail.subject, receivedAt: mail.receivedAt, result: 'already_recorded', isTest: mail.isTest });
         continue;
       }
 
       let { cleanText, structuredJson } = await ParserService.parseEmailBody(mail.body || mail.subject);
+      structuredJson.ingestionTest = mail.isTest;
+      structuredJson.transportSender = mail.transportSender;
+      structuredJson.mailArrivedAt = mail.arrivedAt.toISOString();
       let ocrText = '';
       for (const attachment of mail.attachments || []) {
         if (attachment.contentType.startsWith('image/')) {
@@ -232,8 +225,14 @@ export class GmailService {
         rawTextBody: cleanText,
         parsedJson: structuredJson,
         ocrExtractedText: ocrText || undefined,
-        receivedAt: mail.receivedAt
+        receivedAt: mail.receivedAt,
+        isTest: mail.isTest,
+        transportSender: mail.transportSender
       });
+
+      await ProcessedMailModel.updateOne({ messageId: mail.messageId }, {
+        $setOnInsert: { messageId: mail.messageId, outcome: result.notificationOnly ? 'REVIEW' : 'EXPENSE', isTest: mail.isTest }
+      }, { upsert: true });
 
       if (result.notificationOnly) {
         notificationOnlyCount++;
@@ -241,21 +240,14 @@ export class GmailService {
         if (result.needsUserReview) needsReviewCount++;
         newIngested++;
       }
+      processedEmails.push({ messageId: mail.messageId, sender: mail.sender, subject: mail.subject, receivedAt: mail.receivedAt, result: result.notificationOnly ? 'review_notification' : 'expense_saved', isTest: mail.isTest });
     }
 
-    return { totalProcessed, newIngested, duplicatesSkipped, needsReviewCount, notificationOnlyCount };
+    return { totalProcessed, newIngested, duplicatesSkipped, needsReviewCount, notificationOnlyCount, processedEmails };
   }
 
   private static isSelectedSender(sender: string): boolean {
-    return runtimeConfig.targetSenderEmails.some((selectedSender) =>
-      sender.toLowerCase().includes(selectedSender.toLowerCase())
-    );
-  }
-
-  private static toDate(value: Date | string | undefined): Date | undefined {
-    if (!value) return undefined;
-    const date = value instanceof Date ? value : new Date(value);
-    return Number.isNaN(date.getTime()) ? undefined : date;
+    return exactSenderMatch(sender, runtimeConfig.targetSenderEmails);
   }
 
   private static async classifyAndStoreEmail(emailData: {
@@ -266,6 +258,8 @@ export class GmailService {
     parsedJson: Record<string, any>;
     ocrExtractedText?: string;
     receivedAt: Date;
+    isTest: boolean;
+    transportSender: string;
   }): Promise<{ needsUserReview: boolean; notificationOnly: boolean }> {
     if (!emailData.parsedJson.detectedAmount) {
       const aiFields = await GroqService.extractFinancialFields(
@@ -285,7 +279,9 @@ export class GmailService {
             messageId: emailData.messageId,
             sender: emailData.sender,
             subject: emailData.subject,
-            receivedAt: emailData.receivedAt
+            receivedAt: emailData.receivedAt,
+            ingestionTest: emailData.isTest,
+            transportSender: emailData.transportSender
           }
         );
         return { needsUserReview: false, notificationOnly: true };
@@ -293,6 +289,8 @@ export class GmailService {
     }
 
     let categoryId = await RuleEngine.evaluateEmail(emailData.sender, emailData.subject, emailData.rawTextBody);
+    emailData.parsedJson.ingestionTest = emailData.isTest;
+    emailData.parsedJson.transportSender = emailData.transportSender;
     let categorySource: 'RULE' | 'GROQ_AI' | 'USER_MANUAL' | 'UNASSIGNED' = 'RULE';
     let needsReview = false;
     let confidenceScore = 1.0;

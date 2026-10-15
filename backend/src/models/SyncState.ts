@@ -6,6 +6,7 @@ export interface ISyncState extends Document {
   lastAttemptedSyncAt?: Date;
   lastError?: string;
   imapCursor?: { key: string; lastUid: number };
+  oauthCursor?: { key: string; after: number; before?: number; pageToken?: string };
   ingestionLockToken?: string;
   ingestionLockUntil?: Date;
   createdAt: Date;
@@ -19,6 +20,7 @@ const SyncStateSchema = new Schema<ISyncState>(
     lastAttemptedSyncAt: { type: Date },
     lastError: { type: String },
     imapCursor: { type: Schema.Types.Mixed },
+    oauthCursor: { type: Schema.Types.Mixed },
     ingestionLockToken: { type: String },
     ingestionLockUntil: { type: Date }
   },

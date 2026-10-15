@@ -22,16 +22,23 @@ function mailText(mail: ParsedMail) {
 
 function sentToTestRecipient(mail: ParsedMail, recipient: string) {
   if (!recipient) return false;
-  const addresses = [mail.to, mail.cc, mail.bcc].flatMap((field) =>
-    (Array.isArray(field) ? field : field ? [field] : []).flatMap((group) => group.value.map((address) => address.address || ''))
-  );
-  const deliveredTo = mail.headers.get('delivered-to');
-  if (typeof deliveredTo === 'string') addresses.push(deliveredTo);
+  const addresses = [mail.to, mail.cc, mail.bcc, mail.headers.get('delivered-to')].flatMap(headerAddresses);
   return exactSenderMatch(recipient, addresses);
+}
+
+function headerAddresses(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(headerAddresses);
+  if (!value || typeof value !== 'object') return [];
+  if ('address' in value && typeof value.address === 'string') return [value.address];
+  if ('value' in value) return headerAddresses(value.value);
+  if ('group' in value) return headerAddresses(value.group);
+  return [];
 }
 
 export async function admitMail(mail: ParsedMail, filters: MailFilters) {
   const transportSender = mailSender(mail);
+  if (!transportSender) return { accepted: false as const, reason: 'missing_sender', transportSender };
   if (exactSenderMatch(transportSender, filters.selectedSenders)) {
     return { accepted: true as const, reason: 'selected_sender', sender: transportSender, transportSender, mail, isTest: false };
   }
