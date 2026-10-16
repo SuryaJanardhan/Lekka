@@ -11,11 +11,13 @@ import { SystemController } from '../controllers/systemController';
 import { PushController } from '../controllers/pushController';
 import { secureApiMiddleware } from '../middleware/authMiddleware';
 import { SnapshotController } from '../controllers/snapshotController';
+import { trackSnapshotChanges } from '../middleware/snapshotRevision';
 
 const router = Router();
 
 // Apply cryptographic API secret middleware to all /api routes
 router.use(secureApiMiddleware);
+router.use(trackSnapshotChanges);
 router.get('/sync/status', SnapshotController.status);
 router.get('/sync/snapshot', SnapshotController.snapshot);
 

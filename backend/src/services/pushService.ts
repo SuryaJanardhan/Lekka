@@ -4,6 +4,7 @@ import { PushDeviceModel, PushDispatchModel } from '../models/PushDevice';
 import { EmailModel } from '../models/Email';
 import { NotificationModel } from '../models/Notification';
 import { DigestKind, digestPeriod, digestText } from './pushSummary';
+import { bumpDataRevision } from './dataRevisionService';
 
 function credentials() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
@@ -109,6 +110,7 @@ export class PushService {
       await PushDispatchModel.updateOne({ _id: claim._id }, { state: result.failed ? 'failed' : 'sent', sentCount: result.sent });
       if (result.failed) throw new Error('Some phones could not receive the daily summary');
       await NotificationModel.create({ title, message, type: 'REMINDER', metadata: { key, report: period.report, remoteSent: result.sent } });
+      await bumpDataRevision();
       return result;
     } catch (error) {
       await PushDispatchModel.updateOne({ _id: claim._id }, { state: 'failed' });

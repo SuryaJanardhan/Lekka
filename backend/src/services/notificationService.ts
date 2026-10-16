@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { NotificationModel, NotificationType } from '../models/Notification';
 import { PushService } from './pushService';
 import { remoteNotificationTarget } from './pushPolicy';
+import { bumpDataRevision } from './dataRevisionService';
 
 export interface NotificationLog {
   id: string;
@@ -43,6 +44,7 @@ class NotificationService {
       type,
       metadata
     });
+    await bumpDataRevision();
 
     const screen = remoteNotificationTarget(type, metadata);
     let remoteDelivery;
