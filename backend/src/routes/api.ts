@@ -10,11 +10,14 @@ import { ChatController } from '../controllers/chatController';
 import { SystemController } from '../controllers/systemController';
 import { PushController } from '../controllers/pushController';
 import { secureApiMiddleware } from '../middleware/authMiddleware';
+import { SnapshotController } from '../controllers/snapshotController';
 
 const router = Router();
 
 // Apply cryptographic API secret middleware to all /api routes
 router.use(secureApiMiddleware);
+router.get('/sync/status', SnapshotController.status);
+router.get('/sync/snapshot', SnapshotController.snapshot);
 
 // Email routes
 router.get('/emails', EmailController.getEmails);
