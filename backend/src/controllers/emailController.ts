@@ -2,6 +2,16 @@ import { Request, Response } from 'express';
 import { LedgerService } from '../services/ledgerService';
 
 export class EmailController {
+  public static async requestReview(req: Request, res: Response) {
+    try {
+      const entry = await LedgerService.requestReview(req.params.emailId);
+      res.json({ success: true, data: entry });
+    } catch (error: any) {
+      const status = /not found/i.test(error.message) ? 404 : /invalid/i.test(error.message) ? 400 : 500;
+      res.status(status).json({ success: false, error: error.message });
+    }
+  }
+
   public static async getEmails(req: Request, res: Response) {
     try {
       const { categoryId, needsReview, search } = req.query;

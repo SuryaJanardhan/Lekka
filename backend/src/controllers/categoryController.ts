@@ -30,12 +30,13 @@ export class CategoryController {
 
   public static async createCategory(req: Request, res: Response) {
     try {
-      const { name, colorCode } = req.body;
-      if (!name) return res.status(400).json({ success: false, error: 'Category name is required' });
+      const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+      const { colorCode } = req.body;
+      if (!name || name.length > 80) return res.status(400).json({ success: false, error: 'Category name must contain 1 to 80 characters' });
 
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || new Types.ObjectId().toHexString();
       const existing = await CategoryModel.findOne({ slug });
-      if (existing) return res.status(400).json({ success: false, error: 'Category already exists' });
+      if (existing) return res.status(409).json({ success: false, error: 'Category already exists' });
 
       const category = new CategoryModel({
         name,
@@ -47,7 +48,7 @@ export class CategoryController {
       await category.save();
       res.status(201).json({ success: true, data: category });
     } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 11000 ? 409 : 500).json({ success: false, error: error.code === 11000 ? 'Category already exists' : error.message });
     }
   }
 }

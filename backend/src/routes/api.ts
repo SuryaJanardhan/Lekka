@@ -23,6 +23,7 @@ router.get('/emails/:id', EmailController.getEmailById);
 router.patch('/emails/:id', EmailController.updateTransaction);
 router.delete('/emails/:id', EmailController.deleteTransaction);
 router.post('/emails/:emailId/category', EmailController.assignCategory);
+router.post('/emails/:emailId/review', EmailController.requestReview);
 
 // Category routes
 router.get('/categories', CategoryController.getCategories);
