@@ -141,6 +141,15 @@ export class LedgerService {
     }
   }
 
+  public static async requestReview(id: string) {
+    if (!Types.ObjectId.isValid(id)) throw new Error('Invalid ledger entry ID');
+    const entry = await EmailModel.findByIdAndUpdate(id, {
+      $set: { needsUserReview: true, reviewStatus: 'PENDING' }
+    }, { new: true }).populate('categoryId');
+    if (!entry) throw new Error('Ledger entry not found');
+    return entry;
+  }
+
   public static async assignCategory(params: {
     entryId: string;
     categoryId: string;

@@ -14,7 +14,6 @@ import { ProcessedMailModel } from '../models/ProcessedMail';
 import { admitMail, exactSenderMatch } from './mailAdmission';
 import { InboxCursor, InboxMail, InboxSettings, scanImapInbox } from './imapInbox';
 import { transactionDirection } from './expensePolicy';
-import { learningConditions } from './categoryLearning';
 
 export interface IngestionResult {
   totalProcessed: number;
@@ -307,6 +306,7 @@ export class GmailService {
     let confidenceScore = 1.0;
 
     if (!categoryId) {
+      needsReview = true;
       const aiResult = await GroqService.classifyEmailContent(emailData.sender, emailData.subject, emailData.rawTextBody);
       if (aiResult.merchantName) emailData.parsedJson.merchantName = aiResult.merchantName;
       categorySource = 'GROQ_AI';
@@ -323,15 +323,7 @@ export class GmailService {
       }
       categoryId = category ? category._id as any : null;
 
-      if (!category || aiResult.confidenceScore < 0.8) {
-        needsReview = true;
-      }
       if (!category) categorySource = 'UNASSIGNED';
-      const conditions = learningConditions(emailData.sender, emailData.subject, emailData.parsedJson.merchantName, emailData.rawTextBody);
-      if (category && aiResult.confidenceScore >= 0.9 && conditions[1].field === 'body') {
-        await RuleEngine.autoGenerateRuleFromUserFeedback(emailData.subject, emailData.sender, categoryId!,
-          emailData.parsedJson.merchantName, emailData.rawTextBody, 'AI');
-      }
     }
 
     await EmailModel.create({
