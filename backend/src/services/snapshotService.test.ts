@@ -39,3 +39,11 @@ test('a failed component rejects the whole snapshot rather than returning empty 
 test('snapshot report month follows IST across midnight and year rollover without changing transaction dates', () => {
   assert.deepEqual(snapshotMonth(new Date('2026-12-31T19:00:00Z')), { startDate: '2026-12-31T18:30:00.000Z', endDate: '2027-01-31T18:30:00.000Z' });
 });
+
+test('an active ingestion never exposes a half-imported snapshot', async t => {
+  t.mock.method(DataRevisionModel, 'findById', () => query({ version: 7 }));
+  t.mock.method(SyncStateModel, 'findOne', () => query({ ingestionLockUntil: new Date(Date.now() + 60000) }));
+  const entries = t.mock.method(EmailModel, 'find', () => { throw Error('Must not read partial ledger'); });
+  await assert.rejects(() => SnapshotService.snapshot(), /Ingestion is still running/);
+  assert.equal(entries.mock.callCount(), 0);
+});

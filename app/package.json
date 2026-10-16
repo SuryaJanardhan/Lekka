@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "test:native-features": "node scripts/verifyNativeFeatures.mjs",
     "test:prod-config": "node scripts/verifyProductionConfig.mjs",
+    "test:cache": "node --test scripts/dataSync.test.mjs",
     "preview": "vite preview",
     "eas-build-post-install": "node scripts/preparePushConfig.mjs && npm run build && npx cap sync android"
   },

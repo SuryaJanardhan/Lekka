@@ -95,6 +95,12 @@ if (failures.length === 0) {
       failures.push(`/api/categories is not compatible. Status ${categories.status}`);
     }
 
+    const cacheStatus = await checkEndpoint('/api/sync/status');
+    const snapshot = await checkEndpoint('/api/sync/snapshot');
+    if (cacheStatus.status !== 200 || JSON.parse(cacheStatus.text).data?.schemaVersion !== 1) failures.push('Snapshot revision API is unavailable.');
+    const savedData = JSON.parse(snapshot.text).data;
+    if (snapshot.status !== 200 || savedData?.schemaVersion !== 1 || !Array.isArray(savedData.entries) || !Array.isArray(savedData.categories) || !savedData.analytics?.summary) failures.push('Complete snapshot API is unavailable.');
+
     const analytics = await checkEndpoint('/api/analytics');
     if (analytics.status !== 200 || !analytics.text.includes('"summary"')) {
       failures.push(`/api/analytics is not compatible. Status ${analytics.status}`);
