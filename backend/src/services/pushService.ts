@@ -106,11 +106,14 @@ export class PushService {
         ...spending, monthSpend: monthly.spend, weekSpend: weekly.spend, pending,
         pendingEntries, uncategorized, emailReviews, examples, includeWeek: period.weekEnd
       }, now);
+      const notification = await NotificationModel.findOneAndUpdate({ type: 'REMINDER', 'metadata.key': key }, {
+        $setOnInsert: { title, message, type: 'REMINDER', metadata: { key, report: period.report } }
+      }, { upsert: true, new: true });
+      await bumpDataRevision();
       const result = await this.send(title, message, key, period.report === 'review' ? 'review' : 'insights');
       await PushDispatchModel.updateOne({ _id: claim._id }, { state: result.failed ? 'failed' : 'sent', sentCount: result.sent });
       if (result.failed) throw new Error('Some phones could not receive the daily summary');
-      await NotificationModel.create({ title, message, type: 'REMINDER', metadata: { key, report: period.report, remoteSent: result.sent } });
-      await bumpDataRevision();
+      await NotificationModel.updateOne({ _id: notification._id }, { $set: { 'metadata.remoteSent': result.sent } });
       return result;
     } catch (error) {
       await PushDispatchModel.updateOne({ _id: claim._id }, { state: 'failed' });

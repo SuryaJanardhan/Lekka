@@ -75,6 +75,10 @@ export class DataSync {
     if (!force && !dirty && this.snapshot) {
       const status = await this.api.getSyncStatus();
       if (status.schemaVersion !== 1 || typeof status.revision !== 'string') throw new Error('Invalid sync status');
+      if (status.ingestionInProgress) {
+        this.saveMeta({ ...this.meta(), nextCheckAt: this.now().getTime() + 60000 });
+        return { snapshot: this.snapshot, network: true, persisted: true };
+      }
       const reportStart = this.snapshot.analytics.period?.startDate;
       if (status.revision === this.snapshot.revision && reportStart && indiaDay(new Date(reportStart)).slice(0, 7) === indiaDay(this.now()).slice(0, 7)) {
         this.saveMeta({ ...this.meta(), nextCheckAt: nextCheck(status, this.now()) });

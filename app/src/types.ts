@@ -10,6 +10,7 @@ export interface SyncStatus {
   schemaVersion: number;
   revision: string;
   lastSuccessfulIngestionAt: string | null;
+  ingestionInProgress?: boolean;
 }
 
 export interface DataSnapshot extends SyncStatus {

@@ -245,7 +245,7 @@ export function App() {
       setConnection(result.network ? 'online' : 'cached');
       if (!result.persisted) showToast('Server data loaded; local cache could not be saved');
       logEvent(result.network ? 'server sync ok' : 'saved data loaded', `${result.snapshot.entries.length} entries`);
-      return true;
+      return result.persisted;
     } catch (error: any) {
       logEvent('refresh failed', error.message || 'unknown');
       setConnection('offline');
@@ -715,7 +715,7 @@ export function App() {
           <span className={`status-dot ${connection}`}>{connection === 'cached' ? 'Saved data' : connection}</span>
         </div>
         <div className="top-actions">
-          <button className="icon-button" onClick={() => refresh()} title="Refresh"><RefreshCw size={18} className={loading ? 'spin' : ''} /></button>
+          <button className="icon-button" disabled={loading} onClick={() => refresh()} title="Refresh"><RefreshCw size={18} className={loading ? 'spin' : ''} /></button>
           <button className="icon-button accent" onClick={() => setTab('ai')} title="Ask AI"><Bot size={19} /></button>
         </div>
       </header>
