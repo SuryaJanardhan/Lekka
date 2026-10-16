@@ -10,6 +10,8 @@ The result reports the connected mailbox, selected senders, trusted forwarders, 
 
 Preview amounts use the regular deterministic parser. Full ingestion additionally tries AI when no amount was found. Messages without an amount after parsing become review notifications, never invented expenses.
 
+Chat and ingestion share credential lookup: the first non-empty `GROQ_API_KEY`, `GROQ_API_KEY_1` or `GROQ_API_KEY_2` is used. These are production credential aliases, not a local or mock mode. A failed run does not advance the mailbox checkpoint, so retrying after a configuration fix recovers waiting emails; existing Message-ID receipts prevent duplicates.
+
 ## Send two real test messages
 
 1. Get `testRecipient` from the preview output. This private Gmail plus-address reaches the existing collector account; no new Gmail account is needed.

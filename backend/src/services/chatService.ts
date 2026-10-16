@@ -4,6 +4,7 @@ import { EmailModel } from '../models/Email';
 import { CategoryModel } from '../models/Category';
 import { RuleModel } from '../models/Rule';
 import { LedgerReportService } from './ledgerReportService';
+import { groqApiKey } from '../config/groqCredentials';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -16,7 +17,7 @@ export class ChatService {
 
   private static getClient(): Groq | null {
     if (!this.groqClient) {
-      const apiKey = process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_1 || process.env.GROQ_API_KEY_2;
+      const apiKey = groqApiKey();
       if (apiKey) {
         this.groqClient = new Groq({ apiKey });
       }

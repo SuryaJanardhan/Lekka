@@ -1,5 +1,6 @@
 import Groq from 'groq-sdk';
 import { CategoryModel } from '../models/Category';
+import { groqApiKey } from '../config/groqCredentials';
 
 export interface AICategorizationResult {
   categoryName: string;
@@ -13,7 +14,7 @@ export class GroqService {
 
   private static getClient(): Groq | null {
     if (!this.groqClient) {
-      const apiKey = process.env.GROQ_API_KEY;
+      const apiKey = groqApiKey();
       if (apiKey) {
         this.groqClient = new Groq({ apiKey });
       }
