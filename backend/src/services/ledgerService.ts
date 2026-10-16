@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { EmailModel } from '../models/Email';
 import { CategoryModel } from '../models/Category';
 import { RuleEngine } from './ruleEngine';
+import { notificationService } from './notificationService';
 
 export interface CreateManualLedgerEntryInput {
   title: string;
@@ -142,6 +143,7 @@ export class LedgerService {
       await RuleEngine.autoGenerateRuleFromUserFeedback(learningSubject, email.sender,
         new Types.ObjectId(input.categoryId), learningMerchant, learningBody);
     }
+    await notificationService.resolveCategoryReview(String(email._id));
     return EmailModel.findById(email._id).populate('categoryId');
   }
 
@@ -150,6 +152,7 @@ export class LedgerService {
     if (!result) {
       throw new Error('Ledger entry not found');
     }
+    await notificationService.resolveCategoryReview(id);
   }
 
   public static async requestReview(id: string) {
@@ -158,6 +161,7 @@ export class LedgerService {
       $set: { needsUserReview: true, reviewStatus: 'PENDING' }
     }, { new: true }).populate('categoryId');
     if (!entry) throw new Error('Ledger entry not found');
+    await notificationService.notifyCategoryReview(entry);
     return entry;
   }
 
@@ -191,6 +195,7 @@ export class LedgerService {
         email.rawTextBody
       );
     }
+    await notificationService.resolveCategoryReview(String(email._id));
 
     return EmailModel.findById(email._id).populate('categoryId');
   }

@@ -43,9 +43,9 @@ export class PushService {
         });
         sent++;
       } catch (error: any) {
+        failed++;
         const code = error.response?.data?.error?.details?.find((detail: any) => detail.errorCode)?.errorCode;
         if (code === 'UNREGISTERED') await PushDeviceModel.deleteOne({ _id: device._id, token: device.token });
-        else failed++;
         console.error('[Push] Delivery failed:', code || error.response?.status || 'transport error');
       }
     }
@@ -59,7 +59,7 @@ export class PushService {
     if (!await PushDeviceModel.exists({})) return { skipped: 'No registered phones', sent: 0 };
     const uncategorizedQuery = { $or: [{ categoryId: null }, { categorySource: 'UNASSIGNED' }] };
     const pendingQuery = { $or: [{ needsUserReview: true }, ...uncategorizedQuery.$or] };
-    const reviewEmailQuery = { type: 'REVIEW', read: false };
+    const reviewEmailQuery = { type: 'REVIEW', read: false, 'metadata.reviewKind': { $ne: 'category' } };
     const [pendingEntries, uncategorized, emailReviews, entryExample, emailExample] = await Promise.all([
       EmailModel.countDocuments(pendingQuery),
       EmailModel.countDocuments(uncategorizedQuery),

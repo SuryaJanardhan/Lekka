@@ -83,4 +83,5 @@ export interface DashboardStats {
     totalAmount: number;
     count: number;
   }>;
+  yearlyTrend?: Array<{ year: string; totalAmount: number; count: number }>;
 }

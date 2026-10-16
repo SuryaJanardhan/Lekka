@@ -6,6 +6,7 @@ import { LedgerService } from './ledgerService';
 import { RuleModel } from '../models/Rule';
 import { CategoryModel } from '../models/Category';
 import { EmailModel } from '../models/Email';
+import { notificationService } from './notificationService';
 
 test('AI-created legacy rules cannot bypass review; a user-confirmed merchant rule can', async (t) => {
   const category = new Types.ObjectId();
@@ -32,6 +33,7 @@ test('reopening review changes only review flags, not amounts or categories', as
 });
 
 test('saving an edited pending entry trains its original merchant and retains receipt evidence', async (t) => {
+  t.mock.method(notificationService, 'resolveCategoryReview', async () => undefined);
   const id = new Types.ObjectId();
   const entry: any = { _id: id, subject: 'Receipt', sender: 'bank@example.com', rawTextBody: 'You paid INR 30 to Cafe',
     parsedJson: { detectedAmount: 30, merchantName: 'Cafe' }, needsUserReview: true, save: async () => undefined };
@@ -48,6 +50,7 @@ test('saving an edited pending entry trains its original merchant and retains re
 });
 
 test('Save category confirms a pending entry and then trains the chosen category', async (t) => {
+  const resolved = t.mock.method(notificationService, 'resolveCategoryReview', async () => undefined);
   const id = new Types.ObjectId();
   const category = new Types.ObjectId();
   const entry: any = { _id: id, subject: 'Receipt', sender: 'bank@example.com', rawTextBody: 'You paid INR 30 to Cafe',
@@ -63,4 +66,5 @@ test('Save category confirms a pending entry and then trains the chosen category
   assert.equal(learned.mock.callCount(), 1);
   assert.equal(String(learned.mock.calls[0].arguments[2]), category.toHexString());
   assert.equal(learned.mock.calls[0].arguments[3], 'Cafe');
+  assert.equal(resolved.mock.calls[0].arguments[0], id.toHexString());
 });

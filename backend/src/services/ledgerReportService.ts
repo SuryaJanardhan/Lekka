@@ -65,6 +65,7 @@ export class LedgerReportService {
       paymentModeBreakdown,
       dailyTrend,
       monthlyTrend,
+      yearlyTrend,
       pendingReviews
     ] = await Promise.all([
       EmailModel.aggregate([
@@ -157,6 +158,12 @@ export class LedgerReportService {
         },
         { $sort: { _id: 1 } }
       ]),
+      EmailModel.aggregate([
+        amountStage,
+        { $match: { reportAmount: { $gt: 0 } } },
+        { $group: { _id: { $dateToString: { format: '%Y', date: '$receivedAt' } }, totalAmount: { $sum: '$reportAmount' }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } }
+      ]),
       EmailModel.countDocuments({
         needsUserReview: true,
         receivedAt: { $gte: start, $lt: end }
@@ -199,6 +206,7 @@ export class LedgerReportService {
         totalAmount: item.totalAmount,
         count: item.count
       })),
+      yearlyTrend: yearlyTrend.map((item) => ({ year: item._id, totalAmount: item.totalAmount, count: item.count })),
       monthlyTrend: monthlyTrend.map((item) => ({
         month: item._id,
         totalAmount: item.totalAmount,
