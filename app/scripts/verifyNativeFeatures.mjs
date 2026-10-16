@@ -12,6 +12,14 @@ const remotePushSource = readFileSync(resolve(root, 'src/remotePush.ts'), 'utf8'
 
 const checks = [
   {
+    name: 'cache-first hydration replaces startup health checks and repeated entity reads',
+    pass: appSource.includes('dataSync.hydrate()') && appSource.includes('dataSync.synchronize(force)') && !appSource.includes('checkConnection()') && !appSource.includes('api.getEntries()')
+  },
+  {
+    name: 'cached push registration preserves native listeners without per-open backend status calls',
+    pass: remotePushSource.includes('cached?.hash === hash') && remotePushSource.includes("addListener('pushNotificationReceived'") && !remotePushSource.includes('api.pushStatus(')
+  },
+  {
     name: 'native foreground push alerts and high-importance Android channel are configured',
     pass: JSON.parse(capacitorConfig).plugins?.PushNotifications?.presentationOptions?.includes('alert') && remotePushSource.includes('importance: 4')
   },

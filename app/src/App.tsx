@@ -231,6 +231,7 @@ export function App() {
     setAnalytics(snapshot.analytics);
     setRules(snapshot.rules);
     setNotifications(snapshot.notifications);
+    setSelectedEntry(previous => previous ? snapshot.entries.find(entry => entry._id === previous._id) || null : null);
     setLastSyncedAt(snapshot.generatedAt);
     setManual((prev) => ({ ...prev, categoryId: snapshot.categories.some(c => c._id === prev.categoryId) ? prev.categoryId : snapshot.categories[0]?._id || '' }));
     setRule((prev) => ({ ...prev, categoryId: snapshot.categories.some(c => c._id === prev.categoryId) ? prev.categoryId : snapshot.categories[0]?._id || '' }));

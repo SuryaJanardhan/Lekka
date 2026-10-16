@@ -9,6 +9,7 @@ export interface SyncResult { snapshot: DataSnapshot; network: boolean; persiste
 export function validSnapshot(value: unknown): value is DataSnapshot {
   const s = value as DataSnapshot | null;
   return Boolean(s && s.schemaVersion === 1 && typeof s.revision === 'string' && typeof s.generatedAt === 'string' &&
+    (s.lastSuccessfulIngestionAt === null || (typeof s.lastSuccessfulIngestionAt === 'string' && Number.isFinite(Date.parse(s.lastSuccessfulIngestionAt)))) &&
     Number.isFinite(Date.parse(s.generatedAt)) && Array.isArray(s.entries) && s.entries.every(e => e && typeof e._id === 'string' && typeof e.receivedAt === 'string' && e.parsedJson && typeof e.sender === 'string') &&
     Array.isArray(s.categories) && s.categories.every(c => c && typeof c._id === 'string' && typeof c.name === 'string') &&
     Array.isArray(s.rules) && s.rules.every(r => r && typeof r._id === 'string' && Array.isArray(r.conditions)) &&
@@ -17,7 +18,9 @@ export function validSnapshot(value: unknown): value is DataSnapshot {
 }
 
 export function indiaDay(date: Date): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const value = (type: string) => parts.find(part => part.type === type)!.value;
+  return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
 function nextCheck(status: SyncStatus, now: Date): number {

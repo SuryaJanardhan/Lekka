@@ -26,6 +26,7 @@ graph LR
 * **Debits only**: Credits, refunds and incoming money never become expenses. Unclear payments go to review, not your spending totals.
 * **Android-native bits**: compact PIN lock, fingerprint unlock, local confirmations, and FCM remote notifications once Firebase is configured.
 * **AI chats**: separate saved conversations, chat history, and a composer that fits above the keyboard.
+* **Cache first**: saved production data opens instantly from IndexedDB after unlocking. Fresh same-day reopens skip backend reads; writes still go to production immediately and refresh one complete snapshot. [Sync details](docs/cache-sync.md).
 
 Remote push setup and the daily notification plan: [the Firebase guide](docs/push-notifications.md).
 * **LLM export**: Save a local JSON context bundle for deeper review elsewhere.
