@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { SyncStateModel } from '../models/SyncState';
 import { JobRunModel } from '../models/JobRun';
 import { NotificationModel } from '../models/Notification';
+import { groqApiKey } from '../config/groqCredentials';
 
 export class SystemController {
   public static async getSyncStatus(_req: Request, res: Response) {
@@ -14,6 +15,7 @@ export class SystemController {
       res.json({
         success: true,
         data: {
+          aiConfigured: Boolean(groqApiKey()),
           gmail: gmail ? {
             lastAttemptedSyncAt: gmail.lastAttemptedSyncAt || null,
             lastSuccessfulSyncAt: gmail.lastSuccessfulSyncAt || null,

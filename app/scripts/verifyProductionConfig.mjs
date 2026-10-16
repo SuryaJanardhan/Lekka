@@ -100,6 +100,11 @@ if (failures.length === 0) {
       failures.push(`/api/analytics is not compatible. Status ${analytics.status}`);
     }
 
+    const sync = await checkEndpoint('/api/system/sync-status');
+    if (sync.status !== 200 || JSON.parse(sync.text).data?.aiConfigured !== true) {
+      failures.push('Production ingestion has no recognized Groq credential.');
+    }
+
     const chat = await checkEndpoint('/api/chat', {
       method: 'POST',
       body: JSON.stringify({ message: 'smoke', sessionId: 'prod-config-smoke' })
