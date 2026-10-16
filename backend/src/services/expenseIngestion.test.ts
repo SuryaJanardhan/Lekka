@@ -83,3 +83,14 @@ test('an AI category outside the user list is unassigned for review, never creat
   assert.equal(stored.categoryId, null);
   assert.equal(stored.categorySource, 'UNASSIGNED');
 });
+
+test('saving a first-time review entry requests its native notification', async (t) => {
+  t.mock.method(RuleEngine, 'evaluateEmail', async () => null);
+  t.mock.method(GroqService, 'classifyEmailContent', async () => ({ categoryName: 'Food', confidenceScore: 0.99, reasoning: 'Test' }));
+  t.mock.method(CategoryModel, 'findOne', async () => ({ _id: new Types.ObjectId() }));
+  t.mock.method(EmailModel, 'create', async (data: any) => ({ ...data, _id: 'entry' }));
+  const notify = t.mock.method(notificationService, 'notifyCategoryReview', async () => undefined);
+  await classify(mail('You paid INR 200 to Metro Cafe'));
+  assert.equal(notify.mock.callCount(), 1);
+  assert.equal(notify.mock.calls[0].arguments[0]?.needsUserReview, true);
+});
