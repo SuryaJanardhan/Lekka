@@ -28,7 +28,7 @@ export function CategoryPicker({ categories, value, onChange, onCreate }: {
   };
 
   return <div className="category-picker">
-    <label>Category<select required value={creating ? '__new__' : value} disabled={saving} onChange={(event) => {
+    <label>Category<select aria-label="Category" required value={creating ? '__new__' : value} disabled={saving} onChange={(event) => {
       if (event.target.value === '__new__') { setPreviousValue(value); onChange(''); setCreating(true); }
       else { setCreating(false); onChange(event.target.value); }
       setError('');

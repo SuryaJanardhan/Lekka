@@ -24,3 +24,27 @@ test('rename preserves the category ID and validates name before database writes
   assert.equal(invalidResponse.code, 400);
   assert.equal(update.mock.callCount(), 1);
 });
+
+test('review category creation rejects blank names and reports duplicates without writing', async (t) => {
+  let queries = 0;
+  t.mock.method(CategoryModel, 'findOne', async () => { queries++; return { name: 'Food' }; });
+  for (const name of ['', '   ', 123]) {
+    const res = Object.assign(Object.create(null), response());
+    await CategoryController.createCategory(Object.assign(Object.create(null), { body: { name } }), res);
+    assert.equal(res.code, 400);
+  }
+  assert.equal(queries, 0);
+  const duplicate = Object.assign(Object.create(null), response());
+  await CategoryController.createCategory(Object.assign(Object.create(null), { body: { name: ' Food ' } }), duplicate);
+  assert.equal(duplicate.code, 409);
+});
+
+test('a category created from review is trimmed and belongs to the user', async (t) => {
+  t.mock.method(CategoryModel, 'findOne', async () => null);
+  t.mock.method(CategoryModel.prototype, 'save', async function(this: any) { return this; });
+  const res = Object.assign(Object.create(null), response());
+  await CategoryController.createCategory(Object.assign(Object.create(null), { body: { name: ' Investments ' } }), res);
+  assert.equal(res.code, 201);
+  assert.equal(res.payload.data.name, 'Investments');
+  assert.equal(res.payload.data.createdSource, 'USER');
+});

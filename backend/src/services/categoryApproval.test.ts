@@ -46,3 +46,21 @@ test('saving an edited pending entry trains its original merchant and retains re
   assert.equal(learned.mock.calls[0].arguments[0], 'Receipt');
   assert.equal(learned.mock.calls[0].arguments[3], 'Cafe');
 });
+
+test('Save category confirms a pending entry and then trains the chosen category', async (t) => {
+  const id = new Types.ObjectId();
+  const category = new Types.ObjectId();
+  const entry: any = { _id: id, subject: 'Receipt', sender: 'bank@example.com', rawTextBody: 'You paid INR 30 to Cafe',
+    parsedJson: { merchantName: 'Cafe' }, needsUserReview: true, save: async () => undefined };
+  let calls = 0;
+  t.mock.method(EmailModel, 'findById', () => ++calls === 1 ? Promise.resolve(entry) : { populate: async () => entry });
+  t.mock.method(CategoryModel, 'findById', async () => ({ _id: category }));
+  const learned = t.mock.method(RuleEngine, 'autoGenerateRuleFromUserFeedback', async () => undefined);
+  await LedgerService.assignCategory({ entryId: id.toHexString(), categoryId: category.toHexString() });
+  assert.equal(entry.reviewStatus, 'APPROVED');
+  assert.equal(entry.needsUserReview, false);
+  assert.equal(entry.categorySource, 'USER_MANUAL');
+  assert.equal(learned.mock.callCount(), 1);
+  assert.equal(String(learned.mock.calls[0].arguments[2]), category.toHexString());
+  assert.equal(learned.mock.calls[0].arguments[3], 'Cafe');
+});
