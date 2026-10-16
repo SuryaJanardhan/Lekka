@@ -1,17 +1,20 @@
-import { Category, DashboardStats, EmailRecord, NotificationItem, Rule } from './types';
+import { Category, DashboardStats, EmailRecord, NotificationItem, Rule, DataSnapshot, SyncStatus } from './types';
 
 export interface ApiClientConfig {
   baseUrl: string;
   apiSecret: string;
+  onDataWrite?: () => void;
 }
 
 export class ApiClient {
   private baseUrl: string;
   private apiSecret: string;
+  private onDataWrite?: () => void;
 
   constructor(config: ApiClientConfig) {
     this.baseUrl = config.baseUrl.trim().replace(/\/+$/, '');
     this.apiSecret = config.apiSecret;
+    this.onDataWrite = config.onDataWrite;
   }
 
   getBaseUrl() {
@@ -26,6 +29,8 @@ export class ApiClient {
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    if (options.method && ['POST', 'PATCH', 'DELETE', 'PUT'].includes(options.method) &&
+      (/^\/api\/(emails|categories|rules|ingest)(\/|$)/.test(path) || /^\/api\/notifications\/(clear|[^/]+\/read)$/.test(path))) this.onDataWrite?.();
     if (!this.baseUrl) {
       throw new Error('Backend URL is not configured');
     }
@@ -74,6 +79,9 @@ export class ApiClient {
   getCategories() {
     return this.request<Category[]>('/api/categories');
   }
+
+  getSnapshot() { return this.request<DataSnapshot>('/api/sync/snapshot'); }
+  getSyncStatus() { return this.request<SyncStatus>('/api/sync/status'); }
 
   renameCategory(id: string, name: string) {
     return this.request<Category>(`/api/categories/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name }) });

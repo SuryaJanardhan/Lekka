@@ -6,6 +6,21 @@ export interface Category {
   createdSource: 'SYSTEM' | 'USER';
 }
 
+export interface SyncStatus {
+  schemaVersion: number;
+  revision: string;
+  lastSuccessfulIngestionAt: string | null;
+}
+
+export interface DataSnapshot extends SyncStatus {
+  generatedAt: string;
+  categories: Category[];
+  entries: EmailRecord[];
+  analytics: DashboardStats;
+  rules: Rule[];
+  notifications: NotificationItem[];
+}
+
 export interface EmailRecord {
   _id: string;
   messageId: string;
