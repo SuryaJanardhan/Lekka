@@ -33,6 +33,7 @@ import { LockScreen } from './LockScreen';
 import { ChatMessage, Conversation, loadConversations, saveConversations, newConversationId } from './chatHistory';
 import { startRemotePush, stopRemotePush } from './remotePush';
 import { CategorySettings } from './CategorySettings';
+import { CategoryPicker } from './CategoryPicker';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
@@ -918,6 +919,11 @@ export function App() {
           categories={categories.filter((category) => category._id !== 'all')}
           onClose={() => setSelectedEntry(null)}
           onReassign={(categoryId) => reassign(selectedEntry, categoryId)}
+          onCreateCategory={async (name) => {
+            const category = await api.createCategory(name);
+            setCategories((previous) => [...previous.filter((item) => item._id !== category._id), category].sort((a, b) => a.name.localeCompare(b.name)));
+            return category;
+          }}
           onUpdate={(payload) => updateEntry(selectedEntry, payload)}
           onDelete={() => deleteEntry(selectedEntry)}
         />
@@ -1090,6 +1096,7 @@ function EntrySheet({
   categories,
   onClose,
   onReassign,
+  onCreateCategory,
   onUpdate,
   onDelete
 }: {
@@ -1097,10 +1104,11 @@ function EntrySheet({
   categories: Category[];
   onClose: () => void;
   onReassign: (categoryId: string) => void;
+  onCreateCategory: (name: string) => Promise<Category>;
   onUpdate: (payload: Record<string, any>) => void;
   onDelete: () => void;
 }) {
-  const [categoryId, setCategoryId] = useState(entry.categoryId?._id || categories[0]?._id || '');
+  const [categoryId, setCategoryId] = useState(entry.categoryId?._id || '');
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     title: entry.parsedJson?.merchantName || entry.subject,
@@ -1134,8 +1142,8 @@ function EntrySheet({
               <Metric label="Mode" value={entry.parsedJson?.paymentMode || entry.categorySource} />
               <Metric label="Source" value={entry.categorySource} />
             </div>
-            <label>Category<select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>{categories.map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select></label>
-            <button className="primary-button" onClick={() => onReassign(categoryId)}><Tag size={18} /> Save category</button>
+            <CategoryPicker categories={categories} value={categoryId} onChange={setCategoryId} onCreate={onCreateCategory} />
+            <button className="primary-button" disabled={!categoryId} onClick={() => onReassign(categoryId)}><Tag size={18} /> Save category</button>
             <div className="two-col">
               <button className="secondary-button" onClick={() => setEditing(true)}>Edit</button>
               <button className="secondary-button danger-text" onClick={onDelete}><Trash2 size={17} /> Delete</button>
@@ -1147,10 +1155,10 @@ function EntrySheet({
             <label>Title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
             <label>Mode<select value={form.paymentMode} onChange={(event) => setForm({ ...form, paymentMode: event.target.value as PaymentMode })}>{(['CASH', 'UPI', 'CARD', 'FRIEND_PAID'] as PaymentMode[]).map((mode) => <option key={mode} value={mode}>{mode.replace('_', ' ')}</option>)}</select></label>
             {form.paymentMode === 'FRIEND_PAID' && <label>Friend name<input value={form.friendName} onChange={(event) => setForm({ ...form, friendName: event.target.value })} /></label>}
-            <label>Category<select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>{categories.map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select></label>
+            <CategoryPicker categories={categories} value={categoryId} onChange={setCategoryId} onCreate={onCreateCategory} />
             <label>Date<input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
             <label>Notes<textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
-            <button className="primary-button" type="submit">Save changes</button>
+            <button className="primary-button" type="submit" disabled={!categoryId}>Save changes</button>
             <button className="secondary-button" type="button" onClick={() => setEditing(false)}>Cancel</button>
           </form>
         )}

@@ -208,6 +208,9 @@ h2 { font-size: 1.05rem; line-height: 1.2; }
 .note-row small { color: var(--muted); font-size: 0.72rem; }
 .note-row span { overflow-wrap: anywhere; }
 .note-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.category-picker, .category-create { display: grid; gap: 10px; min-width: 0; }
+.category-create-actions { display: flex; align-items: center; gap: 8px; }
+.category-create [role="alert"] { color: var(--red); margin: 0; }
 .notification-list { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 200ms ease, opacity 200ms ease, transform 200ms ease; }
 .notification-list > * { min-height: 0; overflow: hidden; }
 .notification-list-exit { grid-template-rows: 0fr; opacity: 0; transform: translateY(-6px); }

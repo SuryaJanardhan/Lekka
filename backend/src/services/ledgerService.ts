@@ -113,10 +113,17 @@ export class LedgerService {
     }
 
     const paymentMode = input.paymentMode || 'CASH';
+    const learningSubject = email.parsedJson?.categoryLearningSubject || email.subject;
+    const learningMerchant = email.parsedJson?.categoryLearningMerchant || email.parsedJson?.merchantName;
+    const learningBody = email.rawTextBody;
+    const learnCategory = !email.parsedJson?.isManual && input.categoryId &&
+      (email.needsUserReview || String(email.categoryId || '') !== input.categoryId);
     email.subject = input.title.trim();
-    email.rawTextBody = input.notes || `Manual transaction entry: ${input.title.trim()}`;
+    if (email.parsedJson?.isManual) email.rawTextBody = input.notes || `Manual transaction entry: ${input.title.trim()}`;
     email.parsedJson = {
       ...email.parsedJson,
+      categoryLearningSubject: learningSubject,
+      categoryLearningMerchant: learningMerchant,
       detectedAmount: amount,
       currency: 'INR',
       paymentMode,
@@ -131,6 +138,10 @@ export class LedgerService {
     email.receivedAt = transactionDate;
 
     await email.save();
+    if (learnCategory) {
+      await RuleEngine.autoGenerateRuleFromUserFeedback(learningSubject, email.sender,
+        new Types.ObjectId(input.categoryId), learningMerchant, learningBody);
+    }
     return EmailModel.findById(email._id).populate('categoryId');
   }
 
@@ -173,10 +184,10 @@ export class LedgerService {
 
     if (params.createAutoRule !== false) {
       await RuleEngine.autoGenerateRuleFromUserFeedback(
-        email.subject,
+        email.parsedJson?.categoryLearningSubject || email.subject,
         email.sender,
         new Types.ObjectId(params.categoryId),
-        email.parsedJson?.merchantName,
+        email.parsedJson?.categoryLearningMerchant || email.parsedJson?.merchantName,
         email.rawTextBody
       );
     }

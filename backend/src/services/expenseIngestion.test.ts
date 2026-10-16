@@ -48,10 +48,13 @@ test('even confident first-time AI suggestions need user review and cannot train
   t.mock.method(RuleEngine, 'evaluateEmail', async () => null);
   t.mock.method(GroqService, 'classifyEmailContent', async () => ({ categoryName: 'Food', confidenceScore: 0.95, reasoning: 'Cafe payment', merchantName: 'Metro Cafe' }));
   t.mock.method(CategoryModel, 'findOne', async () => ({ _id: id }));
-  t.mock.method(EmailModel, 'create', async () => undefined);
+  let stored: any;
+  t.mock.method(EmailModel, 'create', async (data: any) => { stored = data; });
   const learn = t.mock.method(RuleEngine, 'autoGenerateRuleFromUserFeedback', async () => undefined);
   const result = await classify(mail('You paid INR 200 to Metro Cafe'));
   assert.equal(result.needsUserReview, true);
+  assert.equal(stored.reviewStatus, 'PENDING');
+  assert.equal(stored.categoryId, id);
   assert.equal(learn.mock.callCount(), 0);
 });
 
