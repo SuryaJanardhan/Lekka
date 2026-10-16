@@ -26,7 +26,8 @@ class NotificationService {
       message: notification.message,
       type: notification.type,
       createdAt: notification.createdAt.toISOString(),
-      read: notification.read
+      read: notification.read,
+      remoteDelivery: notification.metadata?.remoteDelivery
     }));
   }
 
@@ -49,8 +50,15 @@ class NotificationService {
       try {
         remoteDelivery = await PushService.send(title, message, `notification-${notification._id}`, screen);
       } catch {
+        remoteDelivery = { sent: 0, failed: 1, registered: 0 };
         console.error('[Push] Remote alert failed; the in-app notification is saved');
       }
+    }
+    if (screen) {
+      remoteDelivery ||= { sent: 0, failed: 1, registered: 0 };
+      await NotificationModel.updateOne({ _id: notification._id }, { $set: {
+        'metadata.remoteDelivery': { ...remoteDelivery, attemptedAt: new Date() }
+      } });
     }
 
     return {
@@ -67,6 +75,27 @@ class NotificationService {
   public async markAsRead(id: string): Promise<boolean> {
     const result = await NotificationModel.findByIdAndUpdate(id, { read: true });
     return Boolean(result);
+  }
+
+  public async notifyCategoryReview(entry?: { _id: unknown; messageId: string; subject: string; sender: string; parsedJson?: Record<string, any>; needsUserReview?: boolean }) {
+    if (!entry?.needsUserReview) return;
+    const entryId = String(entry._id);
+    if (await NotificationModel.exists({ type: 'REVIEW', 'metadata.reviewKind': 'category', 'metadata.entryId': entryId })) return;
+    const merchant = String(entry.parsedJson?.merchantName || entry.subject).slice(0, 80);
+    const amount = Number(entry.parsedJson?.detectedAmount);
+    try {
+      return await this.addNotification('Category review needed', `${merchant}${amount > 0 ? `: INR ${amount.toLocaleString('en-IN')}` : ''}. Choose or confirm a category in Review.`, 'REVIEW', {
+        reviewKind: 'category', entryId, messageId: entry.messageId, sender: entry.sender, subject: entry.subject
+      });
+    } catch (error: any) {
+      if (error.code !== 11000) throw error;
+    }
+  }
+
+  public async resolveCategoryReview(entryId: string) {
+    await NotificationModel.updateMany({ type: 'REVIEW', 'metadata.reviewKind': 'category', 'metadata.entryId': entryId }, {
+      $set: { read: true, dismissed: true }
+    });
   }
 
   public async clearAll(): Promise<number> {

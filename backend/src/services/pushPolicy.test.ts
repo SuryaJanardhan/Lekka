@@ -11,10 +11,10 @@ test('automatic sync alerts report new expenses or failures', () => {
   assert.equal(remoteNotificationTarget('SYNC', { newIngested: 2 }), 'ledger');
   assert.equal(remoteNotificationTarget('SYNC', { newIngested: 2, needsReviewCount: 1 }), 'review');
   assert.equal(remoteNotificationTarget('SYNC', { status: 'failed' }), 'settings');
+  assert.equal(remoteNotificationTarget('SYNC', { source: 'manual', newIngested: 1, needsReviewCount: 1 }), 'review');
 });
 
 test('empty syncs, manual sync duplicates, and unlock feedback do not generate remote alerts', () => {
   assert.equal(remoteNotificationTarget('SYNC', { newIngested: 0 }), null);
-  assert.equal(remoteNotificationTarget('SYNC', { source: 'manual', newIngested: 2 }), null);
   assert.equal(remoteNotificationTarget('SECURITY', {}), null);
 });

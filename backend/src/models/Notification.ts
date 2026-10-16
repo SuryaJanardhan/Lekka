@@ -31,5 +31,9 @@ const NotificationSchema = new Schema<INotification>(
 );
 
 NotificationSchema.index({ createdAt: -1 });
+NotificationSchema.index({ 'metadata.entryId': 1 }, {
+  unique: true,
+  partialFilterExpression: { type: 'REVIEW', 'metadata.reviewKind': 'category' }
+});
 
 export const NotificationModel = model<INotification>('Notification', NotificationSchema);

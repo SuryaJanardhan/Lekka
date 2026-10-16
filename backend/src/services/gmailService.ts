@@ -196,6 +196,10 @@ export class GmailService {
         ProcessedMailModel.exists({ messageId: mail.messageId })
       ]);
       if (existing || reviewed || processed) {
+        if (existing) {
+          const entry = await EmailModel.findById(existing._id);
+          if (entry) await notificationService.notifyCategoryReview(entry);
+        }
         if (!processed) await ProcessedMailModel.updateOne({ messageId: mail.messageId }, {
           $setOnInsert: { messageId: mail.messageId, outcome: existing ? 'EXPENSE' : 'REVIEW', isTest: mail.isTest }
         }, { upsert: true });
@@ -326,7 +330,7 @@ export class GmailService {
       if (!category) categorySource = 'UNASSIGNED';
     }
 
-    await EmailModel.create({
+    const entry = await EmailModel.create({
       messageId: emailData.messageId,
       sender: emailData.sender,
       subject: emailData.subject,
@@ -340,6 +344,7 @@ export class GmailService {
       reviewStatus: needsReview ? 'PENDING' : 'APPROVED',
       receivedAt: emailData.receivedAt
     });
+    await notificationService.notifyCategoryReview(entry);
 
     return { needsUserReview: needsReview, notificationOnly: false };
   }
