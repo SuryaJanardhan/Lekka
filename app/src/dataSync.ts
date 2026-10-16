@@ -9,7 +9,11 @@ export interface SyncResult { snapshot: DataSnapshot; network: boolean; persiste
 export function validSnapshot(value: unknown): value is DataSnapshot {
   const s = value as DataSnapshot | null;
   return Boolean(s && s.schemaVersion === 1 && typeof s.revision === 'string' && typeof s.generatedAt === 'string' &&
-    Array.isArray(s.entries) && Array.isArray(s.categories) && Array.isArray(s.rules) && Array.isArray(s.notifications) && s.analytics?.summary);
+    Number.isFinite(Date.parse(s.generatedAt)) && Array.isArray(s.entries) && s.entries.every(e => e && typeof e._id === 'string' && typeof e.receivedAt === 'string' && e.parsedJson && typeof e.sender === 'string') &&
+    Array.isArray(s.categories) && s.categories.every(c => c && typeof c._id === 'string' && typeof c.name === 'string') &&
+    Array.isArray(s.rules) && s.rules.every(r => r && typeof r._id === 'string' && Array.isArray(r.conditions)) &&
+    Array.isArray(s.notifications) && s.notifications.every(n => n && typeof n.id === 'string' && typeof n.message === 'string') &&
+    s.analytics?.summary && Number.isFinite(s.analytics.summary.totalEmails) && Number.isFinite(s.analytics.summary.totalFinancialAmount) && Array.isArray(s.analytics.categoryBreakdown));
 }
 
 export function indiaDay(date: Date): string {
@@ -71,7 +75,8 @@ export class DataSync {
     if (!force && !dirty && this.snapshot) {
       const status = await this.api.getSyncStatus();
       if (status.schemaVersion !== 1 || typeof status.revision !== 'string') throw new Error('Invalid sync status');
-      if (status.revision === this.snapshot.revision && this.snapshot.analytics.period?.startDate?.slice(0, 7) === this.now().toISOString().slice(0, 7)) {
+      const reportStart = this.snapshot.analytics.period?.startDate;
+      if (status.revision === this.snapshot.revision && reportStart && indiaDay(new Date(reportStart)).slice(0, 7) === indiaDay(this.now()).slice(0, 7)) {
         this.saveMeta({ ...this.meta(), nextCheckAt: nextCheck(status, this.now()) });
         return { snapshot: this.snapshot, network: true, persisted: true };
       }

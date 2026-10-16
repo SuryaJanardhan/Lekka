@@ -6,6 +6,14 @@ import { LedgerReportService } from './ledgerReportService';
 import { notificationService } from './notificationService';
 import { dataRevision } from './dataRevisionService';
 
+export function snapshotMonth(now = new Date()) {
+  const date = new Date(now.getTime() + 330 * 60000);
+  return {
+    startDate: new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1) - 330 * 60000).toISOString(),
+    endDate: new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) - 330 * 60000).toISOString()
+  };
+}
+
 export class SnapshotService {
   static async status() {
     const [revision, gmail] = await Promise.all([dataRevision(), SyncStateModel.findOne({ key: 'gmail' }).select('lastSuccessfulSyncAt').lean()]);
@@ -18,7 +26,7 @@ export class SnapshotService {
       const [categories, entries, analytics, rules, notifications, status] = await Promise.all([
         CategoryModel.find({}).sort({ name: 1 }).lean(),
         EmailModel.find({}).populate('categoryId').sort({ receivedAt: -1 }).lean(),
-        LedgerReportService.getDashboardStats(),
+        LedgerReportService.getDashboardStats(snapshotMonth()),
         RuleModel.find({}).populate('categoryId').sort({ priority: -1 }).lean(),
         notificationService.getNotifications(),
         this.status()

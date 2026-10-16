@@ -6,7 +6,7 @@ import ts from 'typescript';
 const code = ts.transpileModule(readFileSync(new URL('../src/dataSync.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const { DataSync } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 const now = new Date('2026-10-16T10:00:00Z');
-const snapshot = revision => ({ schemaVersion: 1, revision, generatedAt: now.toISOString(), lastSuccessfulIngestionAt: '2026-10-15T18:58:00Z', categories: [], entries: [], rules: [], notifications: [], analytics: { period: { startDate: '2026-10-01T00:00:00Z' }, summary: {} } });
+const snapshot = revision => ({ schemaVersion: 1, revision, generatedAt: now.toISOString(), lastSuccessfulIngestionAt: '2026-10-15T18:58:00Z', categories: [], entries: [], rules: [], notifications: [], analytics: { period: { startDate: '2026-10-01T00:00:00Z' }, summary: { totalEmails: 0, totalFinancialAmount: 0 }, categoryBreakdown: [] } });
 function fixture(saved = snapshot('1'), meta = { nextCheckAt: now.getTime() + 3600000 }) {
   const state = { saved, meta, reads: 0, snapshots: 0, status: 0, remote: snapshot('2'), serverStatus: snapshot('2'), fail: false, failStorage: false };
   const api = { getSnapshot: async () => { state.snapshots++; if (state.fail) throw Error('Offline'); return structuredClone(state.remote); }, getSyncStatus: async () => { state.status++; return state.serverStatus; } };
@@ -33,7 +33,7 @@ test('daily unchanged revision only requests lightweight status', async () => {
   assert.equal(f.state.snapshots, 0);
 });
 test('changed server revision downloads and replaces deleted rows, never merges them', async () => {
-  const old = snapshot('1'); old.entries = [{ _id: 'old' }];
+  const old = snapshot('1'); old.entries = [{ _id: 'old', sender: 'Bank', receivedAt: now.toISOString(), parsedJson: {} }];
   const f = fixture(old, {});
   await f.create().synchronize();
   assert.deepEqual(f.state.saved.entries, []);

@@ -43,7 +43,15 @@ export interface CacheMetadata {
 export class SyncMetadata {
   constructor(private key: string) {}
   read(): CacheMetadata {
-    try { return JSON.parse(localStorage.getItem(this.key) || '{}'); }
+    try {
+      const value = JSON.parse(localStorage.getItem(this.key) || '{}');
+      if (!value || typeof value !== 'object') return {};
+      return {
+        dirty: value.dirty === true,
+        nextCheckAt: Number.isFinite(value.nextCheckAt) ? value.nextCheckAt : 0,
+        pushKeys: Array.isArray(value.pushKeys) ? value.pushKeys.filter((key: unknown) => typeof key === 'string') : []
+      };
+    }
     catch { return {}; }
   }
   write(meta: CacheMetadata) { localStorage.setItem(this.key, JSON.stringify(meta)); }
