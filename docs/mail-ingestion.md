@@ -59,6 +59,10 @@ In Review, open an entry and choose Category > New category to create one withou
 
 The X beside Notifications in Review clears all in-app notifications with a short animation. It marks alerts read and dismissed rather than deleting their metadata: reminders stop, cleared alerts stay hidden after refresh, and processed-email deduplication remains intact. It does not remove ledger entries or pending transaction reviews. Failed clear requests leave notifications visible. This does not cancel notifications already delivered to Android's system tray.
 
+Every newly pending category review creates a contextual REVIEW alert with the merchant and amount and attempts FCM delivery, including manual ingestion. An entry has one category alert; retries do not create extra alerts. Saving its category or deleting the entry resolves that alert. These alerts are excluded from the missing-amount email count so reminders do not double-count the same expense. Actionable manual sync summaries also use remote delivery. Delivery attempt counts are stored in notification metadata; an accepted FCM request is not proof that Android displayed a banner. Foreground native presentation and a high-importance channel are configured, but Android notification permissions, channel settings, offline delivery and force-stop restrictions still apply.
+
+Settings includes Add category below the category dropdown, using the same creation flow as Review. Ledger search has a clear button, pending actions add a red dot to Review, and category/mode labels are emphasized. Stats use named months with years and a separate four-digit yearly series; transaction dates are unchanged.
+
 ## Checkpoint and audit behavior
 
 IMAP searches matching senders/recipients across the Inbox before downloading bodies. Initial recovery is bounded to the newest `GMAIL_IMAP_SCAN_LIMIT` matching messages; subsequent runs resume older-first from the last handled UID. `GMAIL_INGEST_LIMIT` bounds body downloads per run. If `hasMore` is true, another manual ingestion continues the backlog. Older messages outside the initial recovery window are counted explicitly.

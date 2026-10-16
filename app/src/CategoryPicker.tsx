@@ -10,9 +10,10 @@ export function CategoryPicker({ categories, value, onChange, onCreate }: {
 }) {
   const [creating, setCreating] = useState(false);
   const [previousValue, setPreviousValue] = useState('');
+  const [saving, setSaving] = useState(false);
 
   return <div className="category-picker">
-    <label>Category<select aria-label="Category" required value={creating ? '__new__' : value} onChange={(event) => {
+    <label>Category<select aria-label="Category" required disabled={saving} value={creating ? '__new__' : value} onChange={(event) => {
       if (event.target.value === '__new__') { setPreviousValue(value); onChange(''); setCreating(true); }
       else { setCreating(false); onChange(event.target.value); }
     }}>
@@ -20,6 +21,6 @@ export function CategoryPicker({ categories, value, onChange, onCreate }: {
       {categories.map(category => <option key={category._id} value={category._id}>{category.name}</option>)}
       <option value="__new__">New category...</option>
     </select></label>
-    {creating && <CategoryCreateForm onCreate={onCreate} onCreated={(category) => { onChange(category._id); setCreating(false); }} onCancel={() => { setCreating(false); onChange(previousValue); }} />}
+    {creating && <CategoryCreateForm onCreate={onCreate} onSavingChange={setSaving} onCreated={(category) => { onChange(category._id); setCreating(false); }} onCancel={() => { setCreating(false); onChange(previousValue); }} />}
   </div>;
 }

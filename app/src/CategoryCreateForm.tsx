@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Category } from './types';
 
-export function CategoryCreateForm({ onCreate, onCreated, onCancel }: {
+export function CategoryCreateForm({ onCreate, onCreated, onCancel, onSavingChange }: {
   onCreate: (name: string) => Promise<Category>;
   onCreated: (category: Category) => void;
   onCancel: () => void;
+  onSavingChange?: (saving: boolean) => void;
 }) {
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -13,10 +14,11 @@ export function CategoryCreateForm({ onCreate, onCreated, onCancel }: {
   const create = async () => {
     if (saving || !name.trim()) return;
     setSaving(true);
+    onSavingChange?.(true);
     setError('');
     try { onCreated(await onCreate(name.trim())); }
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not create category'); }
-    finally { setSaving(false); }
+    finally { setSaving(false); onSavingChange?.(false); }
   };
   return <div className="category-create">
     <label>New category name<input aria-label="New category name" value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); create(); } }} maxLength={80} autoFocus disabled={saving} /></label>

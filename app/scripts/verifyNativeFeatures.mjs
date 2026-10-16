@@ -8,8 +8,13 @@ const appSource = readFileSync(resolve(root, 'src/App.tsx'), 'utf8');
 const apiSource = readFileSync(resolve(root, 'src/api.ts'), 'utf8');
 const capacitorConfig = readFileSync(resolve(root, 'capacitor.config.json'), 'utf8');
 const androidManifest = readFileSync(resolve(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
+const remotePushSource = readFileSync(resolve(root, 'src/remotePush.ts'), 'utf8');
 
 const checks = [
+  {
+    name: 'native foreground push alerts and high-importance Android channel are configured',
+    pass: JSON.parse(capacitorConfig).plugins?.PushNotifications?.presentationOptions?.includes('alert') && remotePushSource.includes('importance: 4')
+  },
   {
     name: 'biometric unlock requires checkBiometry availability',
     pass: appSource.includes('if (!check.isAvailable)')
