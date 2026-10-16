@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { NotificationModel } from '../models/Notification';
 import { notificationService, NotificationController } from './notificationService';
 import { PushService } from './pushService';
+import { DataRevisionModel } from '../models/DataRevision';
 
 test('clear all hides alerts and clears reminders without deleting their dedupe metadata', async (t) => {
   let change: any;
@@ -14,6 +15,7 @@ test('clear all hides alerts and clears reminders without deleting their dedupe 
 });
 
 test('a pending category review saves one contextual alert and sends real push transport', async (t) => {
+  t.mock.method(DataRevisionModel, 'findByIdAndUpdate', async () => ({ version: 1 }));
   let exists = false;
   let stored: any;
   t.mock.method(NotificationModel, 'exists', async () => exists ? { _id: 'notification' } : null);
@@ -32,6 +34,7 @@ test('a pending category review saves one contextual alert and sends real push t
 });
 
 test('failed FCM transport remains visible as failed instead of pretending delivery', async (t) => {
+  t.mock.method(DataRevisionModel, 'findByIdAndUpdate', async () => ({ version: 1 }));
   let recorded: any;
   t.mock.method(NotificationModel, 'create', async (data: any) => ({ ...data, _id: 'notification', createdAt: new Date(), read: false }));
   t.mock.method(NotificationModel, 'updateOne', async (_query: any, update: any) => { recorded = update; });

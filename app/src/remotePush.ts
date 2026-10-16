@@ -2,6 +2,7 @@ import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { ApiClient } from './api';
 import { newConversationId } from './chatHistory';
+import { indiaDay } from './dataSync';
 
 const installationKey = 'lekka_push_installation';
 export function pushInstallationId() {
@@ -12,8 +13,8 @@ export function pushInstallationId() {
 
 export function startRemotePush(api: ApiClient, handlers: {
   status: (status: string) => void;
-  received: (title: string) => void;
-  opened: (screen: string) => void;
+  received: (title: string, key?: string) => void;
+  opened: (screen: string, key?: string) => void;
   error: (detail: string) => void;
 }) {
   let disposed = false;
@@ -23,9 +24,6 @@ export function startRemotePush(api: ApiClient, handlers: {
     if (disposed) await handle.remove(); else listeners.push(handle);
   };
   const register = async () => {
-    const status = await api.pushStatus(pushInstallationId());
-    if (disposed) return;
-    if (!status.configured) { handlers.status('Firebase setup needed'); return; }
     let permission = await PushNotifications.checkPermissions();
     if (permission.receive === 'prompt' || permission.receive === 'prompt-with-rationale') permission = await PushNotifications.requestPermissions();
     if (disposed) return;
@@ -33,7 +31,16 @@ export function startRemotePush(api: ApiClient, handlers: {
     await PushNotifications.createChannel({ id: 'lekka_alerts', name: 'Lekka alerts', importance: 4, visibility: 0, vibration: true });
     await add(PushNotifications.addListener('registration', async ({ value }) => {
       try {
-        await api.registerPushDevice(pushInstallationId(), value);
+        const key = `lekka-push-registration:${api.getBaseUrl()}`;
+        let hash = '';
+        try { hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))).map(n => n.toString(16).padStart(2, '0')).join(''); } catch { /* Registration still works without a cache fingerprint. */ }
+        let cached;
+        try { cached = JSON.parse(localStorage.getItem(key) || 'null'); } catch { cached = null; }
+        const day = indiaDay(new Date());
+        if (hash && cached?.hash === hash && cached?.day === day) { if (!disposed) handlers.status('Registered'); return; }
+        const result = await api.registerPushDevice(pushInstallationId(), value);
+        if (result.configured === false) { if (!disposed) handlers.status('Firebase setup needed'); return; }
+        if (hash) { try { localStorage.setItem(key, JSON.stringify({ hash, day })); } catch { /* Keep native notifications working if storage is full. */ } }
         if (!disposed) handlers.status('Connected');
       } catch (error) {
         if (!disposed) { handlers.status('Registration failed'); handlers.error(error instanceof Error ? error.message : 'Phone registration failed'); }
@@ -43,10 +50,10 @@ export function startRemotePush(api: ApiClient, handlers: {
       if (!disposed) { handlers.status('Registration failed'); handlers.error('FCM registration failed. Check Android Firebase configuration.'); }
     }));
     await add(PushNotifications.addListener('pushNotificationReceived', (notification) => {
-      if (!disposed) handlers.received(notification.title || 'New Lekka notification');
+      if (!disposed) handlers.received(notification.title || 'New Lekka notification', notification.data?.notificationKey);
     }));
     await add(PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
-      if (!disposed) handlers.opened(notification.data?.screen || 'review');
+      if (!disposed) handlers.opened(notification.data?.screen || 'review', notification.data?.notificationKey);
     }));
     if (!disposed) { handlers.status('Connecting'); await PushNotifications.register(); }
   };
@@ -59,5 +66,6 @@ export function startRemotePush(api: ApiClient, handlers: {
 
 export async function stopRemotePush(api: ApiClient) {
   await api.unregisterPushDevice(pushInstallationId());
+  localStorage.removeItem(`lekka-push-registration:${api.getBaseUrl()}`);
   if (Capacitor.isNativePlatform()) await PushNotifications.unregister();
 }

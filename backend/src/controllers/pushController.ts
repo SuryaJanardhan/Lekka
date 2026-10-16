@@ -29,7 +29,7 @@ export class PushController {
     try {
       await PushDeviceModel.init();
       await PushDeviceModel.findOneAndUpdate({ installationId }, { token, lastSeenAt: new Date() }, { upsert: true, new: true });
-      res.json({ success: true, data: { registered: true } });
+      res.json({ success: true, data: { registered: true, configured: PushService.isConfigured() } });
     } catch {
       res.status(500).json({ success: false, error: 'Could not register phone for notifications' });
     }

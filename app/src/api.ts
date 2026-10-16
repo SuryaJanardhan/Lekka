@@ -125,7 +125,7 @@ export class ApiClient {
   }
 
   registerPushDevice(installationId: string, token: string) {
-    return this.request('/api/notifications/devices', { method: 'POST', body: JSON.stringify({ installationId, token }) });
+    return this.request<{ registered: boolean; configured?: boolean }>('/api/notifications/devices', { method: 'POST', body: JSON.stringify({ installationId, token }) });
   }
 
   unregisterPushDevice(installationId: string) {

@@ -27,13 +27,15 @@ import {
 } from '@aparajita/capacitor-biometric-auth';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { ApiClient } from './api';
-import { Category, DashboardStats, EmailRecord, NotificationItem, Rule } from './types';
+import { Category, DashboardStats, EmailRecord, NotificationItem, Rule, DataSnapshot } from './types';
 import { amountOf, money, moneyExact, shortDate, timeAgo } from './format';
 import { LockScreen } from './LockScreen';
 import { ChatMessage, Conversation, loadConversations, saveConversations, newConversationId } from './chatHistory';
 import { startRemotePush, stopRemotePush } from './remotePush';
 import { CategorySettings } from './CategorySettings';
 import { CategoryPicker } from './CategoryPicker';
+import { SnapshotCache, SyncMetadata } from './cacheStore';
+import { DataSync } from './dataSync';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
@@ -63,7 +65,10 @@ export function App() {
   const [remotePushEnabled, setRemotePushEnabled] = useState(() => localStorage.getItem('lekka_remote_push_enabled') !== 'false');
   const [remotePushStatus, setRemotePushStatus] = useState('Not connected');
   const [tab, setTab] = useState<Tab>('today');
-  const [connection, setConnection] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [connection, setConnection] = useState<'checking' | 'online' | 'offline' | 'cached'>('checking');
+  const [lastSyncedAt, setLastSyncedAt] = useState('');
+  const dataSyncRef = useRef<DataSync | null>(null);
+  const pushRefreshTimer = useRef<ReturnType<typeof setTimeout>>();
   const [toast, setToastValue] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
   const setToast = useCallback((message: string) => {
@@ -147,7 +152,9 @@ export function App() {
 
   const [pinForm, setPinForm] = useState({ current: '', next: '', confirm: '' });
 
-  const api = useMemo(() => new ApiClient({ baseUrl: backendUrl, apiSecret }), []);
+  const api = useMemo(() => new ApiClient({ baseUrl: backendUrl, apiSecret, onDataWrite: () => dataSyncRef.current?.invalidate() }), []);
+  const dataSync = useMemo(() => new DataSync(api, new SnapshotCache(backendUrl), new SyncMetadata(`lekka-sync-v1:${backendUrl}`)), [api]);
+  dataSyncRef.current = dataSync;
 
   const logEvent = (label: string, detail = '') => {
     const line = `${new Date().toISOString()} ${label}${detail ? `: ${detail}` : ''}`;
@@ -218,63 +225,76 @@ export function App() {
     if (notify) await sendDeviceNotification(title, message);
   };
 
-  const refresh = async () => {
+  const applySnapshot = (snapshot: DataSnapshot) => {
+    setCategories([defaultCategory, ...snapshot.categories]);
+    setEntries(snapshot.entries);
+    setAnalytics(snapshot.analytics);
+    setRules(snapshot.rules);
+    setNotifications(snapshot.notifications);
+    setLastSyncedAt(snapshot.generatedAt);
+    setManual((prev) => ({ ...prev, categoryId: snapshot.categories.some(c => c._id === prev.categoryId) ? prev.categoryId : snapshot.categories[0]?._id || '' }));
+    setRule((prev) => ({ ...prev, categoryId: snapshot.categories.some(c => c._id === prev.categoryId) ? prev.categoryId : snapshot.categories[0]?._id || '' }));
+  };
+
+  const refresh = async (force = true, quiet = false): Promise<boolean> => {
     setLoading(true);
     try {
-      const [categoryData, entryData, reportData, ruleData, notificationData] = await Promise.all([
-        api.getCategories(),
-        api.getEntries(),
-        api.getAnalytics(),
-        api.getRules(),
-        api.getNotifications()
-      ]);
-      const usableCategories = [defaultCategory, ...categoryData];
-      setCategories(usableCategories);
-      setEntries(entryData);
-      setAnalytics(reportData);
-      setRules(ruleData);
-      setNotifications(notificationData);
-      setManual((prev) => ({ ...prev, categoryId: prev.categoryId || categoryData[0]?._id || '' }));
-      setRule((prev) => ({ ...prev, categoryId: prev.categoryId || categoryData[0]?._id || '' }));
-      setConnection('online');
-      logEvent('refresh ok', `${entryData.length} entries`);
+      if (force) dataSync.invalidate();
+      const result = await dataSync.synchronize(force);
+      applySnapshot(result.snapshot);
+      setConnection(result.network ? 'online' : 'cached');
+      if (!result.persisted) showToast('Server data loaded; local cache could not be saved');
+      logEvent(result.network ? 'server sync ok' : 'saved data loaded', `${result.snapshot.entries.length} entries`);
+      return true;
     } catch (error: any) {
       logEvent('refresh failed', error.message || 'unknown');
-      showToast(error.message || 'Backend data refresh failed');
+      setConnection('offline');
+      if (!quiet) showToast(error.message || 'Refresh failed; saved data kept');
+      return false;
     } finally {
       setLoading(false);
     }
   };
 
-  const checkConnection = async () => {
-    setConnection('checking');
-    try {
-      const health = await api.health();
-      setConnection(health?.databaseConnected ? 'online' : 'offline');
-      logEvent('backend health', `${health?.databaseConnected ? 'online' : 'offline'} ${health?.status ? `status ${health.status}` : ''}`.trim());
-    } catch (error: any) {
-      setConnection('offline');
-      logEvent('backend health failed', error.message || 'unknown');
-    }
+  const afterWrite = async (message: string, title = 'Lekka', notify = false) => {
+    const refreshed = await refresh(true, true);
+    showToast(refreshed ? message : `${message} on server; refresh pending`, title, notify);
   };
 
   useEffect(() => {
     logEvent('app backend url', api.getBaseUrl() || '<empty>');
-    checkConnection();
   }, []);
 
   useEffect(() => {
-    if (isUnlocked) refresh();
-  }, [isUnlocked]);
+    if (!isUnlocked) return;
+    let active = true;
+    void dataSync.hydrate().then(snapshot => {
+      if (!active) return;
+      if (snapshot) { applySnapshot(snapshot); setConnection('cached'); }
+      void refresh(false);
+    });
+    const resume = () => { if (document.visibilityState === 'visible') void refresh(false, true); };
+    document.addEventListener('visibilitychange', resume);
+    return () => { active = false; document.removeEventListener('visibilitychange', resume); };
+  }, [isUnlocked, dataSync]);
+
+  useEffect(() => () => clearTimeout(pushRefreshTimer.current), []);
 
   useEffect(() => {
     if (!isUnlocked || !remotePushEnabled) return;
     return startRemotePush(api, {
       status: setRemotePushStatus,
-      received: (title) => { logEvent('remote notification received', title); refresh(); },
-      opened: (screen) => {
+      received: (title, key) => {
+        logEvent('remote notification received', title);
+        if (!dataSync.invalidate(key)) return;
+        clearTimeout(pushRefreshTimer.current);
+        pushRefreshTimer.current = setTimeout(() => { void refresh(false, true); }, 3000);
+      },
+      opened: (screen, key) => {
         setTab(screen === 'insights' ? 'insights' : screen === 'ledger' ? 'ledger' : screen === 'settings' ? 'settings' : 'review');
-        refresh();
+        clearTimeout(pushRefreshTimer.current);
+        dataSync.invalidate(key);
+        void refresh(false);
       },
       error: (detail) => logEvent('remote push', detail)
     });
@@ -436,9 +456,8 @@ export function App() {
     setSyncing(true);
     try {
       const result = await api.syncGmail();
-      await refresh();
       logEvent('gmail ingestion ok', `${result.newIngested} synced`);
-      showToast(`${result.newIngested} expenses synced, ${result.notificationOnlyCount} emails flagged`, 'Gmail sync', true);
+      await afterWrite(`${result.newIngested} expenses synced, ${result.notificationOnlyCount} emails flagged`, 'Gmail sync', true);
     } catch (error: any) {
       logEvent('gmail ingestion failed', error.message || 'unknown');
       showToast(error.message || 'Gmail sync failed');
@@ -461,8 +480,7 @@ export function App() {
       });
       setManual((prev) => ({ ...prev, title: '', amount: '', friendName: '', notes: '' }));
       setTab('today');
-      await refresh();
-      showToast('Expense saved', 'Lekka expense', true);
+      await afterWrite('Expense saved', 'Lekka expense', true);
     } catch (error: any) {
       showToast(error.message || 'Could not save expense');
     }
@@ -472,8 +490,7 @@ export function App() {
     try {
       await api.assignCategory(entry._id, categoryId);
       setSelectedEntry(null);
-      await refresh();
-      showToast('Category updated and rule trained');
+      await afterWrite('Category updated and rule trained');
     } catch (error: any) {
       showToast(error.message || 'Category update failed');
     }
@@ -482,6 +499,7 @@ export function App() {
   const createCategory = async (name: string) => {
     const category = await api.createCategory(name);
     setCategories((previous) => [...previous.filter((item) => item._id !== category._id), category].sort((a, b) => a.name.localeCompare(b.name)));
+    await afterWrite('Category created');
     return category;
   };
 
@@ -489,8 +507,7 @@ export function App() {
     try {
       await api.updateEntry(entry._id, payload);
       setSelectedEntry(null);
-      await refresh();
-      showToast('Transaction updated');
+      await afterWrite('Transaction updated');
     } catch (error: any) {
       showToast(error.message || 'Transaction update failed');
     }
@@ -500,8 +517,7 @@ export function App() {
     try {
       await api.deleteEntry(entry._id);
       setSelectedEntry(null);
-      await refresh();
-      showToast('Transaction deleted');
+      await afterWrite('Transaction deleted');
     } catch (error: any) {
       showToast(error.message || 'Transaction delete failed');
     }
@@ -519,8 +535,7 @@ export function App() {
       else payload.categoryId = rule.categoryId;
       await api.createRule(payload);
       setRule((prev) => ({ ...prev, value: '', customCategoryName: '' }));
-      await refresh();
-      showToast('Rule saved');
+      await afterWrite('Rule saved');
     } catch (error: any) {
       showToast(error.message || 'Rule save failed');
     }
@@ -529,8 +544,7 @@ export function App() {
   const deleteRule = async (id: string) => {
     try {
       await api.deleteRule(id);
-      await refresh();
-      showToast('Rule deleted');
+      await afterWrite('Rule deleted');
     } catch (error: any) {
       showToast(error.message || 'Rule delete failed');
     }
@@ -540,7 +554,7 @@ export function App() {
     try {
       await api.markNotificationRead(id);
       setNotifications((previous) => previous.map((item) => item.id === id ? { ...item, read: true } : item));
-      showToast('Marked reviewed');
+      await afterWrite('Marked reviewed');
     } catch (error: any) {
       showToast(error.message || 'Could not mark reviewed');
     }
@@ -554,6 +568,7 @@ export function App() {
       setNotificationExit(true);
       await new Promise((resolve) => setTimeout(resolve, 220));
       setNotifications([]);
+      await afterWrite('Notifications cleared');
     } catch (error: any) {
       showToast(error.message || 'Could not clear notifications');
     } finally {
@@ -697,10 +712,10 @@ export function App() {
       <header className="topbar">
         <div>
           <strong>Lekka</strong>
-          <span className={`status-dot ${connection}`}>{connection}</span>
+          <span className={`status-dot ${connection}`}>{connection === 'cached' ? 'Saved data' : connection}</span>
         </div>
         <div className="top-actions">
-          <button className="icon-button" onClick={refresh} title="Refresh"><RefreshCw size={18} className={loading ? 'spin' : ''} /></button>
+          <button className="icon-button" onClick={() => refresh()} title="Refresh"><RefreshCw size={18} className={loading ? 'spin' : ''} /></button>
           <button className="icon-button accent" onClick={() => setTab('ai')} title="Ask AI"><Bot size={19} /></button>
         </div>
       </header>
@@ -869,14 +884,14 @@ export function App() {
             <h2>Settings</h2>
             <CategorySettings categories={categories.filter((category) => category._id !== 'all')} onCreate={createCategory} onRename={async (id, name) => {
               await api.renameCategory(id, name);
-              await refresh();
-              showToast('Category renamed');
+              await afterWrite('Category renamed');
             }} />
             <div className="form-card">
               <div className="settings-row">
                 <span>Backend</span>
-                <strong className={connection}>{connection}</strong>
+                <strong className={connection}>{connection === 'cached' ? 'Saved data' : connection}</strong>
               </div>
+              {lastSyncedAt && <div className="settings-row"><span>Last synced</span><small>{new Date(lastSyncedAt).toLocaleString('en-IN')}</small></div>}
               <div className="settings-row">
                 <span>Remote notifications</span>
                 <strong>{remotePushEnabled ? remotePushStatus : 'Disabled'}</strong>
