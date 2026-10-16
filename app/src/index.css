@@ -208,6 +208,10 @@ h2 { font-size: 1.05rem; line-height: 1.2; }
 .note-row small { color: var(--muted); font-size: 0.72rem; }
 .note-row span { overflow-wrap: anywhere; }
 .note-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.entry-main small { font-weight: 600; color: #4b5563; }
+.nav-icon { position: relative; width: 22px; height: 22px; display: grid; place-items: center; }
+.review-dot { position: absolute; top: -2px; right: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 2px var(--panel); }
+.category-settings { display: grid; gap: 12px; }
 .category-picker, .category-create { display: grid; gap: 10px; min-width: 0; }
 .category-create-actions { display: flex; align-items: center; gap: 8px; }
 .category-create [role="alert"] { color: var(--red); margin: 0; }
@@ -220,7 +224,7 @@ h2 { font-size: 1.05rem; line-height: 1.2; }
 
 .search-panel {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr) 36px;
   gap: 10px;
   align-items: center;
 }
@@ -234,6 +238,7 @@ h2 { font-size: 1.05rem; line-height: 1.2; }
   color: var(--ink);
 }
 .search-panel input { border: 0; min-height: 32px; padding: 0; outline: none; }
+.search-clear { width: 36px; height: 36px; }
 label { display: flex; flex-direction: column; gap: 7px; color: var(--muted); font-size: 0.78rem; font-weight: 800; }
 textarea { resize: vertical; min-height: 74px; }
 .form-card { display: flex; flex-direction: column; gap: 12px; }

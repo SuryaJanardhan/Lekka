@@ -86,6 +86,7 @@ export function App() {
   const [notificationExit, setNotificationExit] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<EmailRecord | null>(null);
   const [search, setSearch] = useState('');
+  const searchInput = useRef<HTMLInputElement>(null);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [chatInput, setChatInput] = useState('');
   const [conversations, setConversations] = useState<Conversation[]>(loadConversations);
@@ -478,6 +479,12 @@ export function App() {
     }
   };
 
+  const createCategory = async (name: string) => {
+    const category = await api.createCategory(name);
+    setCategories((previous) => [...previous.filter((item) => item._id !== category._id), category].sort((a, b) => a.name.localeCompare(b.name)));
+    return category;
+  };
+
   const updateEntry = async (entry: EmailRecord, payload: Record<string, any>) => {
     try {
       await api.updateEntry(entry._id, payload);
@@ -756,7 +763,8 @@ export function App() {
           <section className="stack">
             <div className="search-panel">
               <Search size={18} />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search merchant, sender, notes" />
+              <input ref={searchInput} aria-label="Search ledger" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search merchant, sender, notes" />
+              {search && <button className="icon-button search-clear" type="button" title="Clear search" aria-label="Clear search" onClick={() => { setSearch(''); searchInput.current?.focus(); }}><X size={17} /></button>}
             </div>
             <div className="chip-row">
               {categories.map((category) => (
@@ -816,7 +824,7 @@ export function App() {
               <Metric label="Week" value={money(periodTotals.week)} />
               <Metric label="Month total" value={money(totals.monthTotal)} />
               <Metric label="Quarter" value={money(periodTotals.quarter)} />
-              <Metric label="Year" value={money(periodTotals.year)} />
+              <Metric label={`Year ${new Date().getFullYear()}`} value={money(periodTotals.year)} />
               <Metric label="Avg entry" value={money(analytics?.summary.averageAmount || 0)} />
               <Metric label="Auto sorted" value={`${analytics?.summary.aiAccuracyPercentage || 100}%`} />
               <Metric label="Entries" value={String(analytics?.summary.totalEmails || 0)} />
@@ -827,7 +835,8 @@ export function App() {
               modes={(analytics?.paymentModeBreakdown || []).map((item, index) => ({ label: item.mode, value: item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))}
             />
             <ReportBars title="Daily trend" rows={(analytics?.dailyTrend || []).map((item, index) => ({ label: item.date.slice(8), value: item.totalAmount, color: ['#14b8a6', '#2563eb', '#f59e0b', '#ef4444'][index % 4] }))} />
-            <ReportBars title="Monthly trend" rows={(analytics?.monthlyTrend || []).map((item, index) => ({ label: item.month.slice(5), value: item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))} />
+            <ReportBars title="Monthly trend" rows={(analytics?.monthlyTrend || []).map((item, index) => ({ label: new Date(Number(item.month.slice(0, 4)), Number(item.month.slice(5, 7)) - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }), value: item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))} />
+            <ReportBars title="Yearly trend" rows={(analytics?.yearlyTrend || []).map((item, index) => ({ label: item.year, value: item.totalAmount, color: ['#2563eb', '#0f766e', '#b45309', '#dc2626'][index % 4] }))} />
           </section>
         )}
 
@@ -858,7 +867,7 @@ export function App() {
         {tab === 'settings' && (
           <section className="stack">
             <h2>Settings</h2>
-            <CategorySettings categories={categories.filter((category) => category._id !== 'all')} onRename={async (id, name) => {
+            <CategorySettings categories={categories.filter((category) => category._id !== 'all')} onCreate={createCategory} onRename={async (id, name) => {
               await api.renameCategory(id, name);
               await refresh();
               showToast('Category renamed');
@@ -919,11 +928,7 @@ export function App() {
           categories={categories.filter((category) => category._id !== 'all')}
           onClose={() => setSelectedEntry(null)}
           onReassign={(categoryId) => reassign(selectedEntry, categoryId)}
-          onCreateCategory={async (name) => {
-            const category = await api.createCategory(name);
-            setCategories((previous) => [...previous.filter((item) => item._id !== category._id), category].sort((a, b) => a.name.localeCompare(b.name)));
-            return category;
-          }}
+          onCreateCategory={createCategory}
           onUpdate={(payload) => updateEntry(selectedEntry, payload)}
           onDelete={() => deleteEntry(selectedEntry)}
         />
@@ -933,7 +938,7 @@ export function App() {
         <NavButton active={tab === 'today'} icon={<Wallet size={20} />} label="Today" onClick={() => setTab('today')} />
         <NavButton active={tab === 'ledger'} icon={<ListFilter size={20} />} label="Ledger" onClick={() => setTab('ledger')} />
         <NavButton active={tab === 'add'} icon={<Plus size={22} />} label="Add" onClick={() => setTab('add')} />
-        <NavButton active={tab === 'review'} icon={<Bell size={20} />} label="Review" onClick={() => setTab('review')} />
+        <NavButton active={tab === 'review'} icon={<Bell size={20} />} label="Review" badge={reviewEntries.length > 0 || notifications.some((item) => item.type === 'REVIEW' && !item.read)} onClick={() => setTab('review')} />
         <NavButton active={tab === 'insights'} icon={<BarChart3 size={20} />} label="Stats" onClick={() => setTab('insights')} />
         <NavButton active={tab === 'rules'} icon={<SlidersHorizontal size={20} />} label="Rules" onClick={() => setTab('rules')} />
         <NavButton active={tab === 'settings'} icon={<Settings size={20} />} label="Set" onClick={() => setTab('settings')} />
@@ -994,7 +999,7 @@ function EntryList({ entries, onSelect, empty }: { entries: EmailRecord[]; onSel
           <div className="entry-main">
             <strong>{entry.parsedJson?.merchantName || entry.subject}</strong>
             <span>{entry.sender} · {shortDate(entry.receivedAt)}</span>
-            <small>{entry.categoryId?.name || 'Unassigned'} · {entry.parsedJson?.paymentMode || entry.categorySource}</small>
+            <small>{entry.categoryId?.name || 'Unassigned'} · {entry.parsedJson?.paymentMode || 'Mode not set'}</small>
           </div>
           <div className="entry-side">
             <strong>{moneyExact(amountOf(entry))}</strong>
@@ -1167,6 +1172,6 @@ function EntrySheet({
   );
 }
 
-function NavButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
-  return <button className={active ? 'active' : ''} onClick={onClick}>{icon}<span>{label}</span></button>;
+function NavButton({ active, icon, label, onClick, badge }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void; badge?: boolean }) {
+  return <button className={active ? 'active' : ''} onClick={onClick} aria-label={label}><span className="nav-icon">{icon}{badge && <i className="review-dot" aria-label="Pending review actions" />}</span><span>{label}</span></button>;
 }

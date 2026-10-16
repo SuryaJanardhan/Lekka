@@ -1,17 +1,20 @@
 import { useState } from 'react';
-import { Pencil, Check, X } from 'lucide-react';
+import { Pencil, Check, X, Plus } from 'lucide-react';
 import { Category } from './types';
+import { CategoryCreateForm } from './CategoryCreateForm';
 
-export function CategorySettings({ categories, onRename }: {
+export function CategorySettings({ categories, onRename, onCreate }: {
   categories: Category[];
   onRename: (id: string, name: string) => Promise<void>;
+  onCreate: (name: string) => Promise<Category>;
 }) {
   const [editing, setEditing] = useState('');
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [adding, setAdding] = useState(false);
 
-  return <details className="category-settings">
+  return <div className="category-settings"><details>
     <summary>Categories</summary>
     <div className="list">
       {categories.map((category) => <div className="settings-row" key={category._id}>
@@ -33,5 +36,8 @@ export function CategorySettings({ categories, onRename }: {
       </div>)}
       {error && <p role="alert">{error}</p>}
     </div>
-  </details>;
+  </details>
+    {adding ? <CategoryCreateForm onCreate={onCreate} onCreated={() => setAdding(false)} onCancel={() => setAdding(false)} /> :
+      <button className="secondary-button" type="button" onClick={() => setAdding(true)}><Plus size={17} />Add category</button>}
+  </div>;
 }
