@@ -23,6 +23,8 @@ export interface IngestionResult {
   needsReviewCount: number;
   notificationOnlyCount: number;
   creditsSkipped?: number;
+  debitsAdded?: number;
+  creditsAdded?: number;
   skipped?: string;
   diagnostics?: Record<string, unknown>;
   processedEmails?: Array<{ messageId: string; sender: string; subject: string; receivedAt: Date; result: string; isTest: boolean }>;
@@ -102,7 +104,7 @@ export class GmailService {
       if (!saved.matchedCount) throw new Error('Gmail ingestion lease expired before progress was committed');
       await notificationService.addNotification(
         'Gmail sync complete',
-        result.newIngested + ' expenses added, ' + result.needsReviewCount + ' transactions need review, ' + result.notificationOnlyCount + ' emails need a manual amount check.',
+        result.newIngested + ' transactions added (' + (result.debitsAdded || 0) + ' debits, ' + (result.creditsAdded || 0) + ' credits), ' + result.needsReviewCount + ' need category review, ' + result.notificationOnlyCount + ' emails need a manual amount check.',
         'SYNC', { ...result, source }
       );
       return result;
@@ -185,6 +187,8 @@ export class GmailService {
     let needsReviewCount = 0;
     let notificationOnlyCount = 0;
     let creditsSkipped = 0;
+    let debitsAdded = 0;
+    let creditsAdded = 0;
     const processedEmails: NonNullable<IngestionResult['processedEmails']> = [];
 
     for (const mail of mails) {
@@ -194,9 +198,9 @@ export class GmailService {
       const [existing, reviewed, processed] = await Promise.all([
         EmailModel.exists({ messageId: mail.messageId }),
         NotificationModel.exists({ type: 'REVIEW', 'metadata.messageId': mail.messageId }),
-        ProcessedMailModel.exists({ messageId: mail.messageId })
+        ProcessedMailModel.findOne({ messageId: mail.messageId }).select('outcome').lean()
       ]);
-      if (existing || reviewed || processed) {
+      if (existing || reviewed || (processed && processed.outcome !== 'IGNORED_CREDIT')) {
         if (existing) {
           const entry = await EmailModel.findById(existing._id);
           if (entry) await notificationService.notifyCategoryReview(entry);
@@ -239,7 +243,8 @@ export class GmailService {
       });
 
       await ProcessedMailModel.updateOne({ messageId: mail.messageId }, {
-        $setOnInsert: { messageId: mail.messageId, outcome: result.notificationOnly ? 'REVIEW' : result.direction === 'CREDIT' ? 'CREDIT' : 'EXPENSE', isTest: mail.isTest }
+        $setOnInsert: { messageId: mail.messageId },
+        $set: { outcome: result.notificationOnly ? 'REVIEW' : result.direction === 'CREDIT' ? 'CREDIT' : 'EXPENSE', isTest: mail.isTest }
       }, { upsert: true });
 
       if (result.ignoredCredit) {
@@ -249,11 +254,12 @@ export class GmailService {
       } else {
         if (result.needsUserReview) needsReviewCount++;
         newIngested++;
+        if (result.direction === 'CREDIT') creditsAdded++; else debitsAdded++;
       }
-      processedEmails.push({ messageId: mail.messageId, sender: mail.sender, subject: mail.subject, receivedAt: mail.receivedAt, result: result.ignoredCredit ? 'ignored_credit' : result.notificationOnly ? 'review_notification' : 'expense_saved', isTest: mail.isTest });
+      processedEmails.push({ messageId: mail.messageId, sender: mail.sender, subject: mail.subject, receivedAt: mail.receivedAt, result: result.notificationOnly ? 'review_notification' : result.direction === 'CREDIT' ? 'credit_saved' : 'expense_saved', isTest: mail.isTest });
     }
 
-    return { totalProcessed, newIngested, duplicatesSkipped, needsReviewCount, notificationOnlyCount, creditsSkipped, processedEmails };
+    return { totalProcessed, newIngested, duplicatesSkipped, needsReviewCount, notificationOnlyCount, creditsSkipped, debitsAdded, creditsAdded, processedEmails };
   }
 
   private static isSelectedSender(sender: string): boolean {
@@ -284,7 +290,7 @@ export class GmailService {
         direction = aiFields.transactionDirection;
       } else {
         await notificationService.addNotification(
-          `${emailData.parsedJson.detectedAmount ? 'Expense unclear' : 'Amount missing'}: ${emailData.sender}`,
+          `${emailData.parsedJson.detectedAmount ? 'Transaction unclear' : 'Amount missing'}: ${emailData.sender}`,
           `"${emailData.subject}" from ${emailData.sender} could not be confirmed as a completed transaction with an amount. Review and add it manually if needed.`,
           'REVIEW',
           {
@@ -293,7 +299,8 @@ export class GmailService {
             subject: emailData.subject,
             receivedAt: emailData.receivedAt,
             ingestionTest: emailData.isTest,
-            transportSender: emailData.transportSender
+            transportSender: emailData.transportSender,
+            transactionDirection: direction
           }
         );
         return { needsUserReview: false, notificationOnly: true };

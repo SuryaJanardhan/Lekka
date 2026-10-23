@@ -86,9 +86,9 @@ export class PushService {
       const sum = async (start: Date, end: Date) => {
         const [row] = await EmailModel.aggregate([
           { $match: { receivedAt: { $gte: start, $lt: end } } },
-          { $project: { amount: { $convert: { input: '$parsedJson.detectedAmount', to: 'double', onError: 0, onNull: 0 } } } },
+          { $project: { direction: { $ifNull: ['$parsedJson.transactionDirection', 'DEBIT'] }, amount: { $convert: { input: '$parsedJson.detectedAmount', to: 'double', onError: 0, onNull: 0 } } } },
           { $match: { amount: { $gt: 0 } } },
-          { $group: { _id: null, spend: { $sum: '$amount' }, count: { $sum: 1 } } }
+          { $group: { _id: null, spend: { $sum: { $cond: [{ $eq: ['$direction', 'CREDIT'] }, 0, '$amount'] } }, credits: { $sum: { $cond: [{ $eq: ['$direction', 'CREDIT'] }, '$amount', 0] } }, count: { $sum: { $cond: [{ $eq: ['$direction', 'CREDIT'] }, 0, 1] } } } }
         ]);
         return row || { spend: 0, count: 0 };
       };
@@ -99,7 +99,7 @@ export class PushService {
       if (entryExample) {
         const label = String(entryExample.parsedJson?.merchantName || entryExample.subject).slice(0, 55);
         const amount = Number(entryExample.parsedJson?.detectedAmount);
-        examples.push(`${label}${amount > 0 ? `: INR ${amount.toLocaleString('en-IN')}` : ''}`);
+        examples.push(`${entryExample.parsedJson?.transactionDirection === 'CREDIT' ? 'Credit: ' : ''}${label}${amount > 0 ? `: INR ${amount.toLocaleString('en-IN')}` : ''}`);
       }
       if (emailExample) examples.push(`${String(emailExample.metadata?.sender || 'Email').slice(0, 40)}: ${String(emailExample.metadata?.subject || emailExample.title).slice(0, 55)} (amount missing)`);
       const { title, message } = digestText(period.report, {

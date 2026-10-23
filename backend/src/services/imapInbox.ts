@@ -44,6 +44,7 @@ export async function scanImapInbox(settings: InboxSettings, savedCursor?: Inbox
       const mailbox = client.mailbox;
       const key = createHash('sha256').update(JSON.stringify({
         user: settings.user.toLowerCase(), folder: 'INBOX', validity: String(mailbox.uidValidity),
+        transactionPolicy: 'debit-credit-v2',
         senders: [...settings.selectedSenders].map(s => s.toLowerCase()).sort(),
         forwarders: [...settings.trustedForwarders].map(s => s.toLowerCase()).sort(),
         testRecipient: settings.testRecipient, scanLimit: settings.scanLimit

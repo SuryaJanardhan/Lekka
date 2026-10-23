@@ -54,7 +54,9 @@ export class ChatService {
             subject: e.subject,
             amount: e.parsedJson?.detectedAmount || 0,
             category: (e.categoryId as any)?.name || 'General',
-            paymentMode: e.parsedJson?.paymentMode || 'ONLINE',
+            paymentMode: e.parsedJson?.paymentMode && e.parsedJson.paymentMode !== 'ONLINE' ? e.parsedJson.paymentMode : 'UPI',
+            direction: e.parsedJson?.transactionDirection || 'DEBIT',
+            notes: e.parsedJson?.notes || '',
             date: e.receivedAt
           }));
         }
@@ -75,6 +77,7 @@ export class ChatService {
             sender: e.sender,
             subject: e.subject,
             amount: e.parsedJson?.detectedAmount || 0,
+            direction: e.parsedJson?.transactionDirection || 'DEBIT',
             category: (e.categoryId as any)?.name || 'General',
             date: e.receivedAt
           }));
@@ -90,7 +93,10 @@ export class ChatService {
             cashSpend: cash,
             friendPaidSpend: friend,
             onlineSpend: total - cash - friend,
-            totalTransactions: report.summary.totalEmails,
+            totalCredits: report.summary.totalCredits,
+            netAmount: report.summary.netAmount,
+            categories: report.categoryBreakdown,
+            totalTransactions: report.summary.totalTransactions,
             period: report.period
           };
         }

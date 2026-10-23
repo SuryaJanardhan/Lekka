@@ -28,6 +28,7 @@ export interface DigestTotals {
   emailReviews: number;
   examples: string[];
   includeWeek: boolean;
+  credits?: number;
 }
 
 export function digestText(report: DigestReport, totals: DigestTotals, now = new Date()) {
@@ -44,6 +45,7 @@ export function digestText(report: DigestReport, totals: DigestTotals, now = new
   const title = report === 'monthly' ? `Your ${month} spending` : 'Your weekly spending';
   const period = report === 'monthly' ? 'this month' : 'this week';
   const parts = [`Recorded ${period}: ${money(totals.spend)} across ${totals.count} ${totals.count === 1 ? 'expense' : 'expenses'}.`];
+  if (totals.credits) parts.push(`Credits received: ${money(totals.credits)}.`);
   if (report === 'weekly') parts.push(`This month: ${money(totals.monthSpend)}.`);
   if (report === 'monthly' && totals.includeWeek) parts.push(`This week: ${money(totals.weekSpend)}.`);
   if (totals.pending) parts.push(`${totals.pending} ${totals.pending === 1 ? 'item still needs' : 'items still need'} review.`);
