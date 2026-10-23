@@ -24,7 +24,8 @@ test('refund policy text does not turn a completed purchase into a credit', () =
 test('learned categories always include exact sender and merchant or exact subject', () => {
   assert.deepEqual(learningConditions('BANK@example.com', 'Payment received', 'Shop', 'Paid INR 25 to Shop'), [
     { field: 'sender', operator: 'equals', value: 'bank@example.com' },
-    { field: 'body', operator: 'contains', value: 'Shop' }
+    { field: 'body', operator: 'contains', value: 'Shop' },
+    { field: 'direction', operator: 'equals', value: 'DEBIT' }
   ]);
   assert.deepEqual(learningConditions('bank@example.com', 'Receipt 123', 'Invented', 'No merchant here')[1],
     { field: 'subject', operator: 'equals', value: 'Receipt 123' });

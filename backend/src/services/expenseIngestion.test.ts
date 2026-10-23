@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { GmailService } from './gmailService';
 import { GroqService } from './groqService';
@@ -9,18 +9,25 @@ import { CategoryModel } from '../models/Category';
 import { Types } from 'mongoose';
 
 const classify = Reflect.get(GmailService, 'classifyAndStoreEmail').bind(GmailService);
+beforeEach(t => { if ('mock' in t) t.mock.method(GroqService, 'summarizeTransaction', async () => 'Payment made for daily needs'); });
 function mail(body: string) {
   return { messageId: 'test-only', sender: 'bank@example.com', subject: 'Bank update', rawTextBody: body,
     parsedJson: { detectedAmount: 200 }, receivedAt: new Date(), isTest: true, transportSender: 'bank@example.com' };
 }
 
-test('credit with a parsed amount never creates an expense or calls AI', async (t) => {
-  const ai = t.mock.method(GroqService, 'extractFinancialFields', async () => { throw new Error('Unexpected AI'); });
-  const store = t.mock.method(EmailModel, 'create', async () => { throw new Error('Unexpected expense'); });
+test('a confirmed credit is stored separately and enters the same category review flow', async (t) => {
+  t.mock.method(GroqService, 'extractFinancialFields', async () => ({ transactionDirection: 'CREDIT', detectedAmount: 200 }));
+  t.mock.method(RuleEngine, 'evaluateEmail', async () => null);
+  t.mock.method(GroqService, 'classifyEmailContent', async () => ({ categoryName: 'Food', confidenceScore: 0.9, reasoning: 'Refund' }));
+  t.mock.method(CategoryModel, 'findOne', async () => ({ _id: new Types.ObjectId() }));
+  let saved: any;
+  t.mock.method(EmailModel, 'create', async (entry: any) => { saved = entry; });
   const result = await classify(mail('INR 200 credited to your account'));
-  assert.equal(result.ignoredCredit, true);
-  assert.equal(ai.mock.callCount(), 0);
-  assert.equal(store.mock.callCount(), 0);
+  assert.equal(result.direction, 'CREDIT');
+  assert.equal(result.needsUserReview, true);
+  assert.equal(saved.parsedJson.transactionDirection, 'CREDIT');
+  assert.equal(saved.parsedJson.paymentMode, 'UPI');
+  assert.equal(saved.parsedJson.notes.split(/\s+/).length, 5);
 });
 test('unpaid invoice amount goes to review when AI cannot confirm a debit', async (t) => {
   t.mock.method(GroqService, 'extractFinancialFields', async () => null);

@@ -20,3 +20,10 @@ test('all parallel Groq tool calls receive a tool response before the final comp
   const result = await ChatService.processChatMessage({ sessionId: 'parallel-regression', userMessage: 'Show categories and totals' });
   assert.equal(result.reply, 'Complete ledger answer.');
 });
+
+test('provider failures are errors, not successful fake assistant replies', async t => {
+  const previous = Reflect.get(ChatService, 'groqClient');
+  t.after(() => Reflect.set(ChatService, 'groqClient', previous));
+  Reflect.set(ChatService, 'groqClient', { chat: { completions: { create: async () => { throw { status: 429 }; } } } });
+  await assert.rejects(() => ChatService.processChatMessage({ sessionId: 'rate-limit', userMessage: 'Hello' }), /rate limit/);
+});
