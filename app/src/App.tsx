@@ -36,6 +36,7 @@ import { CategorySettings } from './CategorySettings';
 import { CategoryPicker } from './CategoryPicker';
 import { SnapshotCache, SyncMetadata } from './cacheStore';
 import { DataSync } from './dataSync';
+import { RulesPanel } from './RulesPanel';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
@@ -146,13 +147,6 @@ export function App() {
     notes: ''
   });
 
-  const [rule, setRule] = useState({
-    field: 'subject',
-    operator: 'contains',
-    value: '',
-    categoryId: '',
-    customCategoryName: ''
-  });
 
   const [pinForm, setPinForm] = useState({ current: '', next: '', confirm: '' });
 
@@ -238,7 +232,6 @@ export function App() {
     setSelectedEntry(previous => previous ? snapshot.entries.find(entry => entry._id === previous._id) || null : null);
     setLastSyncedAt(snapshot.generatedAt);
     setManual((prev) => ({ ...prev, categoryId: snapshot.categories.some(c => c._id === prev.categoryId) ? prev.categoryId : snapshot.categories[0]?._id || '' }));
-    setRule((prev) => ({ ...prev, categoryId: snapshot.categories.some(c => c._id === prev.categoryId) ? prev.categoryId : snapshot.categories[0]?._id || '' }));
   };
 
   const refresh = async (force = true, quiet = false): Promise<boolean> => {
@@ -539,21 +532,10 @@ export function App() {
   };
 
 
-  const saveRule = async (event: React.FormEvent) => {
-    event.preventDefault();
-    try {
-      const payload: Record<string, any> = {
-        conditions: [{ field: rule.field, operator: rule.operator, value: rule.value }],
-        priority: 10
-      };
-      if (rule.customCategoryName.trim()) payload.customCategoryName = rule.customCategoryName.trim();
-      else payload.categoryId = rule.categoryId;
-      await api.createRule(payload);
-      setRule((prev) => ({ ...prev, value: '', customCategoryName: '' }));
-      await afterWrite('Rule saved');
-    } catch (error: any) {
-      showToast(error.message || 'Rule save failed');
-    }
+  const saveRule = async (payload: Record<string, unknown>, id?: string) => {
+    if (id) await api.updateRule(id, payload);
+    else await api.createRule(payload);
+    await afterWrite(id ? 'Rule updated' : 'Rule saved');
   };
 
   const deleteRule = async (id: string) => {
@@ -877,29 +859,7 @@ export function App() {
           </section>
         )}
 
-        {tab === 'rules' && (
-          <section className="stack">
-            <h2>Rules</h2>
-            <form className="form-card" onSubmit={saveRule}>
-              <div className="two-col">
-                <label>Field<select value={rule.field} onChange={(event) => setRule({ ...rule, field: event.target.value })}><option value="sender">Sender</option><option value="subject">Subject</option><option value="body">Body</option></select></label>
-                <label>Match<select value={rule.operator} onChange={(event) => setRule({ ...rule, operator: event.target.value })}><option value="contains">Contains</option><option value="equals">Equals</option><option value="startsWith">Starts with</option><option value="regex">Regex</option></select></label>
-              </div>
-              <label>Value<input value={rule.value} onChange={(event) => setRule({ ...rule, value: event.target.value })} placeholder="Swiggy, Amazon, rent" required /></label>
-              <label>Category<select value={rule.categoryId} onChange={(event) => setRule({ ...rule, categoryId: event.target.value })}>{categories.filter((c) => c._id !== 'all').map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select></label>
-              <label>New category<input value={rule.customCategoryName} onChange={(event) => setRule({ ...rule, customCategoryName: event.target.value })} placeholder="Optional" /></label>
-              <button className="primary-button" type="submit">Save rule</button>
-            </form>
-            <div className="list">
-              {rules.map((item) => (
-                <article className="rule-row" key={item._id}>
-                  <div><strong>{item.categoryId?.name || 'Category'}</strong><span>{item.conditions.map((condition) => `${condition.field} ${condition.operator} ${condition.value}`).join(' and ')}</span></div>
-                  <button className="icon-button danger" onClick={() => deleteRule(item._id)}><Trash2 size={16} /></button>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
+        {tab === 'rules' && <RulesPanel rules={rules} categories={categories.filter(category => category._id !== 'all')} onSave={saveRule} onDelete={deleteRule} />}
 
         {tab === 'settings' && (
           <section className="stack">

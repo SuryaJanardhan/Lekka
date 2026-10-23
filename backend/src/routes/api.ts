@@ -38,6 +38,7 @@ router.patch('/categories/:id', CategoryController.renameCategory);
 // Rule routes
 router.get('/rules', RuleController.getRules);
 router.post('/rules', RuleController.createRule);
+router.patch('/rules/:id', RuleController.updateRule);
 router.delete('/rules/:id', RuleController.deleteRule);
 
 // Analytics routes
