@@ -18,7 +18,8 @@ export class EmailController {
       const emails = await LedgerService.listEntries({
         categoryId: categoryId as string | undefined,
         needsReview: needsReview === 'true',
-        search: search as string | undefined
+        search: search as string | undefined,
+        includeCredits: req.query.includeCredits === 'true'
       });
 
       res.json({ success: true, count: emails.length, data: emails });

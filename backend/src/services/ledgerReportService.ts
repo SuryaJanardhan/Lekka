@@ -1,5 +1,7 @@
 import { PipelineStage } from 'mongoose';
 import { EmailModel } from '../models/Email';
+import { CategoryModel } from '../models/Category';
+import { categoryColors } from './categoryColors';
 
 export interface LedgerReportRange {
   startDate?: string;
@@ -32,6 +34,7 @@ function parseRange(input: LedgerReportRange) {
 
 const amountStage: PipelineStage.AddFields = {
   $addFields: {
+    reportDirection: { $ifNull: ['$parsedJson.transactionDirection', 'DEBIT'] },
     reportAmount: {
       $convert: {
         input: '$parsedJson.detectedAmount',
@@ -57,6 +60,8 @@ export class LedgerReportService {
     const { start, end } = parseRange(input);
 
     const periodBase = [amountStage, periodMatch(start, end)];
+    const debit = { $cond: [{ $eq: ['$reportDirection', 'CREDIT'] }, 0, '$reportAmount'] };
+    const credit = { $cond: [{ $eq: ['$reportDirection', 'CREDIT'] }, '$reportAmount', 0] };
 
     const [
       totals,
@@ -73,14 +78,16 @@ export class LedgerReportService {
         {
           $group: {
             _id: null,
-            totalEmails: { $sum: 1 },
-            totalFinancialAmount: { $sum: '$reportAmount' },
-            averageAmount: { $avg: '$reportAmount' }
+            totalTransactions: { $sum: 1 },
+            totalEmails: { $sum: { $cond: [{ $eq: ['$reportDirection', 'CREDIT'] }, 0, 1] } },
+            creditCount: { $sum: { $cond: [{ $eq: ['$reportDirection', 'CREDIT'] }, 1, 0] } },
+            totalFinancialAmount: { $sum: debit },
+            totalCredits: { $sum: credit }
           }
         }
       ]),
       EmailModel.aggregate([
-        ...periodBase,
+        ...periodBase, { $match: { reportDirection: { $ne: 'CREDIT' } } },
         {
           $group: {
             _id: '$categorySource',
@@ -94,7 +101,8 @@ export class LedgerReportService {
           $group: {
             _id: '$categoryId',
             count: { $sum: 1 },
-            totalAmount: { $sum: '$reportAmount' }
+            totalAmount: { $sum: debit },
+            creditAmount: { $sum: credit }
           }
         },
         {
@@ -111,7 +119,8 @@ export class LedgerReportService {
             categoryName: { $ifNull: ['$category.name', 'Unassigned'] },
             colorCode: { $ifNull: ['$category.colorCode', '#9CA3AF'] },
             count: 1,
-            totalAmount: 1
+            totalAmount: 1,
+            creditAmount: 1
           }
         },
         { $sort: { totalAmount: -1 } }
@@ -120,8 +129,9 @@ export class LedgerReportService {
         ...periodBase,
         {
           $group: {
-            _id: { $ifNull: ['$parsedJson.paymentMode', 'ONLINE'] },
-            totalAmount: { $sum: '$reportAmount' },
+            _id: { $cond: [{ $in: [{ $ifNull: ['$parsedJson.paymentMode', 'UPI'] }, ['ONLINE', '']] }, 'UPI', { $ifNull: ['$parsedJson.paymentMode', 'UPI'] }] },
+            totalAmount: { $sum: debit },
+            creditAmount: { $sum: credit },
             count: { $sum: 1 }
           }
         },
@@ -132,7 +142,7 @@ export class LedgerReportService {
         {
           $group: {
             _id: { $dateToString: { format: '%Y-%m-%d', date: '$receivedAt' } },
-            totalAmount: { $sum: '$reportAmount' },
+            totalAmount: { $sum: debit }, creditAmount: { $sum: credit },
             count: { $sum: 1 }
           }
         },
@@ -152,7 +162,7 @@ export class LedgerReportService {
         {
           $group: {
             _id: { $dateToString: { format: '%Y-%m', date: '$receivedAt' } },
-            totalAmount: { $sum: '$reportAmount' },
+            totalAmount: { $sum: debit }, creditAmount: { $sum: credit },
             count: { $sum: 1 }
           }
         },
@@ -161,7 +171,7 @@ export class LedgerReportService {
       EmailModel.aggregate([
         amountStage,
         { $match: { reportAmount: { $gt: 0 } } },
-        { $group: { _id: { $dateToString: { format: '%Y', date: '$receivedAt' } }, totalAmount: { $sum: '$reportAmount' }, count: { $sum: 1 } } },
+        { $group: { _id: { $dateToString: { format: '%Y', date: '$receivedAt' } }, totalAmount: { $sum: debit }, creditAmount: { $sum: credit }, count: { $sum: 1 } } },
         { $sort: { _id: 1 } }
       ]),
       EmailModel.countDocuments({
@@ -170,7 +180,16 @@ export class LedgerReportService {
       })
     ]);
 
-    const total = totals[0] || { totalEmails: 0, totalFinancialAmount: 0, averageAmount: 0 };
+    const total = totals[0] || { totalEmails: 0, totalFinancialAmount: 0, totalCredits: 0, creditCount: 0, totalTransactions: 0 };
+    const dbCategories = await CategoryModel.find({}).sort({ name: 1 }).lean();
+    const colors = categoryColors(dbCategories);
+    const fullBreakdown = dbCategories.map(category => {
+      const row = categoryBreakdown.find(item => String(item._id) === String(category._id));
+      return { _id: category._id, categoryName: category.name, colorCode: colors.get(String(category._id)), count: row?.count || 0, totalAmount: row?.totalAmount || 0, creditAmount: row?.creditAmount || 0 };
+    });
+    const unassigned = categoryBreakdown.find(row => !row._id);
+    if (unassigned) fullBreakdown.push({ ...unassigned, categoryName: 'Unassigned', colorCode: '#9ca3af', creditAmount: unassigned.creditAmount || 0 });
+    fullBreakdown.sort((a, b) => b.totalAmount - a.totalAmount || a.categoryName.localeCompare(b.categoryName));
     const sourceCounts = sourceBreakdown.reduce<Record<string, number>>((acc, item) => {
       acc[item._id || 'UNASSIGNED'] = item.count;
       return acc;
@@ -187,7 +206,12 @@ export class LedgerReportService {
         totalEmails: total.totalEmails,
         pendingReviews,
         totalFinancialAmount: total.totalFinancialAmount,
-        averageAmount: total.averageAmount || 0,
+        totalCredits: total.totalCredits || 0,
+        debitCount: total.totalEmails,
+        creditCount: total.creditCount || 0,
+        totalTransactions: total.totalTransactions || total.totalEmails,
+        netAmount: (total.totalCredits || 0) - total.totalFinancialAmount,
+        averageAmount: total.totalEmails ? total.totalFinancialAmount / total.totalEmails : 0,
         sources: {
           rule: sourceCounts.RULE || 0,
           ai: sourceCounts.GROQ_AI || 0,
@@ -195,21 +219,24 @@ export class LedgerReportService {
         },
         aiAccuracyPercentage: total.totalEmails > 0 ? Math.round((automaticCount / total.totalEmails) * 100) : 100
       },
-      categoryBreakdown,
+      categoryBreakdown: fullBreakdown,
       paymentModeBreakdown: paymentModeBreakdown.map((item) => ({
         mode: item._id,
         totalAmount: item.totalAmount,
+        creditAmount: item.creditAmount || 0,
         count: item.count
       })),
       dailyTrend: dailyTrend.map((item) => ({
         date: item._id,
         totalAmount: item.totalAmount,
+        creditAmount: item.creditAmount || 0,
         count: item.count
       })),
-      yearlyTrend: yearlyTrend.map((item) => ({ year: item._id, totalAmount: item.totalAmount, count: item.count })),
+      yearlyTrend: yearlyTrend.map((item) => ({ year: item._id, totalAmount: item.totalAmount, creditAmount: item.creditAmount || 0, count: item.count })),
       monthlyTrend: monthlyTrend.map((item) => ({
         month: item._id,
         totalAmount: item.totalAmount,
+        creditAmount: item.creditAmount || 0,
         count: item.count
       }))
     };
