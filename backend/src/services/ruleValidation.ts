@@ -5,7 +5,8 @@ export function validateConditions(value: unknown): IRuleCondition[] {
   return value.map(condition => {
     if (!condition || !['sender', 'subject', 'body', 'direction'].includes(condition.field) || !['contains', 'equals', 'startsWith', 'regex'].includes(condition.operator) || typeof condition.value !== 'string' || !condition.value.trim() || condition.value.length > 240) throw Object.assign(new Error('Invalid rule condition'), { status: 400 });
     if (condition.operator === 'regex') { try { new RegExp(condition.value, 'i'); } catch { throw Object.assign(new Error('Invalid rule regular expression'), { status: 400 }); } }
-    return { field: condition.field, operator: condition.operator, value: condition.value.trim() };
+    if (condition.field === 'direction' && (condition.operator !== 'equals' || !['DEBIT', 'CREDIT'].includes(condition.value.toUpperCase()))) throw Object.assign(new Error('Direction rules must equal DEBIT or CREDIT'), { status: 400 });
+    return { field: condition.field, operator: condition.operator, value: condition.field === 'direction' ? condition.value.toUpperCase() : condition.value.trim() };
   });
 }
 
