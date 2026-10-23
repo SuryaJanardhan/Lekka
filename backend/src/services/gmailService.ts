@@ -14,6 +14,7 @@ import { ProcessedMailModel } from '../models/ProcessedMail';
 import { admitMail, exactSenderMatch } from './mailAdmission';
 import { InboxCursor, InboxMail, InboxSettings, scanImapInbox } from './imapInbox';
 import { transactionDirection } from './expensePolicy';
+import { fiveWordNote } from './transactionNotes';
 
 export interface IngestionResult {
   totalProcessed: number;
@@ -238,7 +239,7 @@ export class GmailService {
       });
 
       await ProcessedMailModel.updateOne({ messageId: mail.messageId }, {
-        $setOnInsert: { messageId: mail.messageId, outcome: result.ignoredCredit ? 'IGNORED_CREDIT' : result.notificationOnly ? 'REVIEW' : 'EXPENSE', isTest: mail.isTest }
+        $setOnInsert: { messageId: mail.messageId, outcome: result.notificationOnly ? 'REVIEW' : result.direction === 'CREDIT' ? 'CREDIT' : 'EXPENSE', isTest: mail.isTest }
       }, { upsert: true });
 
       if (result.ignoredCredit) {
@@ -269,24 +270,22 @@ export class GmailService {
     receivedAt: Date;
     isTest: boolean;
     transportSender: string;
-  }): Promise<{ needsUserReview: boolean; notificationOnly: boolean; ignoredCredit?: boolean }> {
+  }): Promise<{ needsUserReview: boolean; notificationOnly: boolean; ignoredCredit?: boolean; direction?: string }> {
     let direction = transactionDirection(emailData.subject, emailData.rawTextBody);
-    if (direction === 'CREDIT') return { needsUserReview: false, notificationOnly: false, ignoredCredit: true };
-    if (direction === 'UNKNOWN' || !emailData.parsedJson.detectedAmount) {
+    if (direction === 'CREDIT' || direction === 'UNKNOWN' || !emailData.parsedJson.detectedAmount) {
       const aiFields = await GroqService.extractFinancialFields(
         emailData.sender,
         emailData.subject,
         emailData.rawTextBody
       );
 
-      if (aiFields?.transactionDirection === 'CREDIT') return { needsUserReview: false, notificationOnly: false, ignoredCredit: true };
-      if (aiFields?.transactionDirection === 'DEBIT' && aiFields?.detectedAmount) {
+      if (['DEBIT', 'CREDIT'].includes(aiFields?.transactionDirection) && aiFields?.detectedAmount) {
         emailData.parsedJson = { ...emailData.parsedJson, ...aiFields };
-        direction = 'DEBIT';
+        direction = aiFields.transactionDirection;
       } else {
         await notificationService.addNotification(
           `${emailData.parsedJson.detectedAmount ? 'Expense unclear' : 'Amount missing'}: ${emailData.sender}`,
-          `"${emailData.subject}" from ${emailData.sender} could not be confirmed as a completed debit with an amount. Review and add it manually only if it is an expense.`,
+          `"${emailData.subject}" from ${emailData.sender} could not be confirmed as a completed transaction with an amount. Review and add it manually if needed.`,
           'REVIEW',
           {
             messageId: emailData.messageId,
@@ -301,8 +300,9 @@ export class GmailService {
       }
     }
     emailData.parsedJson.transactionDirection = direction;
+    emailData.parsedJson.paymentMode = 'UPI';
 
-    let categoryId = await RuleEngine.evaluateEmail(emailData.sender, emailData.subject, emailData.rawTextBody);
+    let categoryId = await RuleEngine.evaluateEmail(emailData.sender, emailData.subject, emailData.rawTextBody, direction);
     emailData.parsedJson.ingestionTest = emailData.isTest;
     emailData.parsedJson.transportSender = emailData.transportSender;
     let categorySource: 'RULE' | 'GROQ_AI' | 'USER_MANUAL' | 'UNASSIGNED' = 'RULE';
@@ -313,6 +313,7 @@ export class GmailService {
       needsReview = true;
       const aiResult = await GroqService.classifyEmailContent(emailData.sender, emailData.subject, emailData.rawTextBody);
       if (aiResult.merchantName) emailData.parsedJson.merchantName = aiResult.merchantName;
+      if (aiResult.notes) emailData.parsedJson.notes = aiResult.notes;
       categorySource = 'GROQ_AI';
       confidenceScore = aiResult.confidenceScore;
 
@@ -330,6 +331,8 @@ export class GmailService {
       if (!category) categorySource = 'UNASSIGNED';
     }
 
+    emailData.parsedJson.notes = fiveWordNote(emailData.parsedJson.notes) || await GroqService.summarizeTransaction(emailData.sender, emailData.subject, emailData.rawTextBody);
+    if (emailData.parsedJson.notes) emailData.parsedJson.notesSource = 'AI';
     const entry = await EmailModel.create({
       messageId: emailData.messageId,
       sender: emailData.sender,
@@ -346,6 +349,6 @@ export class GmailService {
     });
     await notificationService.notifyCategoryReview(entry);
 
-    return { needsUserReview: needsReview, notificationOnly: false };
+    return { needsUserReview: needsReview, notificationOnly: false, direction };
   }
 }

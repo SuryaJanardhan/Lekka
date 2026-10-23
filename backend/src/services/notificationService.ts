@@ -15,10 +15,11 @@ export interface NotificationLog {
 }
 
 class NotificationService {
-  public async getNotifications(): Promise<NotificationLog[]> {
+  public async getNotifications(includeCredits = false): Promise<NotificationLog[]> {
+    const flow = includeCredits ? {} : { 'metadata.transactionDirection': { $ne: 'CREDIT' } };
     const [reviews, history] = await Promise.all([
-      NotificationModel.find({ dismissed: { $ne: true }, type: 'REVIEW', read: false }).sort({ createdAt: 1 }).limit(50).lean(),
-      NotificationModel.find({ dismissed: { $ne: true }, $or: [{ type: { $ne: 'REVIEW' } }, { read: true }] }).sort({ createdAt: -1 }).limit(30).lean()
+      NotificationModel.find({ ...flow, dismissed: { $ne: true }, type: 'REVIEW', read: false }).sort({ createdAt: 1 }).limit(50).lean(),
+      NotificationModel.find({ ...flow, dismissed: { $ne: true }, $or: [{ type: { $ne: 'REVIEW' } }, { read: true }] }).sort({ createdAt: -1 }).limit(30).lean()
     ]);
     const notifications = [...reviews, ...history];
     return notifications.map((notification) => ({
@@ -87,7 +88,8 @@ class NotificationService {
     const amount = Number(entry.parsedJson?.detectedAmount);
     try {
       return await this.addNotification('Category review needed', `${merchant}${amount > 0 ? `: INR ${amount.toLocaleString('en-IN')}` : ''}. Choose or confirm a category in Review.`, 'REVIEW', {
-        reviewKind: 'category', entryId, messageId: entry.messageId, sender: entry.sender, subject: entry.subject
+        reviewKind: 'category', entryId, messageId: entry.messageId, sender: entry.sender, subject: entry.subject,
+        transactionDirection: entry.parsedJson?.transactionDirection || 'DEBIT'
       });
     } catch (error: any) {
       if (error.code !== 11000) throw error;
@@ -118,10 +120,10 @@ export class NotificationController {
     }
   };
 
-  public static getNotifications = async (_req: Request, res: Response): Promise<void> => {
+  public static getNotifications = async (req: Request, res: Response): Promise<void> => {
     res.json({
       success: true,
-      data: await notificationService.getNotifications()
+      data: await notificationService.getNotifications(req.query.includeCredits === 'true')
     });
   };
 

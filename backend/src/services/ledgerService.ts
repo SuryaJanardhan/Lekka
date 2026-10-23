@@ -23,8 +23,10 @@ export class LedgerService {
     needsReview?: boolean;
     search?: string;
     limit?: number;
+    includeCredits?: boolean;
   }) {
     const query: any = {};
+    if (!params.includeCredits) query['parsedJson.transactionDirection'] = { $ne: 'CREDIT' };
 
     if (params.categoryId) query.categoryId = params.categoryId;
     if (params.needsReview) query.needsUserReview = true;
@@ -137,6 +139,7 @@ export class LedgerService {
       paymentMode,
       friendName: input.friendName || '',
       notes: input.notes || '',
+      notesSource: 'USER',
       merchantName: input.title.trim()
     };
     email.categoryId = input.categoryId ? new Types.ObjectId(input.categoryId) : undefined;
