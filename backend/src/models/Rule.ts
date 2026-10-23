@@ -1,7 +1,7 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
 export interface IRuleCondition {
-  field: 'sender' | 'subject' | 'body';
+  field: 'sender' | 'subject' | 'body' | 'direction';
   operator: 'contains' | 'equals' | 'startsWith' | 'regex';
   value: string;
 }
@@ -19,7 +19,7 @@ export interface IRule extends Document {
 
 const RuleConditionSchema = new Schema<IRuleCondition>(
   {
-    field: { type: String, enum: ['sender', 'subject', 'body'], required: true },
+    field: { type: String, enum: ['sender', 'subject', 'body', 'direction'], required: true },
     operator: { type: String, enum: ['contains', 'equals', 'startsWith', 'regex'], required: true },
     value: { type: String, required: true, trim: true }
   },

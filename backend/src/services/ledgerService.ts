@@ -12,6 +12,7 @@ export interface CreateManualLedgerEntryInput {
   notes?: string;
   date?: string;
   friendName?: string;
+  transactionDirection?: 'DEBIT' | 'CREDIT';
 }
 
 export interface UpdateLedgerEntryInput extends CreateManualLedgerEntryInput {}
@@ -53,7 +54,9 @@ export class LedgerService {
       throw new Error('Amount must be a positive number');
     }
 
-    const paymentMode = input.paymentMode || 'CASH';
+    const paymentMode = input.paymentMode || 'UPI';
+    const direction = input.transactionDirection || 'DEBIT';
+    if (!['DEBIT', 'CREDIT'].includes(direction)) throw new Error('Invalid transaction direction');
     const transactionDate = input.date ? new Date(input.date) : new Date();
     if (Number.isNaN(transactionDate.getTime())) {
       throw new Error('Transaction date is invalid');
@@ -72,6 +75,7 @@ export class LedgerService {
       rawTextBody: input.notes || `Manual transaction entry: ${input.title.trim()}`,
       parsedJson: {
         detectedAmount: amount,
+        transactionDirection: direction,
         currency: 'INR',
         paymentMode,
         friendName: input.friendName || '',
@@ -113,12 +117,14 @@ export class LedgerService {
       throw new Error('Transaction date is invalid');
     }
 
-    const paymentMode = input.paymentMode || 'CASH';
+    const paymentMode = input.paymentMode || (email.parsedJson?.paymentMode && email.parsedJson.paymentMode !== 'ONLINE' ? email.parsedJson.paymentMode : 'UPI');
+    const direction = input.transactionDirection || email.parsedJson?.transactionDirection || 'DEBIT';
+    if (!['DEBIT', 'CREDIT'].includes(direction)) throw new Error('Invalid transaction direction');
     const learningSubject = email.parsedJson?.categoryLearningSubject || email.subject;
     const learningMerchant = email.parsedJson?.categoryLearningMerchant || email.parsedJson?.merchantName;
     const learningBody = email.rawTextBody;
     const learnCategory = !email.parsedJson?.isManual && input.categoryId &&
-      (email.needsUserReview || String(email.categoryId || '') !== input.categoryId);
+      (email.needsUserReview || String(email.categoryId || '') !== input.categoryId || direction !== (email.parsedJson?.transactionDirection || 'DEBIT'));
     email.subject = input.title.trim();
     if (email.parsedJson?.isManual) email.rawTextBody = input.notes || `Manual transaction entry: ${input.title.trim()}`;
     email.parsedJson = {
@@ -126,6 +132,7 @@ export class LedgerService {
       categoryLearningSubject: learningSubject,
       categoryLearningMerchant: learningMerchant,
       detectedAmount: amount,
+      transactionDirection: direction,
       currency: 'INR',
       paymentMode,
       friendName: input.friendName || '',
@@ -141,7 +148,7 @@ export class LedgerService {
     await email.save();
     if (learnCategory) {
       await RuleEngine.autoGenerateRuleFromUserFeedback(learningSubject, email.sender,
-        new Types.ObjectId(input.categoryId), learningMerchant, learningBody);
+        new Types.ObjectId(input.categoryId), learningMerchant, learningBody, direction);
     }
     await notificationService.resolveCategoryReview(String(email._id));
     return EmailModel.findById(email._id).populate('categoryId');
@@ -192,7 +199,8 @@ export class LedgerService {
         email.sender,
         new Types.ObjectId(params.categoryId),
         email.parsedJson?.categoryLearningMerchant || email.parsedJson?.merchantName,
-        email.rawTextBody
+        email.rawTextBody,
+        email.parsedJson?.transactionDirection || 'DEBIT'
       );
     }
     await notificationService.resolveCategoryReview(String(email._id));
