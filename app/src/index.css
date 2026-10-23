@@ -281,7 +281,7 @@ textarea { resize: vertical; min-height: 74px; }
 }
 .chart-card > div:first-child { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
 .chart-card > div:first-child span { color: var(--muted); font-size: 0.78rem; font-weight: 800; }
-.chart-grid { display: grid; grid-template-columns: 118px 1fr; gap: 12px; align-items: center; }
+.chart-grid { display: grid; grid-template-columns: 118px 1fr; gap: 12px; align-items: start; }
 .donut { width: 118px; height: 118px; transform: rotate(-90deg); }
 .donut circle { transition: stroke-dasharray 0.3s ease; }
 .donut text {

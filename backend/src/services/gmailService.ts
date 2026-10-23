@@ -15,6 +15,7 @@ import { admitMail, exactSenderMatch } from './mailAdmission';
 import { InboxCursor, InboxMail, InboxSettings, scanImapInbox } from './imapInbox';
 import { transactionDirection } from './expensePolicy';
 import { fiveWordNote } from './transactionNotes';
+import { LedgerService } from './ledgerService';
 
 export interface IngestionResult {
   totalProcessed: number;
@@ -97,6 +98,7 @@ export class GmailService {
         result = page.result;
         nextOAuthCursor = page.cursor;
       }
+      if (source === 'automatic') await LedgerService.backfillNotes(10).catch(() => console.error('[Notes] Scheduled enrichment deferred'));
       const saved = await SyncStateModel.updateOne(
         { key: 'gmail', ingestionLockToken: token },
         { $set: { lastSuccessfulSyncAt: new Date(), ...(nextCursor ? { imapCursor: nextCursor } : {}), ...(nextOAuthCursor ? { oauthCursor: nextOAuthCursor } : {}) }, $unset: { lastError: '' } }

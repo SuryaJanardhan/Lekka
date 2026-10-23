@@ -853,9 +853,9 @@ export function App() {
               categories={(analytics?.categoryBreakdown || []).map((item) => ({ label: item.categoryName, value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount || 0, color: item.colorCode }))}
               modes={(analytics?.paymentModeBreakdown || []).map((item, index) => ({ label: item.mode, value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))}
             />
-            <ReportBars title="Daily trend" rows={(analytics?.dailyTrend || []).map((item, index) => ({ label: item.date.slice(8), value: item.totalAmount, color: ['#14b8a6', '#2563eb', '#f59e0b', '#ef4444'][index % 4] }))} />
-            <ReportBars title="Monthly trend" rows={(analytics?.monthlyTrend || []).map((item, index) => ({ label: new Date(Number(item.month.slice(0, 4)), Number(item.month.slice(5, 7)) - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }), value: item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))} />
-            <ReportBars title="Yearly trend" rows={(analytics?.yearlyTrend || []).map((item, index) => ({ label: item.year, value: item.totalAmount, color: ['#2563eb', '#0f766e', '#b45309', '#dc2626'][index % 4] }))} />
+            <ReportBars title="Daily trend" rows={(analytics?.dailyTrend || []).map((item, index) => ({ label: item.date.slice(8), value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#14b8a6', '#2563eb', '#f59e0b', '#ef4444'][index % 4] }))} />
+            <ReportBars title="Monthly trend" rows={(analytics?.monthlyTrend || []).map((item, index) => ({ label: new Date(Number(item.month.slice(0, 4)), Number(item.month.slice(5, 7)) - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }), value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))} />
+            <ReportBars title="Yearly trend" rows={(analytics?.yearlyTrend || []).map((item, index) => ({ label: item.year, value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#2563eb', '#0f766e', '#b45309', '#dc2626'][index % 4] }))} />
           </section>
         )}
 
@@ -1068,7 +1068,7 @@ function VisualSummary({
         </div>
       </div>
       <div className="mode-chart">
-        {modes.length === 0 ? <div className="empty-state small">No payment mode data yet</div> : modes.map((mode) => (
+        {modes.every(mode => !mode.value) ? <div className="empty-state small">No payment mode data yet</div> : modes.filter(mode => mode.value > 0).map((mode) => (
           <div key={mode.label}>
             <strong>{mode.label.replace('_', ' ')}</strong>
             <span>{money(mode.value)}</span>
