@@ -47,3 +47,18 @@ test('an active ingestion never exposes a half-imported snapshot', async t => {
   await assert.rejects(() => SnapshotService.snapshot(), /Ingestion is still running/);
   assert.equal(entries.mock.callCount(), 0);
 });
+
+test('legacy snapshots exclude credits while credit-aware clients can request both flows', async t => {
+  t.mock.method(DataRevisionModel, 'findById', () => query({ version: 7 }));
+  t.mock.method(SyncStateModel, 'findOne', () => query(null));
+  t.mock.method(CategoryModel, 'find', () => query([]));
+  t.mock.method(RuleModel, 'find', () => query([]));
+  t.mock.method(LedgerReportService, 'getDashboardStats', async () => ({ summary: {} }));
+  t.mock.method(notificationService, 'getNotifications', async () => []);
+  const filters: any[] = [];
+  t.mock.method(EmailModel, 'find', (filter: any) => { filters.push(filter); return query([]); });
+  await SnapshotService.snapshot();
+  await SnapshotService.snapshot(true);
+  assert.deepEqual(filters[0], { 'parsedJson.transactionDirection': { $ne: 'CREDIT' } });
+  assert.deepEqual(filters[1], {});
+});

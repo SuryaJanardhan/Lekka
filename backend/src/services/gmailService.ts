@@ -213,12 +213,15 @@ export class GmailService {
         ProcessedMailModel.findOne({ messageId: mail.messageId }).select('outcome').lean()
       ]);
       if (existing || reviewed || (processed && processed.outcome !== 'IGNORED_CREDIT')) {
+        let existingDirection = 'DEBIT';
         if (existing) {
           const entry = await EmailModel.findById(existing._id);
+          existingDirection = entry?.parsedJson?.transactionDirection || 'DEBIT';
           if (entry) await notificationService.notifyCategoryReview(entry);
         }
-        if (!processed) await ProcessedMailModel.updateOne({ messageId: mail.messageId }, {
-          $setOnInsert: { messageId: mail.messageId, outcome: existing ? 'EXPENSE' : 'REVIEW', isTest: mail.isTest }
+        if (!processed || processed.outcome === 'IGNORED_CREDIT') await ProcessedMailModel.updateOne({ messageId: mail.messageId }, {
+          $setOnInsert: { messageId: mail.messageId },
+          $set: { outcome: existing ? existingDirection === 'CREDIT' ? 'CREDIT' : 'EXPENSE' : 'REVIEW', isTest: mail.isTest }
         }, { upsert: true });
         duplicatesSkipped++;
         processedEmails.push({ messageId: mail.messageId, sender: mail.sender, subject: mail.subject, receivedAt: mail.receivedAt, result: 'already_recorded', isTest: mail.isTest });
