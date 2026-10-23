@@ -19,7 +19,7 @@ export class ChatService {
     if (!this.groqClient) {
       const apiKey = groqApiKey();
       if (apiKey) {
-        this.groqClient = new Groq({ apiKey });
+        this.groqClient = new Groq({ apiKey, timeout: 12000, maxRetries: 0 });
       }
     }
     return this.groqClient;
@@ -142,27 +142,35 @@ export class ChatService {
       }
     }
 
+    const state = params.clientState || {};
+    const compactState = {
+      currentScreen: state.currentScreen, totals: state.totals, period: state.analytics?.period,
+      categories: Array.isArray(state.categories) ? state.categories.map((c: any) => ({ id: c._id, name: c.name })) : [],
+      recentEntries: Array.isArray(state.recentEntries) ? state.recentEntries.slice(0, 10) : [],
+      reviewEntries: Array.isArray(state.reviewEntries) ? state.reviewEntries.slice(0, 8) : [],
+      rules: Array.isArray(state.rules) ? state.rules.slice(0, 12).map((r: any) => ({ category: r.categoryId?.name, conditions: r.conditions })) : [],
+      notifications: Array.isArray(state.notifications) ? state.notifications.slice(0, 5).map((n: any) => ({ title: n.title, message: String(n.message || '').slice(0, 240) })) : []
+    };
     const systemPrompt = `You are Lekka AI, an intelligent personal financial assistant and ledger companion embedded directly in the Lekka Wallet app.
 You have full real-time awareness of the user's financial ledger, email receipts, cash expenditures, friend-paid splits, categorization rules, and database records.
 
 App State Snapshot:
 - Total Transactions Tracked: ${transactionCount || params.clientState?.transactionCount || 0}
 - Current Active Categories: ${categoriesList.join(', ')}
-- Client Context: ${JSON.stringify(params.clientState || {})}
+- Client Context: ${JSON.stringify(compactState)}
 
 Read-Only Tool Access:
 You have a special tool 'query_database' with STRICT READ-ONLY access to search transactions, pull financial summaries, check active rules, and fetch recent receipts. Use this tool whenever the user asks for specific amounts, past payments, category spending, or rule details.
-Never pretend you can delete or mutate records. All your database access is read-only.
+Never pretend you can delete or mutate records. All your database access is read-only. Use tools for complete financial totals; the recent-entry context is only a preview, not the whole ledger. Distinguish incoming credits from outgoing debits; never count credits as spending.
 Keep responses concise, helpful, friendly, and structured. Use INR (₹) for monetary amounts.`;
 
     // Manage conversation history for session
-    let sessionHistory = this.conversationHistory.get(params.sessionId) || [];
-    if (params.history && params.history.length > 0) {
-      sessionHistory = params.history;
-    }
+    const sourceHistory = params.history?.length ? params.history : this.conversationHistory.get(params.sessionId) || [];
+    let sessionHistory: ChatMessage[] = sourceHistory.filter(m => ['user', 'assistant'].includes(m.role) && typeof m.content === 'string' && !m.content.includes('temporary error connecting to Groq')).slice(-8)
+      .map(m => ({ role: m.role, content: m.content.slice(0, 1200) }));
 
     // Append new user message
-    sessionHistory.push({ role: 'user', content: params.userMessage });
+    if (sessionHistory.at(-1)?.role !== 'user' || sessionHistory.at(-1)?.content !== params.userMessage) sessionHistory.push({ role: 'user', content: params.userMessage });
     if (sessionHistory.length > 20) {
       sessionHistory = sessionHistory.slice(-20);
     }
@@ -216,36 +224,35 @@ Keep responses concise, helpful, friendly, and structured. Use INR (₹) for mon
         messages,
         tools,
         tool_choice: 'auto',
-        temperature: 0.3
+        temperature: 0.3,
+        max_tokens: 1024
       });
 
       const choice = firstResponse.choices[0];
       const toolCalls = choice?.message?.tool_calls;
 
       if (toolCalls && toolCalls.length > 0) {
-        const toolCall = toolCalls[0];
-        const args = JSON.parse(toolCall.function.arguments || '{}');
-        const queryResult = await this.executeDatabaseQuery(args, params.clientState);
-
-        // Feed tool response back into conversation
         messages.push(choice.message);
-        messages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          content: JSON.stringify(queryResult)
-        });
+        for (const toolCall of toolCalls) {
+          let queryResult;
+          try {
+            const args = JSON.parse(toolCall.function.arguments || '{}');
+            queryResult = toolCall.function.name === 'query_database' ? await this.executeDatabaseQuery(args, params.clientState) : { error: 'Unsupported read-only tool' };
+          } catch { queryResult = { error: 'Invalid tool arguments' }; }
+          messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(queryResult) });
+        }
 
         const secondResponse = await client.chat.completions.create({
           model: 'qwen/qwen3.8-27b',
           messages,
-          temperature: 0.3
+          temperature: 0.3, max_tokens: 1024
         });
 
         const finalReply = secondResponse.choices[0]?.message?.content || 'Here are the details from your ledger.';
         sessionHistory.push({ role: 'assistant', content: finalReply });
         this.conversationHistory.set(params.sessionId, sessionHistory);
 
-        return { reply: finalReply, toolUsed: toolCall.function.name };
+        return { reply: finalReply, toolUsed: 'query_database' };
       }
 
       const directReply = choice?.message?.content || 'How can I help you manage your Lekka ledger today?';
@@ -254,9 +261,10 @@ Keep responses concise, helpful, friendly, and structured. Use INR (₹) for mon
 
       return { reply: directReply };
     } catch (err: any) {
-      console.error('Chatbot error:', err);
-      const errReply = 'I encountered a temporary error connecting to Groq AI. Please check your backend connection.';
-      return { reply: errReply };
+      const status = Number(err.status) || 0;
+      console.error('[Chat] Provider request failed', { status, code: err.code || err.name });
+      const message = status === 429 ? 'AI rate limit reached. Please try again shortly.' : status === 401 || status === 403 ? 'AI credentials or model access need attention.' : /timeout/i.test(err.name || '') ? 'AI request timed out. Please retry.' : 'AI could not complete this request. Please retry.';
+      throw Object.assign(new Error(message), { status: status === 429 ? 429 : 502 });
     }
   }
 

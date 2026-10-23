@@ -24,8 +24,8 @@ export class ChatController {
         }
       });
     } catch (error: any) {
-      console.error('ChatController error:', error);
-      res.status(500).json({ success: false, error: error.message || 'Internal server error in chatbot' });
+      console.error('[Chat] Request failed', { status: error.status || 500 });
+      res.status(error.status >= 400 && error.status <= 599 ? error.status : 500).json({ success: false, error: error.message || 'AI request failed' });
     }
   }
 

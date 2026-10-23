@@ -36,7 +36,7 @@ export class ApiClient {
     }
 
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    const timeout = window.setTimeout(() => controller.abort(), path === '/api/chat' ? 45000 : 15000);
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
