@@ -25,6 +25,8 @@ export class SystemController {
             lastResult: lastSync ? {
               createdAt: lastSync.createdAt,
               newIngested: lastSync.metadata?.newIngested ?? null,
+              debitsAdded: lastSync.metadata?.debitsAdded ?? null,
+              creditsAdded: lastSync.metadata?.creditsAdded ?? null,
               totalProcessed: lastSync.metadata?.totalProcessed ?? null,
               duplicatesSkipped: lastSync.metadata?.duplicatesSkipped ?? null,
               notificationOnlyCount: lastSync.metadata?.notificationOnlyCount ?? null,

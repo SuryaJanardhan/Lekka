@@ -34,6 +34,16 @@ export interface IngestionResult {
 type IncomingMail = InboxMail;
 
 export class GmailService {
+  public static async recoverIgnoredCredits() {
+    const receipts = await ProcessedMailModel.find({ outcome: 'IGNORED_CREDIT' }).select('messageId').lean();
+    if (!receipts.length) return { recovered: 0, matched: 0 };
+    const ids = new Set(receipts.map(receipt => receipt.messageId));
+    const scan = await scanImapInbox({ ...this.inboxSettings(), processLimit: 300 }, undefined, true);
+    const candidates = scan.mails.filter(mail => ids.has(mail.messageId));
+    const result = await this.processIncomingMails(candidates);
+    return { recovered: result.creditsAdded || 0, matched: candidates.length, reviews: result.needsReviewCount, remainingOutsideInbox: receipts.length - candidates.length };
+  }
+
   private static inboxSettings(): InboxSettings {
     return {
       user: runtimeConfig.gmail.user, password: runtimeConfig.gmail.appPassword,

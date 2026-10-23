@@ -55,6 +55,7 @@ router.get('/export', ExportController.getLLMContextBundle);
 router.get('/ingest', IngestController.triggerManualIngestion);
 router.get('/ingest/preview', IngestController.previewIngestion);
 router.post('/ingest', IngestController.triggerManualIngestion);
+router.post('/ingest/recover-credits', IngestController.recoverCredits);
 
 // Notification & Server Push routes
 router.get('/notifications', NotificationController.getNotifications);
