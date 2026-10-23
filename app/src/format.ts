@@ -31,7 +31,7 @@ export function directionOf(entry: { parsedJson?: Record<string, any> }): 'DEBIT
 
 export function modeOf(entry: { parsedJson?: Record<string, any> }): string {
   const mode = entry.parsedJson?.paymentMode;
-  return mode && mode !== 'ONLINE' ? mode : 'UPI';
+  return ['CASH', 'UPI', 'CARD', 'FRIEND_PAID'].includes(mode) ? mode : 'UPI';
 }
 
 export function categorySource(source: string): string {

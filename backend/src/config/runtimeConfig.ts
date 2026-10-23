@@ -25,7 +25,8 @@ const defaultCorsOrigins = [
   'ionic://localhost',
   'https://localhost',
   'http://localhost',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  'http://localhost:5174'
 ];
 
 export const runtimeConfig = {

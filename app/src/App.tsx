@@ -84,6 +84,8 @@ export function App() {
   const [syncing, setSyncing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
+  const [savingManual, setSavingManual] = useState(false);
+  const manualWriteBusy = useRef(false);
   const [statsDirection, setStatsDirection] = useState<'DEBIT' | 'CREDIT'>('DEBIT');
 
   const [entries, setEntries] = useState<EmailRecord[]>([]);
@@ -475,6 +477,9 @@ export function App() {
 
   const saveManual = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (manualWriteBusy.current) return;
+    manualWriteBusy.current = true;
+    setSavingManual(true);
     try {
       await api.createManualEntry({
         title: manual.title,
@@ -488,10 +493,10 @@ export function App() {
       });
       setManual((prev) => ({ ...prev, title: '', amount: '', friendName: '', notes: '' }));
       setTab('today');
-      await afterWrite('Expense saved', 'Lekka expense', true);
+      await afterWrite(manual.transactionDirection === 'CREDIT' ? 'Credit saved' : 'Expense saved', 'Lekka transaction', true);
     } catch (error: any) {
       showToast(error.message || 'Could not save expense');
-    }
+    } finally { manualWriteBusy.current = false; setSavingManual(false); }
   };
 
   const reassign = async (entry: EmailRecord, categoryId: string) => {
@@ -812,7 +817,7 @@ export function App() {
               <label>Category<select value={manual.categoryId} onChange={(event) => setManual({ ...manual, categoryId: event.target.value })}>{categories.filter((c) => c._id !== 'all').map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select></label>
               <label>Date<input type="date" value={manual.date} onChange={(event) => setManual({ ...manual, date: event.target.value })} /></label>
               <label>Notes<textarea value={manual.notes} onChange={(event) => setManual({ ...manual, notes: event.target.value })} placeholder="Optional" /></label>
-              <button className="primary-button" type="submit">Save {manual.transactionDirection === 'CREDIT' ? 'credit' : 'debit'}</button>
+              <button className="primary-button" type="submit" disabled={savingManual}>{savingManual ? 'Saving...' : `Save ${manual.transactionDirection === 'CREDIT' ? 'credit' : 'debit'}`}</button>
             </form>
           </section>
         )}
@@ -839,10 +844,11 @@ export function App() {
               <Metric label="Net flow" value={money(analytics?.summary.netAmount ?? -(analytics?.summary.totalFinancialAmount || 0))} />
               <Metric label="Today" value={money(periodTotals.today)} />
               <Metric label="Week" value={money(periodTotals.week)} />
-              <Metric label="Month total" value={money(totals.monthTotal)} />
+              <Metric label="Debit entries" value={String(analytics?.summary.debitCount ?? analytics?.summary.totalEmails ?? 0)} />
+              <Metric label="Credit entries" value={String(analytics?.summary.creditCount || 0)} />
               <Metric label="Quarter" value={money(periodTotals.quarter)} />
               <Metric label={`Year ${new Date().getFullYear()}`} value={money(periodTotals.year)} />
-              <Metric label="Avg entry" value={money(analytics?.summary.averageAmount || 0)} />
+              <Metric label="Avg debit" value={money(analytics?.summary.averageAmount || 0)} />
               <Metric label="Auto sorted" value={`${analytics?.summary.aiAccuracyPercentage || 100}%`} />
               <Metric label="Entries" value={String(analytics?.summary.totalTransactions ?? analytics?.summary.totalEmails ?? 0)} />
             </div>

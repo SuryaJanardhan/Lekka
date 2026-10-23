@@ -129,7 +129,7 @@ export class LedgerReportService {
         ...periodBase,
         {
           $group: {
-            _id: { $cond: [{ $in: [{ $ifNull: ['$parsedJson.paymentMode', 'UPI'] }, ['ONLINE', '']] }, 'UPI', { $ifNull: ['$parsedJson.paymentMode', 'UPI'] }] },
+            _id: { $cond: [{ $in: ['$parsedJson.paymentMode', ['CASH', 'UPI', 'CARD', 'FRIEND_PAID']] }, '$parsedJson.paymentMode', 'UPI'] },
             totalAmount: { $sum: debit },
             creditAmount: { $sum: credit },
             count: { $sum: 1 }
