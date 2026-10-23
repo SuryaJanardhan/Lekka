@@ -3,6 +3,8 @@ import { EmailModel } from '../models/Email';
 import { CategoryModel } from '../models/Category';
 import { RuleEngine } from './ruleEngine';
 import { notificationService } from './notificationService';
+import { GroqService } from './groqService';
+import { notesBackfillQuery } from './transactionNotes';
 
 export interface CreateManualLedgerEntryInput {
   title: string;
@@ -18,6 +20,20 @@ export interface CreateManualLedgerEntryInput {
 export interface UpdateLedgerEntryInput extends CreateManualLedgerEntryInput {}
 
 export class LedgerService {
+  public static async backfillNotes(limit = 10) {
+    const filter = notesBackfillQuery();
+    const entries = await EmailModel.find(filter).sort({ _id: 1 }).limit(Math.min(Math.max(limit, 1), 10)).lean();
+    const notes = await GroqService.summarizeBatch(entries);
+    let updated = 0;
+    for (const entry of entries) {
+      const note = notes.get(String(entry._id));
+      if (!note) continue;
+      const result = await EmailModel.updateOne({ _id: entry._id, ...filter }, { $set: { 'parsedJson.notes': note, 'parsedJson.notesSource': 'AI' } });
+      updated += result.modifiedCount;
+    }
+    return { scanned: entries.length, updated, remaining: await EmailModel.countDocuments(filter) };
+  }
+
   public static async listEntries(params: {
     categoryId?: string;
     needsReview?: boolean;

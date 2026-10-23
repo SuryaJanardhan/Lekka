@@ -24,6 +24,7 @@ router.get('/sync/snapshot', SnapshotController.snapshot);
 // Email routes
 router.get('/emails', EmailController.getEmails);
 router.post('/emails/manual', EmailController.createManualTransaction);
+router.post('/emails/notes/backfill', EmailController.backfillNotes);
 router.get('/emails/:id', EmailController.getEmailById);
 router.patch('/emails/:id', EmailController.updateTransaction);
 router.delete('/emails/:id', EmailController.deleteTransaction);

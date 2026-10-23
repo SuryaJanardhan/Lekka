@@ -2,6 +2,11 @@ import { Request, Response } from 'express';
 import { LedgerService } from '../services/ledgerService';
 
 export class EmailController {
+  public static async backfillNotes(req: Request, res: Response) {
+    try { res.json({ success: true, data: await LedgerService.backfillNotes(Number(req.body?.limit) || 10) }); }
+    catch { res.status(502).json({ success: false, error: 'AI notes could not be updated; existing notes were kept' }); }
+  }
+
   public static async requestReview(req: Request, res: Response) {
     try {
       const entry = await LedgerService.requestReview(req.params.emailId);
