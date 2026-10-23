@@ -28,7 +28,7 @@ import {
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { ApiClient } from './api';
 import { Category, DashboardStats, EmailRecord, NotificationItem, Rule, DataSnapshot } from './types';
-import { amountOf, money, moneyExact, shortDate, timeAgo } from './format';
+import { amountOf, money, moneyExact, shortDate, timeAgo, directionOf, modeOf, categorySource } from './format';
 import { LockScreen } from './LockScreen';
 import { ChatMessage, Conversation, loadConversations, saveConversations, newConversationId } from './chatHistory';
 import { startRemotePush, stopRemotePush } from './remotePush';
@@ -62,6 +62,8 @@ export function App() {
   const [pinMood, setPinMood] = useState<'idle' | 'success' | 'error'>('idle');
   const [savedPin, setSavedPin] = useState(() => localStorage.getItem('lekka_app_pin') || '1234');
   const [biometricEnabled, setBiometricEnabled] = useState(() => localStorage.getItem('lekka_biometric_enabled') === 'true');
+  const autoBiometricAttempted = useRef(false);
+  const biometricBusy = useRef(false);
   const [remotePushEnabled, setRemotePushEnabled] = useState(() => localStorage.getItem('lekka_remote_push_enabled') !== 'false');
   const [remotePushStatus, setRemotePushStatus] = useState('Not connected');
   const [tab, setTab] = useState<Tab>('today');
@@ -81,6 +83,7 @@ export function App() {
   const [syncing, setSyncing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
+  const [statsDirection, setStatsDirection] = useState<'DEBIT' | 'CREDIT'>('DEBIT');
 
   const [entries, setEntries] = useState<EmailRecord[]>([]);
   const [categories, setCategories] = useState<Category[]>([defaultCategory]);
@@ -135,7 +138,8 @@ export function App() {
   const [manual, setManual] = useState({
     title: '',
     amount: '',
-    paymentMode: 'CASH' as PaymentMode,
+    paymentMode: 'UPI' as PaymentMode,
+    transactionDirection: 'DEBIT' as 'DEBIT' | 'CREDIT',
     friendName: '',
     categoryId: '',
     date: new Date().toISOString().slice(0, 10),
@@ -153,7 +157,7 @@ export function App() {
   const [pinForm, setPinForm] = useState({ current: '', next: '', confirm: '' });
 
   const api = useMemo(() => new ApiClient({ baseUrl: backendUrl, apiSecret, onDataWrite: () => dataSyncRef.current?.invalidate() }), []);
-  const dataSync = useMemo(() => new DataSync(api, new SnapshotCache(backendUrl), new SyncMetadata(`lekka-sync-v1:${backendUrl}`)), [api]);
+  const dataSync = useMemo(() => new DataSync(api, new SnapshotCache(`${backendUrl}:flows-v2`), new SyncMetadata(`lekka-sync-v2:${backendUrl}`)), [api]);
   dataSyncRef.current = dataSync;
 
   const logEvent = (label: string, detail = '') => {
@@ -328,6 +332,7 @@ export function App() {
     const startQuarter = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1).getTime();
     const startYear = new Date(now.getFullYear(), 0, 1).getTime();
     const sumFrom = (start: number) => entries.reduce((sum, entry) => {
+      if (directionOf(entry) === 'CREDIT') return sum;
       const date = new Date(entry.receivedAt).getTime();
       return date >= start ? sum + amountOf(entry) : sum;
     }, 0);
@@ -381,6 +386,8 @@ export function App() {
       showToast('Enable biometrics in Settings after unlocking once');
       return;
     }
+    if (biometricBusy.current) return;
+    biometricBusy.current = true;
     try {
       const check = await BiometricAuth.checkBiometry();
       if (!check.isAvailable) {
@@ -407,8 +414,14 @@ export function App() {
     } catch (error) {
       if (error instanceof BiometryError && error.code === BiometryErrorType.userCancel) return;
       showToast(error instanceof Error ? error.message : 'Biometric unlock failed');
-    }
+    } finally { biometricBusy.current = false; }
   };
+
+  useEffect(() => {
+    if (isUnlocked || !biometricEnabled || autoBiometricAttempted.current || !Capacitor.isNativePlatform()) return;
+    autoBiometricAttempted.current = true;
+    void biometricUnlock();
+  }, [isUnlocked, biometricEnabled]);
 
   const verifyBiometricForSettings = async () => {
     if (!Capacitor.isNativePlatform()) {
@@ -474,6 +487,7 @@ export function App() {
         title: manual.title,
         amount: Number(manual.amount),
         paymentMode: manual.paymentMode,
+        transactionDirection: manual.transactionDirection,
         friendName: manual.paymentMode === 'FRIEND_PAID' ? manual.friendName : '',
         categoryId: manual.categoryId,
         date: manual.date,
@@ -645,7 +659,8 @@ export function App() {
             sender: entry.sender,
             amount: amountOf(entry),
             category: entry.categoryId?.name || 'Unassigned',
-            paymentMode: entry.parsedJson?.paymentMode || entry.categorySource,
+            paymentMode: modeOf(entry),
+            transactionDirection: directionOf(entry),
             date: entry.receivedAt,
             needsReview: entry.needsUserReview
           })),
@@ -799,8 +814,9 @@ export function App() {
 
         {tab === 'add' && (
           <section className="stack">
-            <h2>Add expense</h2>
+            <h2>Add transaction</h2>
             <form className="form-card" onSubmit={saveManual}>
+              <div className="mode-grid flow-toggle">{(['DEBIT', 'CREDIT'] as const).map(direction => <button key={direction} type="button" className={manual.transactionDirection === direction ? 'selected' : ''} onClick={() => setManual({ ...manual, transactionDirection: direction })}>{direction === 'DEBIT' ? 'Debit' : 'Credit'}</button>)}</div>
               <label>Amount<input inputMode="decimal" value={manual.amount} onChange={(event) => setManual({ ...manual, amount: event.target.value })} placeholder="0" required /></label>
               <label>Merchant or title<input value={manual.title} onChange={(event) => setManual({ ...manual, title: event.target.value })} placeholder="Tea, grocery, cab" required /></label>
               <div className="mode-grid">
@@ -814,7 +830,7 @@ export function App() {
               <label>Category<select value={manual.categoryId} onChange={(event) => setManual({ ...manual, categoryId: event.target.value })}>{categories.filter((c) => c._id !== 'all').map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select></label>
               <label>Date<input type="date" value={manual.date} onChange={(event) => setManual({ ...manual, date: event.target.value })} /></label>
               <label>Notes<textarea value={manual.notes} onChange={(event) => setManual({ ...manual, notes: event.target.value })} placeholder="Optional" /></label>
-              <button className="primary-button" type="submit">Save expense</button>
+              <button className="primary-button" type="submit">Save {manual.transactionDirection === 'CREDIT' ? 'credit' : 'debit'}</button>
             </form>
           </section>
         )}
@@ -836,6 +852,9 @@ export function App() {
         {tab === 'insights' && (
           <section className="stack">
             <div className="stat-grid">
+              <Metric label="Debits this month" value={money(analytics?.summary.totalFinancialAmount)} />
+              <Metric label="Credits this month" value={money(analytics?.summary.totalCredits)} />
+              <Metric label="Net flow" value={money(analytics?.summary.netAmount ?? -(analytics?.summary.totalFinancialAmount || 0))} />
               <Metric label="Today" value={money(periodTotals.today)} />
               <Metric label="Week" value={money(periodTotals.week)} />
               <Metric label="Month total" value={money(totals.monthTotal)} />
@@ -843,12 +862,14 @@ export function App() {
               <Metric label={`Year ${new Date().getFullYear()}`} value={money(periodTotals.year)} />
               <Metric label="Avg entry" value={money(analytics?.summary.averageAmount || 0)} />
               <Metric label="Auto sorted" value={`${analytics?.summary.aiAccuracyPercentage || 100}%`} />
-              <Metric label="Entries" value={String(analytics?.summary.totalEmails || 0)} />
+              <Metric label="Entries" value={String(analytics?.summary.totalTransactions ?? analytics?.summary.totalEmails ?? 0)} />
             </div>
+            <div className="mode-grid flow-toggle">{(['DEBIT', 'CREDIT'] as const).map(direction => <button key={direction} type="button" className={statsDirection === direction ? 'selected' : ''} onClick={() => setStatsDirection(direction)}>{direction === 'DEBIT' ? 'Debits' : 'Credits'}</button>)}</div>
             <VisualSummary
-              total={analytics?.summary.totalFinancialAmount || 0}
-              categories={(analytics?.categoryBreakdown || []).map((item) => ({ label: item.categoryName, value: item.totalAmount || item.count, color: item.colorCode }))}
-              modes={(analytics?.paymentModeBreakdown || []).map((item, index) => ({ label: item.mode, value: item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))}
+              title={statsDirection === 'CREDIT' ? 'Credit map' : 'Spend map'}
+              total={statsDirection === 'CREDIT' ? analytics?.summary.totalCredits || 0 : analytics?.summary.totalFinancialAmount || 0}
+              categories={(analytics?.categoryBreakdown || []).map((item) => ({ label: item.categoryName, value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount || 0, color: item.colorCode }))}
+              modes={(analytics?.paymentModeBreakdown || []).map((item, index) => ({ label: item.mode, value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))}
             />
             <ReportBars title="Daily trend" rows={(analytics?.dailyTrend || []).map((item, index) => ({ label: item.date.slice(8), value: item.totalAmount, color: ['#14b8a6', '#2563eb', '#f59e0b', '#ef4444'][index % 4] }))} />
             <ReportBars title="Monthly trend" rows={(analytics?.monthlyTrend || []).map((item, index) => ({ label: new Date(Number(item.month.slice(0, 4)), Number(item.month.slice(5, 7)) - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }), value: item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))} />
@@ -1015,10 +1036,10 @@ function EntryList({ entries, onSelect, empty }: { entries: EmailRecord[]; onSel
           <div className="entry-main">
             <strong>{entry.parsedJson?.merchantName || entry.subject}</strong>
             <span>{entry.sender} · {shortDate(entry.receivedAt)}</span>
-            <small>{entry.categoryId?.name || 'Unassigned'} · {entry.parsedJson?.paymentMode || 'Mode not set'}</small>
+            <small>{entry.categoryId?.name || 'Unassigned'} · {modeOf(entry)} · {directionOf(entry) === 'CREDIT' ? 'Credit' : 'Debit'}</small>
           </div>
           <div className="entry-side">
-            <strong>{moneyExact(amountOf(entry))}</strong>
+            <strong className={directionOf(entry) === 'CREDIT' ? 'amount-credit' : ''}>{directionOf(entry) === 'CREDIT' ? '+' : '-'}{moneyExact(amountOf(entry))}</strong>
             {entry.needsUserReview && <span className="pill warning">Review</span>}
           </div>
         </article>
@@ -1046,22 +1067,24 @@ function NotificationList({ notifications, onRead }: { notifications: Notificati
 }
 
 function VisualSummary({
+  title,
   total,
   categories,
   modes
 }: {
+  title: string;
   total: number;
   categories: Array<{ label: string; value: number; color?: string }>;
   modes: Array<{ label: string; value: number; color?: string }>;
 }) {
-  const slices = categories.length ? categories.slice(0, 5) : [{ label: 'No data', value: 1, color: '#cbd5e1' }];
+  const slices = categories.filter(category => category.value > 0);
   const sum = Math.max(1, slices.reduce((value, row) => value + row.value, 0));
   let cursor = 0;
 
   return (
     <section className="chart-card">
       <div>
-        <h2>Spend map</h2>
+        <h2>{title}</h2>
         <span>{money(total)} this month</span>
       </div>
       <div className="chart-grid">
@@ -1078,8 +1101,8 @@ function VisualSummary({
           <text x="21" y="25" textAnchor="middle">cats</text>
         </svg>
         <div className="legend-list">
-          {categories.slice(0, 5).map((row) => (
-            <span key={row.label}><i style={{ background: row.color || '#0f766e' }} />{row.label}<b>{money(row.value)}</b></span>
+          {categories.map((row) => (
+            <span key={row.label}><i style={{ background: row.color || '#0f766e' }} /><span>{row.label}</span><b>{money(row.value)}</b></span>
           ))}
           {categories.length === 0 && <span><i />No category spend yet<b>{money(0)}</b></span>}
         </div>
@@ -1134,10 +1157,11 @@ function EntrySheet({
   const [form, setForm] = useState({
     title: entry.parsedJson?.merchantName || entry.subject,
     amount: String(amountOf(entry) || ''),
-    paymentMode: (entry.parsedJson?.paymentMode || 'CASH') as PaymentMode,
+    paymentMode: modeOf(entry) as PaymentMode,
+    transactionDirection: directionOf(entry),
     friendName: entry.parsedJson?.friendName || '',
     date: new Date(entry.receivedAt).toISOString().slice(0, 10),
-    notes: entry.parsedJson?.notes || entry.rawTextBody || ''
+    notes: entry.parsedJson?.notes || ''
   });
 
   const submit = (event: React.FormEvent) => {
@@ -1154,14 +1178,16 @@ function EntrySheet({
           <button className="icon-button" onClick={onClose}>×</button>
         </div>
         <h2>{entry.parsedJson?.merchantName || entry.subject}</h2>
-        <p>{entry.rawTextBody || 'No receipt text stored.'}</p>
+        {entry.parsedJson?.notes && <p className="transaction-notes">{entry.parsedJson.notes}</p>}
+        {entry.rawTextBody && <details className="receipt-details"><summary>Original receipt</summary><p>{entry.rawTextBody}</p></details>}
         {!editing ? (
           <>
             <div className="detail-grid">
               <Metric label="Sender" value={entry.sender} />
               <Metric label="Date" value={shortDate(entry.receivedAt)} />
-              <Metric label="Mode" value={entry.parsedJson?.paymentMode || entry.categorySource} />
-              <Metric label="Source" value={entry.categorySource} />
+              <Metric label="Mode" value={modeOf(entry)} />
+              <Metric label="Category source" value={categorySource(entry.categorySource)} />
+              <Metric label="Direction" value={directionOf(entry) === 'CREDIT' ? 'Credit' : 'Debit'} />
             </div>
             <CategoryPicker categories={categories} value={categoryId} onChange={setCategoryId} onCreate={onCreateCategory} />
             <button className="primary-button" disabled={!categoryId} onClick={() => onReassign(categoryId)}><Tag size={18} /> Save category</button>
@@ -1172,6 +1198,7 @@ function EntrySheet({
           </>
         ) : (
           <form className="pin-form sheet-form" onSubmit={submit}>
+            <label>Direction<select value={form.transactionDirection} onChange={event => setForm({ ...form, transactionDirection: event.target.value as 'DEBIT' | 'CREDIT' })}><option value="DEBIT">Debit</option><option value="CREDIT">Credit</option></select></label>
             <label>Amount<input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} required /></label>
             <label>Title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
             <label>Mode<select value={form.paymentMode} onChange={(event) => setForm({ ...form, paymentMode: event.target.value as PaymentMode })}>{(['CASH', 'UPI', 'CARD', 'FRIEND_PAID'] as PaymentMode[]).map((mode) => <option key={mode} value={mode}>{mode.replace('_', ' ')}</option>)}</select></label>

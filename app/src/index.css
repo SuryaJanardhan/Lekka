@@ -293,7 +293,7 @@ textarea { resize: vertical; min-height: 74px; }
 }
 .donut text + text { fill: var(--muted); font-size: 0.18rem; }
 .legend-list { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.legend-list span {
+.legend-list > span {
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 7px;
@@ -304,6 +304,11 @@ textarea { resize: vertical; min-height: 74px; }
 }
 .legend-list i { width: 9px; height: 9px; border-radius: 999px; background: #cbd5e1; }
 .legend-list b { color: var(--ink); font-size: 0.78rem; }
+.legend-list > span > span { min-width: 0; overflow-wrap: anywhere; }
+.flow-toggle { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.amount-credit { color: var(--green); }
+.receipt-details { margin-bottom: 12px; }
+.receipt-details summary { color: var(--muted); font-size: .8rem; cursor: pointer; }
 .mode-chart {
   height: 112px;
   display: grid;

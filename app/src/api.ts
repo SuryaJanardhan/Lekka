@@ -80,7 +80,7 @@ export class ApiClient {
     return this.request<Category[]>('/api/categories');
   }
 
-  getSnapshot() { return this.request<DataSnapshot>('/api/sync/snapshot'); }
+  getSnapshot() { return this.request<DataSnapshot>('/api/sync/snapshot?includeCredits=true'); }
   getSyncStatus() { return this.request<SyncStatus>('/api/sync/status'); }
 
   renameCategory(id: string, name: string) {
@@ -93,6 +93,7 @@ export class ApiClient {
 
   getEntries(params: { needsReview?: boolean; search?: string; categoryId?: string } = {}) {
     const query = new URLSearchParams();
+    query.set('includeCredits', 'true');
     if (params.needsReview) query.set('needsReview', 'true');
     if (params.search) query.set('search', params.search);
     if (params.categoryId) query.set('categoryId', params.categoryId);
@@ -109,7 +110,7 @@ export class ApiClient {
   }
 
   getNotifications() {
-    return this.request<NotificationItem[]>('/api/notifications');
+    return this.request<NotificationItem[]>('/api/notifications?includeCredits=true');
   }
 
   markNotificationRead(id: string) {
@@ -172,6 +173,10 @@ export class ApiClient {
 
   deleteRule(id: string) {
     return this.request(`/api/rules/${id}`, { method: 'DELETE' });
+  }
+
+  updateRule(id: string, payload: Record<string, any>) {
+    return this.request<Rule>(`/api/rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
   }
 
   sendChatMessage(payload: { sessionId: string; message: string; clientState?: Record<string, any>; history?: Array<{ role: string; content: string }> }) {

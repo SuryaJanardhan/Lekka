@@ -44,7 +44,7 @@ export interface Rule {
   _id: string;
   categoryId: Category;
   conditions: Array<{
-    field: 'sender' | 'subject' | 'body';
+    field: 'sender' | 'subject' | 'body' | 'direction';
     operator: 'contains' | 'equals' | 'startsWith' | 'regex';
     value: string;
   }>;
@@ -70,6 +70,11 @@ export interface DashboardStats {
     totalEmails: number;
     pendingReviews: number;
     totalFinancialAmount: number;
+    totalCredits?: number;
+    debitCount?: number;
+    creditCount?: number;
+    totalTransactions?: number;
+    netAmount?: number;
     averageAmount?: number;
     sources: {
       rule: number;
@@ -83,21 +88,25 @@ export interface DashboardStats {
     colorCode: string;
     count: number;
     totalAmount?: number;
+    creditAmount?: number;
   }>;
   paymentModeBreakdown?: Array<{
     mode: string;
     totalAmount: number;
+    creditAmount?: number;
     count: number;
   }>;
   dailyTrend?: Array<{
     date: string;
     totalAmount: number;
+    creditAmount?: number;
     count: number;
   }>;
   monthlyTrend?: Array<{
     month: string;
     totalAmount: number;
+    creditAmount?: number;
     count: number;
   }>;
-  yearlyTrend?: Array<{ year: string; totalAmount: number; count: number }>;
+  yearlyTrend?: Array<{ year: string; totalAmount: number; creditAmount?: number; count: number }>;
 }

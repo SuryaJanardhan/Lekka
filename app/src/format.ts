@@ -24,3 +24,16 @@ export function timeAgo(value?: string) {
 export function amountOf(entry: { parsedJson?: Record<string, any> }) {
   return Number(entry.parsedJson?.detectedAmount || 0);
 }
+
+export function directionOf(entry: { parsedJson?: Record<string, any> }): 'DEBIT' | 'CREDIT' {
+  return entry.parsedJson?.transactionDirection === 'CREDIT' ? 'CREDIT' : 'DEBIT';
+}
+
+export function modeOf(entry: { parsedJson?: Record<string, any> }): string {
+  const mode = entry.parsedJson?.paymentMode;
+  return mode && mode !== 'ONLINE' ? mode : 'UPI';
+}
+
+export function categorySource(source: string): string {
+  return ({ USER_MANUAL: 'You', RULE: 'Saved rule', GROQ_AI: 'AI suggestion', UNASSIGNED: 'Needs category' } as Record<string, string>)[source] || source;
+}
