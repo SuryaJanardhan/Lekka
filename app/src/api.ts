@@ -1,4 +1,5 @@
 import { Category, DashboardStats, EmailRecord, NotificationItem, Rule, DataSnapshot, SyncStatus } from './types';
+import type { OperationCommand, OperationReceipt } from './outboxTypes';
 
 export interface ApiClientConfig {
   baseUrl: string;
@@ -55,7 +56,7 @@ export class ApiClient {
 
     const json = await response.json().catch(() => ({}));
     if (!response.ok || json.success === false) {
-      throw new Error(json.error || json.message || `Request failed: ${response.status}`);
+      throw Object.assign(new Error(json.error || json.message || `Request failed: ${response.status}`), { status: response.status });
     }
 
     return json.data ?? json;
@@ -190,5 +191,15 @@ export class ApiClient {
 
   async exportContext() {
     return this.request<Record<string, any>>('/api/export');
+  }
+
+  submitOperation(command: OperationCommand) {
+    return this.request<OperationReceipt>('/api/operations', { method: 'POST', body: JSON.stringify(command) });
+  }
+  operationStatuses(ids: string[]) {
+    return this.request<OperationReceipt[]>(`/api/operations?ids=${encodeURIComponent(ids.join(','))}`);
+  }
+  resolveOperation(id: string, action: 'retry' | 'discard', command: OperationCommand) {
+    return this.request<OperationReceipt>(`/api/operations/${encodeURIComponent(id)}/resolve`, { method: 'POST', body: JSON.stringify({ action, command }) });
   }
 }

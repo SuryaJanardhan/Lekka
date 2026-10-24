@@ -40,6 +40,11 @@ import { RulesPanel } from './RulesPanel';
 import { Dropdown } from './Dropdown';
 import { SpendingSummary } from './SpendingSummary';
 import { receiptPreview } from './receiptPreview';
+import { Outbox } from './outbox';
+import { OutboxStore } from './outboxStore';
+import { projectOutbox } from './outboxProjection';
+import { entityId, LocalOperation, OperationKind } from './outboxTypes';
+import { OutboxPanel } from './OutboxPanel';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
@@ -92,6 +97,10 @@ export function App() {
   const [statsDirection, setStatsDirection] = useState<'DEBIT' | 'CREDIT'>('DEBIT');
 
   const [entries, setEntries] = useState<EmailRecord[]>([]);
+  const [confirmedEntries, setConfirmedEntries] = useState<EmailRecord[]>([]);
+  const [pendingOperations, setPendingOperations] = useState<LocalOperation[]>([]);
+  const operationsRef = useRef<LocalOperation[]>([]);
+  const confirmedSnapshot = useRef<DataSnapshot | null>(null);
   const [categories, setCategories] = useState<Category[]>([defaultCategory]);
   const [analytics, setAnalytics] = useState<DashboardStats | null>(null);
   const [rules, setRules] = useState<Rule[]>([]);
@@ -229,6 +238,9 @@ export function App() {
   };
 
   const applySnapshot = (snapshot: DataSnapshot) => {
+    confirmedSnapshot.current = snapshot;
+    setConfirmedEntries(snapshot.entries);
+    snapshot = projectOutbox(snapshot, operationsRef.current);
     setCategories([defaultCategory, ...snapshot.categories]);
     setEntries(snapshot.entries);
     setAnalytics(snapshot.analytics);
@@ -239,12 +251,29 @@ export function App() {
     setManual((prev) => ({ ...prev, categoryId: snapshot.categories.some(c => c._id === prev.categoryId) ? prev.categoryId : snapshot.categories[0]?._id || '' }));
   };
 
+  const outbox: Outbox = useMemo(() => new Outbox(new OutboxStore(backendUrl), api, operations => {
+    operationsRef.current = operations;
+    setPendingOperations(operations);
+    if (confirmedSnapshot.current) applySnapshot(confirmedSnapshot.current);
+  }, async () => {
+    dataSync.invalidate();
+    const result = await dataSync.synchronize(true);
+    applySnapshot(result.snapshot);
+    await outbox.reconcile(result.snapshot.revision);
+  }, message => logEvent('pending sync', message)), [api, dataSync]);
+
+  const queueChange = async (kind: OperationKind, targetId: string, payload: Record<string, any>, base?: any) => {
+    await outbox.enqueue(kind, targetId, payload, base);
+    setToast('Saved on device. Pending sync.');
+  };
+
   const refresh = async (force = true, quiet = false): Promise<boolean> => {
     setLoading(true);
     try {
       if (force) dataSync.invalidate();
       const result = await dataSync.synchronize(force);
       applySnapshot(result.snapshot);
+      await outbox.reconcile(result.snapshot.revision);
       setConnection(result.network ? 'online' : 'cached');
       if (!result.persisted) showToast('Server data loaded; local cache could not be saved');
       logEvent(result.network ? 'server sync ok' : 'saved data loaded', `${result.snapshot.entries.length} entries`);
@@ -282,6 +311,15 @@ export function App() {
   }, [isUnlocked, dataSync]);
 
   useEffect(() => () => clearTimeout(pushRefreshTimer.current), []);
+
+  useEffect(() => {
+    if (!isUnlocked) return;
+    void outbox.start().catch(error => showToast(error.message || 'Could not read pending changes'));
+    const resume = () => { void outbox.pump(); };
+    window.addEventListener('online', resume);
+    document.addEventListener('visibilitychange', resume);
+    return () => { outbox.stop(); window.removeEventListener('online', resume); document.removeEventListener('visibilitychange', resume); };
+  }, [isUnlocked, outbox]);
 
   useEffect(() => {
     if (!isUnlocked || !remotePushEnabled) return;
@@ -329,7 +367,7 @@ export function App() {
     const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const startQuarter = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1).getTime();
     const startYear = new Date(now.getFullYear(), 0, 1).getTime();
-    const sumFrom = (start: number) => entries.reduce((sum, entry) => {
+    const sumFrom = (start: number) => confirmedEntries.reduce((sum, entry) => {
       if (directionOf(entry) === 'CREDIT') return sum;
       const date = new Date(entry.receivedAt).getTime();
       return date >= start ? sum + amountOf(entry) : sum;
@@ -341,7 +379,7 @@ export function App() {
       quarter: sumFrom(startQuarter),
       year: sumFrom(startYear)
     };
-  }, [entries]);
+  }, [confirmedEntries]);
 
   const filteredEntries = entries.filter((entry) => {
     const matchesSearch = search.trim()
@@ -484,7 +522,7 @@ export function App() {
     manualWriteBusy.current = true;
     setSavingManual(true);
     try {
-      await api.createManualEntry({
+      await queueChange('entry.create', entityId(), {
         title: manual.title,
         amount: Number(manual.amount),
         paymentMode: manual.paymentMode,
@@ -496,7 +534,6 @@ export function App() {
       });
       setManual((prev) => ({ ...prev, title: '', amount: '', friendName: '', notes: '' }));
       setTab('today');
-      await afterWrite(manual.transactionDirection === 'CREDIT' ? 'Credit saved' : 'Expense saved', 'Lekka transaction', true);
     } catch (error: any) {
       showToast(error.message || 'Could not save expense');
     } finally { manualWriteBusy.current = false; setSavingManual(false); }
@@ -504,26 +541,23 @@ export function App() {
 
   const reassign = async (entry: EmailRecord, categoryId: string) => {
     try {
-      await api.assignCategory(entry._id, categoryId);
+      await queueChange('entry.category', entry._id, { categoryId, createAutoRule: true }, entry);
       setSelectedEntry(null);
-      await afterWrite('Category updated and rule trained');
     } catch (error: any) {
       showToast(error.message || 'Category update failed');
     }
   };
 
   const createCategory = async (name: string) => {
-    const category = await api.createCategory(name);
-    setCategories((previous) => [...previous.filter((item) => item._id !== category._id), category].sort((a, b) => a.name.localeCompare(b.name)));
-    await afterWrite('Category created');
+    const category: Category = { _id: entityId(), name: name.trim(), slug: name.trim().toLowerCase(), colorCode: '#0f766e', createdSource: 'USER' };
+    await queueChange('category.create', category._id, { name: category.name, colorCode: category.colorCode });
     return category;
   };
 
   const updateEntry = async (entry: EmailRecord, payload: Record<string, any>) => {
     try {
-      await api.updateEntry(entry._id, payload);
+      await queueChange('entry.update', entry._id, payload, entry);
       setSelectedEntry(null);
-      await afterWrite('Transaction updated');
     } catch (error: any) {
       showToast(error.message || 'Transaction update failed');
     }
@@ -531,9 +565,8 @@ export function App() {
 
   const deleteEntry = async (entry: EmailRecord) => {
     try {
-      await api.deleteEntry(entry._id);
+      await queueChange('entry.delete', entry._id, {}, entry);
       setSelectedEntry(null);
-      await afterWrite('Transaction deleted');
     } catch (error: any) {
       showToast(error.message || 'Transaction delete failed');
     }
@@ -541,15 +574,16 @@ export function App() {
 
 
   const saveRule = async (payload: Record<string, unknown>, id?: string) => {
-    if (id) await api.updateRule(id, payload);
-    else await api.createRule(payload);
-    await afterWrite(id ? 'Rule updated' : 'Rule saved');
+    if (typeof payload.customCategoryName === 'string' && payload.customCategoryName.trim()) {
+      const category = await createCategory(payload.customCategoryName);
+      payload = { ...payload, categoryId: category._id }; delete payload.customCategoryName;
+    }
+    await queueChange(id ? 'rule.update' : 'rule.create', id || entityId(), payload, id ? rules.find(row => row._id === id) : undefined);
   };
 
   const deleteRule = async (id: string) => {
     try {
-      await api.deleteRule(id);
-      await afterWrite('Rule deleted');
+      await queueChange('rule.delete', id, {}, rules.find(row => row._id === id));
     } catch (error: any) {
       showToast(error.message || 'Rule delete failed');
     }
@@ -557,9 +591,7 @@ export function App() {
 
   const markNotificationReviewed = async (id: string) => {
     try {
-      await api.markNotificationRead(id);
-      setNotifications((previous) => previous.map((item) => item.id === id ? { ...item, read: true } : item));
-      await afterWrite('Marked reviewed');
+      await queueChange('notification.read', id, {});
     } catch (error: any) {
       showToast(error.message || 'Could not mark reviewed');
     }
@@ -569,11 +601,10 @@ export function App() {
     if (clearingNotifications) return;
     setClearingNotifications(true);
     try {
-      await api.clearNotifications();
+      await queueChange('notification.clear', entityId(), { before: confirmedSnapshot.current?.generatedAt || new Date().toISOString() });
       setNotificationExit(true);
       await new Promise((resolve) => setTimeout(resolve, 220));
       setNotifications([]);
-      await afterWrite('Notifications cleared');
     } catch (error: any) {
       showToast(error.message || 'Could not clear notifications');
     } finally {
@@ -727,6 +758,9 @@ export function App() {
       </header>
 
       {toast && <div className="toast"><span>{toast}</span><button onClick={() => setToast('')}>×</button></div>}
+      {pendingOperations.length > 0 && <button className={`sync-banner ${pendingOperations.some(op => op.state === 'BLOCKED') ? 'needs-attention' : ''}`} type="button" onClick={() => setTab('settings')}>
+        {pendingOperations.some(op => op.state === 'BLOCKED') ? 'Sync needs attention' : `${pendingOperations.length} pending ${pendingOperations.length === 1 ? 'change' : 'changes'}`}<ChevronRight size={16} />
+      </button>}
 
       <main className={`content ${tab === 'ai' ? 'chat-content' : ''}`}>
         {tab === 'today' && (
@@ -874,8 +908,11 @@ export function App() {
           <section className="stack">
             <h2>Settings</h2>
             <CategorySettings categories={categories.filter((category) => category._id !== 'all')} onCreate={createCategory} onRename={async (id, name) => {
-              await api.renameCategory(id, name);
-              await afterWrite('Category renamed');
+              await queueChange('category.rename', id, { name }, categories.find(row => row._id === id));
+            }} />
+            <OutboxPanel operations={pendingOperations} onResolve={async (id, action) => {
+              try { await outbox.resolve(id, action); }
+              catch (error: any) { setToast(error.message || 'Could not resolve pending change'); }
             }} />
             <div className="form-card">
               <div className="settings-row">
@@ -1010,6 +1047,7 @@ function EntryList({ entries, onSelect, empty }: { entries: EmailRecord[]; onSel
           <div className="entry-side">
             <strong className={directionOf(entry) === 'CREDIT' ? 'amount-credit' : ''}>{directionOf(entry) === 'CREDIT' ? '+' : '-'}{moneyExact(amountOf(entry))}</strong>
             {entry.needsUserReview && <span className="pill warning">Review</span>}
+            {entry.syncState && <span className={`pill ${entry.syncState === 'blocked' ? 'sync-blocked' : 'sync-pending'}`}>{entry.syncState === 'blocked' ? 'Needs attention' : entry.pendingDelete ? 'Delete pending' : 'Pending sync'}</span>}
           </div>
         </article>
       ))}
@@ -1095,6 +1133,7 @@ function EntrySheet({
         </div>
         <h2>{entry.parsedJson?.merchantName || entry.subject}</h2>
         {entry.parsedJson?.notes && <p className="transaction-notes">{entry.parsedJson.notes}</p>}
+        {entry.syncState && <p className="entry-sync-state">{entry.syncState === 'blocked' ? 'Change needs attention' : entry.pendingDelete ? 'Deletion pending' : 'Pending sync'}</p>}
         {receiptContext && !editing && <section className="receipt-preview" aria-label="Receipt context">
           <h3>Receipt details</h3>
           <p>{receiptContext}</p>
@@ -1108,10 +1147,10 @@ function EntrySheet({
               <Metric label="Direction" value={directionOf(entry) === 'CREDIT' ? 'Credit' : 'Debit'} />
             </div>
             <CategoryPicker categories={categories} value={categoryId} onChange={setCategoryId} onCreate={onCreateCategory} />
-            <button className="primary-button" disabled={!categoryId} onClick={() => onReassign(categoryId)}><Tag size={18} /> Save category</button>
+            <button className="primary-button" disabled={!categoryId || entry.pendingDelete || entry.syncState === 'blocked'} onClick={() => onReassign(categoryId)}><Tag size={18} /> Save category</button>
             <div className="two-col">
-              <button className="secondary-button" onClick={() => setEditing(true)}>Edit</button>
-              <button className="secondary-button danger-text" onClick={onDelete}><Trash2 size={17} /> Delete</button>
+              <button className="secondary-button" disabled={entry.pendingDelete || entry.syncState === 'blocked'} onClick={() => setEditing(true)}>Edit</button>
+              <button className="secondary-button danger-text" disabled={entry.pendingDelete || entry.syncState === 'blocked'} onClick={onDelete}><Trash2 size={17} /> Delete</button>
             </div>
           </>
         ) : (
