@@ -621,6 +621,10 @@ textarea { resize: vertical; min-height: 74px; }
 .entry-detail-head span { display: block; color: var(--muted); font-size: 0.78rem; font-weight: 800; }
 .entry-detail-head strong { font-size: 1.55rem; }
 .sheet p { color: var(--muted); font-size: 0.86rem; line-height: 1.5; }
+.receipt-preview { padding: 10px 0 10px 12px; border-left: 3px solid #a7dacf; }
+.receipt-preview h3 { margin: 0 0 7px; font-size: .76rem; color: var(--green); }
+.receipt-preview p { white-space: pre-line; overflow-wrap: anywhere; color: var(--ink); font-size: .82rem; line-height: 1.6; }
+.receipt-preview > span { display: block; margin-top: 8px; font-size: .7rem; color: var(--muted); overflow-wrap: anywhere; }
 .sheet-form { border-top: 0; padding: 0; }
 
 .spin { animation: spin 1s linear infinite; }

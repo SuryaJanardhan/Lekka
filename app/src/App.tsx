@@ -39,6 +39,7 @@ import { DataSync } from './dataSync';
 import { RulesPanel } from './RulesPanel';
 import { Dropdown } from './Dropdown';
 import { SpendingSummary } from './SpendingSummary';
+import { receiptPreview } from './receiptPreview';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
@@ -1068,6 +1069,7 @@ function EntrySheet({
 }) {
   const [categoryId, setCategoryId] = useState(entry.categoryId?._id || '');
   const [editing, setEditing] = useState(false);
+  const receiptContext = entry.parsedJson?.isManual ? '' : receiptPreview(entry.rawTextBody || '');
   const [form, setForm] = useState({
     title: entry.parsedJson?.merchantName || entry.subject,
     amount: String(amountOf(entry) || ''),
@@ -1093,6 +1095,11 @@ function EntrySheet({
         </div>
         <h2>{entry.parsedJson?.merchantName || entry.subject}</h2>
         {entry.parsedJson?.notes && <p className="transaction-notes">{entry.parsedJson.notes}</p>}
+        {receiptContext && !editing && <section className="receipt-preview" aria-label="Receipt context">
+          <h3>Receipt details</h3>
+          <p>{receiptContext}</p>
+          <span>{entry.sender}</span>
+        </section>}
         {!editing ? (
           <>
             <div className="detail-grid">
