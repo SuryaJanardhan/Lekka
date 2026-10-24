@@ -19,7 +19,7 @@ function credentials() {
 export class PushService {
   static isConfigured() { return Boolean(credentials()); }
 
-  static async send(title: string, body: string, key: string, screen: string) {
+  static async send(title: string, body: string, key: string, screen: string, progress?: { skipInstallationIds?: string[]; onDelivered?: (installationId: string) => Promise<void> }) {
     const account = credentials();
     if (!account) throw new Error('Firebase Cloud Messaging is not configured');
     const devices = await PushDeviceModel.find({}).lean();
@@ -31,6 +31,8 @@ export class PushService {
     const tag = createHash('sha256').update(key).digest('hex').slice(0, 32);
     // Notification payloads let Android display a message while the app is closed.
     for (const device of devices) {
+      if (progress?.skipInstallationIds?.includes(device.installationId)) continue;
+      let delivered = false;
       try {
         await client.request({
           url: `https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`,
@@ -43,12 +45,14 @@ export class PushService {
           } }
         });
         sent++;
+        delivered = true;
       } catch (error: any) {
         failed++;
         const code = error.response?.data?.error?.details?.find((detail: any) => detail.errorCode)?.errorCode;
         if (code === 'UNREGISTERED') await PushDeviceModel.deleteOne({ _id: device._id, token: device.token });
         console.error('[Push] Delivery failed:', code || error.response?.status || 'transport error');
       }
+      if (delivered) await progress?.onDelivered?.(device.installationId);
     }
     return { sent, failed, registered: devices.length };
   }

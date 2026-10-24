@@ -15,11 +15,23 @@ export function operationStatus(op: StoredOperation) {
 export class OperationService {
   private static async deliverConfirmation(op: StoredOperation) {
     if (!op.notificationDue) return;
-    if (PushService.isConfigured()) {
-      const result = await PushService.send('Lekka transaction saved', `${op.payload.title}: INR ${op.payload.amount}. ${op.payload.transactionDirection === 'CREDIT' ? 'Credit' : 'Debit'} saved.`, `operation-${op._id}`, 'ledger');
-      if (result.failed) throw new Error('Transaction saved; confirmation delivery will retry');
+    const owner = randomUUID();
+    const claimed = await OperationModel.findOneAndUpdate({ _id: op._id, state: 'DONE', notificationDue: true,
+      $or: [{ notificationLeaseUntil: { $exists: false } }, { notificationLeaseUntil: { $lt: new Date() } }]
+    }, { $set: { notificationOwner: owner, notificationLeaseUntil: new Date(Date.now() + 120000) } }, { new: true }).lean();
+    if (!claimed) throw operationError('Confirmation is already processing', 425);
+    try {
+      if (PushService.isConfigured()) {
+        const result = await PushService.send('Lekka transaction saved', `${op.payload.title}: INR ${op.payload.amount}. ${op.payload.transactionDirection === 'CREDIT' ? 'Credit' : 'Debit'} saved.`, `operation-${op._id}`, 'ledger', {
+          skipInstallationIds: claimed.notificationDeliveredTo,
+          onDelivered: async installationId => { await OperationModel.updateOne({ _id: op._id, notificationOwner: owner }, { $addToSet: { notificationDeliveredTo: installationId } }); }
+        });
+        if (result.failed) throw new Error('Transaction saved; confirmation delivery will retry');
+      }
+      await OperationModel.updateOne({ _id: op._id, notificationOwner: owner }, { $set: { notificationDue: false } });
+    } finally {
+      await OperationModel.updateOne({ _id: op._id, notificationOwner: owner }, { $unset: { notificationOwner: '', notificationLeaseUntil: '' } });
     }
-    await OperationModel.updateOne({ _id: op._id, state: 'DONE' }, { $set: { notificationDue: false } });
   }
   static async accept(input: unknown) {
     const command = validateOperation(input);
