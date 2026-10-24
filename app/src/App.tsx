@@ -38,6 +38,7 @@ import { SnapshotCache, SyncMetadata } from './cacheStore';
 import { DataSync } from './dataSync';
 import { RulesPanel } from './RulesPanel';
 import { Dropdown } from './Dropdown';
+import { SpendingSummary } from './SpendingSummary';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
@@ -854,7 +855,7 @@ export function App() {
               <Metric label="Entries" value={String(analytics?.summary.totalTransactions ?? analytics?.summary.totalEmails ?? 0)} />
             </div>
             <div className="mode-grid flow-toggle">{(['DEBIT', 'CREDIT'] as const).map(direction => <button key={direction} type="button" className={statsDirection === direction ? 'selected' : ''} onClick={() => setStatsDirection(direction)}>{direction === 'DEBIT' ? 'Debits' : 'Credits'}</button>)}</div>
-            <VisualSummary
+            <SpendingSummary
               title={statsDirection === 'CREDIT' ? 'Credit map' : 'Spend map'}
               total={statsDirection === 'CREDIT' ? analytics?.summary.totalCredits || 0 : analytics?.summary.totalFinancialAmount || 0}
               categories={(analytics?.categoryBreakdown || []).map((item) => ({ label: item.categoryName, value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount || 0, color: item.colorCode }))}
@@ -1030,60 +1031,6 @@ function NotificationList({ notifications, onRead }: { notifications: Notificati
         </article>
       ))}
     </div>
-  );
-}
-
-function VisualSummary({
-  title,
-  total,
-  categories,
-  modes
-}: {
-  title: string;
-  total: number;
-  categories: Array<{ label: string; value: number; color?: string }>;
-  modes: Array<{ label: string; value: number; color?: string }>;
-}) {
-  const slices = categories.filter(category => category.value > 0);
-  const sum = Math.max(1, slices.reduce((value, row) => value + row.value, 0));
-  let cursor = 0;
-
-  return (
-    <section className="chart-card">
-      <div>
-        <h2>{title}</h2>
-        <span>{money(total)} this month</span>
-      </div>
-      <div className="chart-grid">
-        <svg className="donut" viewBox="0 0 42 42" aria-label="Category spend chart">
-          <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#e5e7eb" strokeWidth="7" />
-          {slices.map((slice) => {
-            const size = (slice.value / sum) * 100;
-            const dash = `${size} ${100 - size}`;
-            const offset = 25 - cursor;
-            cursor += size;
-            return <circle key={slice.label} cx="21" cy="21" r="15.9" fill="transparent" stroke={slice.color || '#0f766e'} strokeWidth="7" strokeDasharray={dash} strokeDashoffset={offset} />;
-          })}
-          <text x="21" y="20" textAnchor="middle">{categories.length}</text>
-          <text x="21" y="25" textAnchor="middle">cats</text>
-        </svg>
-        <div className="legend-list">
-          {categories.map((row) => (
-            <span key={row.label}><i style={{ background: row.color || '#0f766e' }} /><span>{row.label}</span><b>{money(row.value)}</b></span>
-          ))}
-          {categories.length === 0 && <span><i />No category spend yet<b>{money(0)}</b></span>}
-        </div>
-      </div>
-      <div className="mode-chart">
-        {modes.every(mode => !mode.value) ? <div className="empty-state small">No payment mode data yet</div> : modes.filter(mode => mode.value > 0).map((mode) => (
-          <div key={mode.label}>
-            <strong>{mode.label.replace('_', ' ')}</strong>
-            <span>{money(mode.value)}</span>
-            <i><b style={{ height: `${Math.max(8, (mode.value / Math.max(...modes.map((item) => item.value), 1)) * 100)}%`, background: mode.color || '#0f766e' }} /></i>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }
 
