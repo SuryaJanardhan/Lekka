@@ -8,7 +8,7 @@ import { bumpDataRevision } from './dataRevisionService';
 mongoose.set('transactionAsyncLocalStorage', true);
 
 export function operationStatus(op: StoredOperation) {
-  return { id: op._id, state: op.state, error: op.error, revision: op.revision, result: op.result };
+  return { id: op._id, state: op.state, error: op.error, revision: op.revision, result: op.result, updatedAt: op.updatedAt.toISOString() };
 }
 
 export class OperationService {

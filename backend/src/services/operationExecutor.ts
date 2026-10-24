@@ -8,9 +8,10 @@ import { CategoryModel } from '../models/Category';
 import { RuleModel } from '../models/Rule';
 import { OperationModel, StoredOperation } from '../models/Operation';
 import { Types } from 'mongoose';
-import { operationError } from './operationCommand';
+import { operationError, validateOperationPayload } from './operationCommand';
 
 export async function executeOperation(op: StoredOperation) {
+  validateOperationPayload({ ...op, id: op._id });
   if (op.kind.startsWith('entry.') && op.payload.categoryId && (!Types.ObjectId.isValid(op.payload.categoryId) || !await CategoryModel.exists({ _id: op.payload.categoryId }))) throw operationError('Category no longer exists. Choose an existing category.', 404);
   const model = op.kind.startsWith('entry.') ? EmailModel : op.kind.startsWith('category.') ? CategoryModel : op.kind.startsWith('rule.') ? RuleModel : null;
   if (model && !op.kind.endsWith('.create')) {

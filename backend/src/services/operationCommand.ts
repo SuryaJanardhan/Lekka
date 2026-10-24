@@ -14,15 +14,27 @@ export function validateOperation(input: any): OperationCommand {
   for (const key of ['predecessorId', 'expectedAfter']) if (input[key] !== undefined && (!uuid.test(input[key]) || input[key] === input.id)) throw operationError('Invalid operation dependency');
   if (input.expectedUpdatedAt !== undefined && (typeof input.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(input.expectedUpdatedAt)))) throw operationError('Invalid record version');
   if (JSON.stringify(input.payload).length > 32000) throw operationError('Queued change is too large');
-  if (['entry.update', 'entry.delete', 'entry.category', 'category.rename', 'rule.update', 'rule.delete'].includes(input.kind) && !input.expectedAfter && !input.expectedUpdatedAt) throw operationError('Refresh this record before changing it');
   return { id: input.id, kind: input.kind, targetId: input.targetId, payload: input.payload,
     ...(input.predecessorId ? { predecessorId: input.predecessorId } : {}), ...(input.expectedAfter ? { expectedAfter: input.expectedAfter } : {}),
     ...(input.expectedUpdatedAt ? { expectedUpdatedAt: input.expectedUpdatedAt } : {}) };
 }
 
-function canonical(value: any): any {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
+export function validateOperationPayload(input: OperationCommand) {
+  const payload = input.payload;
+  if (['entry.create', 'entry.update'].includes(input.kind)) {
+    if (typeof payload.title !== 'string' || !payload.title.trim() || !Number.isFinite(payload.amount) || payload.amount <= 0) throw operationError('A title and positive amount are required');
+    if (payload.transactionDirection && !['DEBIT', 'CREDIT'].includes(payload.transactionDirection)) throw operationError('Invalid transaction direction');
+    if (payload.paymentMode && !['UPI', 'CARD', 'CASH', 'FRIEND_PAID'].includes(payload.paymentMode)) throw operationError('Invalid payment mode');
+    if (payload.date && (typeof payload.date !== 'string' || !Number.isFinite(Date.parse(payload.date)))) throw operationError('Invalid transaction date');
+  }
+  if (['category.create', 'category.rename'].includes(input.kind) && (typeof payload.name !== 'string' || !payload.name.trim() || payload.name.length > 80)) throw operationError('Category name must contain 1 to 80 characters');
+  if (['entry.update', 'entry.delete', 'entry.category', 'category.rename', 'rule.update', 'rule.delete'].includes(input.kind) && !input.expectedAfter && !input.expectedUpdatedAt) throw operationError('Refresh this record before changing it');
+}
+
+function canonical(value: any, depth = 0): any {
+  if (depth > 12) throw operationError('Queued change is nested too deeply');
+  if (Array.isArray(value)) return value.map(item => canonical(item, depth + 1));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key], depth + 1)]));
   return value;
 }
 export function operationHash(command: OperationCommand) { return createHash('sha256').update(JSON.stringify(canonical(command))).digest('hex'); }
