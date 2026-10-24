@@ -49,7 +49,7 @@ Sources: [Google forwarding setup](https://support.google.com/mail/answer/10957?
 
 ## Debit-only categories and learning
 
-After admission and duplicate checks, Lekka reads body text and OCR from attached images. Confirmed credits, refunds, cashback and reversals are recorded as ignored, never as spending. Unclear direction, unpaid bills, failed payments or missing amounts require review when AI cannot confirm a completed debit. Manual expense amounts must be positive; negative values are rejected.
+After admission and duplicate checks, Lekka reads body text and OCR from attached images. Confirmed debits and credits are stored with separate directions; incoming money never counts as spending. Both use the same user-approved category rules and review flow. Unclear direction, unpaid bills, failed payments or missing amounts require review when AI cannot confirm a completed transaction. Manual amounts must be positive; direction determines debit or credit. See [ledger flows](ledger-flows.md) for rule editing, notes and legacy-client compatibility.
 
 Category matching uses user-created or user-confirmed rules first. Without an approved match, every email goes to Review, even if AI suggests a category with high confidence. AI sees the current category names and must choose from that list; an unmatched suggestion becomes unassigned. AI never trains rules automatically, and legacy AI-learned rules are ignored. The configured personal categories are Office Travel, Food, Drinks, Groceries, Medicines, Clothes and Movies. Only an empty category list permits AI to suggest an initial category, still pending review.
 

@@ -23,7 +23,7 @@ graph LR
 * **AI assistant**: Ask questions against your real ledger context. The AI can read, not mutate.
 * **Rules**: Category rules run before AI so repeat merchants stay predictable.
 * **Your categories, your call**: Every new pattern goes to Review with an AI suggestion. Only your saved choice trains a sender-plus-merchant rule for next time. Create a category directly in Review or rename it in Settings without breaking its history.
-* **Debits only**: Credits, refunds and incoming money never become expenses. Unclear payments go to review, not your spending totals.
+* **Separate money flows**: Debits and incoming credits are tracked separately. Credits never inflate spending, and unclear transactions go to review. [Ledger flow details](docs/ledger-flows.md).
 * **Android-native bits**: compact PIN lock, fingerprint unlock, local confirmations, and FCM remote notifications once Firebase is configured.
 * **AI chats**: separate saved conversations, chat history, and a composer that fits above the keyboard.
 * **Cache first**: saved production data opens instantly from IndexedDB after unlocking. Fresh same-day reopens skip backend reads; writes still go to production immediately and refresh one complete snapshot. [Sync details](docs/cache-sync.md).

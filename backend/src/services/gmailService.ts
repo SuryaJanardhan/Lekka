@@ -35,7 +35,7 @@ type IncomingMail = InboxMail;
 
 export class GmailService {
   public static async recoverIgnoredCredits() {
-    const receipts = await ProcessedMailModel.find({ outcome: 'IGNORED_CREDIT' }).select('messageId').lean();
+    const receipts = await ProcessedMailModel.find({ outcome: 'IGNORED_CREDIT', isTest: { $ne: true } }).select('messageId').lean();
     if (!receipts.length) return { recovered: 0, matched: 0 };
     const ids = new Set(receipts.map(receipt => receipt.messageId));
     const scan = await scanImapInbox({ ...this.inboxSettings(), processLimit: 300 }, undefined, true);

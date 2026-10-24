@@ -12,6 +12,10 @@ const remotePushSource = readFileSync(resolve(root, 'src/remotePush.ts'), 'utf8'
 
 const checks = [
   {
+    name: 'enabled biometrics auto-prompt once on a native locked launch without overlapping requests',
+    pass: appSource.includes('autoBiometricAttempted.current = true') && appSource.includes('void biometricUnlock()') && appSource.includes('if (biometricBusy.current) return;')
+  },
+  {
     name: 'cache-first hydration replaces startup health checks and repeated entity reads',
     pass: appSource.includes('dataSync.hydrate()') && appSource.includes('dataSync.synchronize(force)') && !appSource.includes('checkConnection()') && !appSource.includes('api.getEntries()')
   },
@@ -49,7 +53,7 @@ const checks = [
   },
   {
     name: 'real app flows can trigger device notifications',
-    pass: appSource.includes("'Gmail sync', true") && appSource.includes("'Lekka expense', true")
+    pass: appSource.includes("'Gmail sync', true") && appSource.includes("'Lekka transaction', true")
   },
   {
     name: 'settings verifies biometric before enabling preference',
