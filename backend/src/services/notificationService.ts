@@ -102,8 +102,8 @@ class NotificationService {
     });
   }
 
-  public async clearAll(): Promise<number> {
-    const result = await NotificationModel.updateMany({ dismissed: { $ne: true } }, { $set: { read: true, dismissed: true } });
+  public async clearAll(before?: Date): Promise<number> {
+    const result = await NotificationModel.updateMany({ dismissed: { $ne: true }, ...(before ? { createdAt: { $lte: before } } : {}) }, { $set: { read: true, dismissed: true } });
     return result.modifiedCount;
   }
 }
@@ -111,9 +111,11 @@ class NotificationService {
 export const notificationService = new NotificationService();
 
 export class NotificationController {
-  public static clearAll = async (_req: Request, res: Response): Promise<void> => {
+  public static clearAll = async (req: Request, res: Response): Promise<void> => {
     try {
-      const cleared = await notificationService.clearAll();
+      const before = req.body?.before ? new Date(req.body.before) : undefined;
+      if (before && !Number.isFinite(before.getTime())) { res.status(400).json({ success: false, error: 'Invalid notification cutoff' }); return; }
+      const cleared = await notificationService.clearAll(before);
       res.json({ success: true, data: { cleared } });
     } catch {
       res.status(500).json({ success: false, error: 'Could not clear notifications' });
