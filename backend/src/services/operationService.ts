@@ -70,7 +70,16 @@ export class OperationService {
     if (completed?.state === 'DONE') await this.deliverConfirmation(completed);
   }
 
-  static async resolve(id: string, action: 'retry' | 'discard') {
+  static async resolve(id: string, action: 'retry' | 'discard', input?: OperationCommand) {
+    if (action === 'discard' && input) {
+      const structural = validateOperation({ ...input, payload: {} });
+      if (structural.id !== id) throw operationError('Operation ID does not match');
+      const hash = operationHash({ ...structural, payload: input.payload });
+      await OperationModel.updateOne({ _id: id }, { $setOnInsert: { ...structural, _id: id, payload: {}, hash, state: 'CANCELLED' } }, { upsert: true, writeConcern: { w: 'majority', j: true } });
+      const existing = await OperationModel.findById(id).lean();
+      if (existing?.hash !== hash) throw operationError('Operation ID already belongs to a different change.', 409);
+      if (existing.state === 'CANCELLED') return existing;
+    }
     const op = await OperationModel.findOneAndUpdate({ _id: id, state: 'BLOCKED' }, {
       $set: { state: action === 'retry' ? 'PENDING' : 'CANCELLED', nextAttemptAt: new Date() }, $unset: { error: '' }
     }, { new: true }).lean();

@@ -79,3 +79,42 @@ integration('queued notification clear does not dismiss notifications created af
   assert.equal((await NotificationModel.findById(old._id))?.dismissed, true);
   assert.notEqual((await NotificationModel.findById(recent._id))?.dismissed, true);
 });
+
+integration('an unaccepted oversized operation can be discarded without blocking its successor', async () => {
+  const rejected = { id: randomUUID(), kind: 'category.create' as const, targetId: new Types.ObjectId().toHexString(), payload: { name: 'Too large', notes: 'x'.repeat(33000) } };
+  await assert.rejects(() => OperationService.accept(rejected), /too large/);
+  await OperationService.resolve(rejected.id, 'discard', rejected);
+  const next = { ...create(), predecessorId: rejected.id };
+  await OperationService.accept(next); await OperationService.process(next.id);
+  assert.equal((await OperationModel.findById(next.id))?.state, 'DONE');
+});
+
+integration('invalid colors missing rule categories and missing notification cutoffs are visible permanent errors', async () => {
+  for (const command of [
+    { id: randomUUID(), kind: 'category.create', targetId: new Types.ObjectId().toHexString(), payload: { name: 'Invalid color', colorCode: { unsafe: true } } },
+    { id: randomUUID(), kind: 'rule.create', targetId: new Types.ObjectId().toHexString(), payload: { categoryId: new Types.ObjectId().toHexString(), conditions: [{ field: 'subject', operator: 'contains', value: 'example' }], priority: 10 } },
+    { id: randomUUID(), kind: 'notification.clear', targetId: new Types.ObjectId().toHexString(), payload: {} }
+  ]) {
+    await OperationService.accept(command); await OperationService.process(command.id);
+    assert.equal((await OperationModel.findById(command.id))?.state, 'BLOCKED');
+  }
+});
+
+integration('category assignment rule learning review dismissal and revision roll back as one transaction', async () => {
+  const category = await CategoryModel.create({ name: 'Atomic review', slug: 'atomic-review', createdSource: 'USER' });
+  const entry = await EmailModel.create({ messageId: randomUUID(), sender: 'alerts@axis.bank.in', subject: 'Paid to HungerBox', rawTextBody: 'Paid to HungerBox via UPI', receivedAt: new Date(), needsUserReview: true, reviewStatus: 'PENDING', parsedJson: { detectedAmount: 120, merchantName: 'HungerBox' } });
+  const notification = await NotificationModel.create({ title: 'Review', message: 'Review', type: 'REVIEW', metadata: { reviewKind: 'category', entryId: String(entry._id) } });
+  const command = { id: randomUUID(), kind: 'entry.category', targetId: String(entry._id), expectedUpdatedAt: entry.updatedAt.toISOString(), payload: { categoryId: String(category._id), createAutoRule: true } };
+  const current = await DataRevisionModel.findById('app');
+  await mongoose.connection.db!.command({ collMod: DataRevisionModel.collection.name, validator: { version: { $lte: current!.version } } });
+  try {
+    await OperationService.accept(command); await assert.rejects(() => OperationService.process(command.id));
+    assert.equal((await EmailModel.findById(entry._id))?.categoryId, undefined);
+    assert.equal(await RuleModel.countDocuments({ categoryId: category._id }), 0);
+    assert.notEqual((await NotificationModel.findById(notification._id))?.dismissed, true);
+  } finally { await mongoose.connection.db!.command({ collMod: DataRevisionModel.collection.name, validator: {} }); }
+  await OperationModel.updateOne({ _id: command.id }, { nextAttemptAt: new Date(0) }); await OperationService.process(command.id);
+  assert.equal((await OperationModel.findById(command.id))?.state, 'DONE');
+  assert.equal(await RuleModel.countDocuments({ categoryId: category._id }), 1);
+  assert.equal((await NotificationModel.findById(notification._id))?.dismissed, true);
+});

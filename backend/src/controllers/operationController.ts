@@ -26,7 +26,7 @@ export class OperationController {
   static async resolve(req: Request, res: Response) {
     try {
       if (!['retry', 'discard'].includes(req.body.action)) return res.status(400).json({ success: false, error: 'Choose retry or discard' });
-      const op = await OperationService.resolve(req.params.id, req.body.action);
+      const op = await OperationService.resolve(req.params.id, req.body.action, req.body.command);
       if (op.state === 'PENDING') wake(op._id);
       res.json({ success: true, data: operationStatus(op) });
     } catch (error: any) { res.status(error.status || 503).json({ success: false, error: error.status ? error.message : 'Could not resolve queued change' }); }

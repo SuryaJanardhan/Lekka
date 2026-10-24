@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import { validateConditions, validatePriority } from './ruleValidation';
 
 export const operationKinds = ['entry.create', 'entry.update', 'entry.delete', 'entry.category', 'category.create', 'category.rename', 'rule.create', 'rule.update', 'rule.delete', 'notification.read', 'notification.clear'] as const;
 export type OperationKind = typeof operationKinds[number];
@@ -21,6 +22,15 @@ export function validateOperation(input: any): OperationCommand {
 
 export function validateOperationPayload(input: OperationCommand) {
   const payload = input.payload;
+  if (payload.categoryId !== undefined && (typeof payload.categoryId !== 'string' || (payload.categoryId && !/^[a-f0-9]{24}$/i.test(payload.categoryId)))) throw operationError('Invalid category ID');
+  for (const key of ['title', 'notes', 'friendName', 'customCategoryName']) if (payload[key] !== undefined && typeof payload[key] !== 'string') throw operationError(`Invalid ${key}`);
+  if (payload.colorCode !== undefined && (typeof payload.colorCode !== 'string' || !/^#[a-f0-9]{6}$/i.test(payload.colorCode))) throw operationError('Invalid category color');
+  if (['rule.create', 'rule.update'].includes(input.kind)) {
+    validateConditions(payload.conditions); validatePriority(payload.priority);
+    if (!payload.categoryId && !payload.customCategoryName?.trim()) throw operationError('Choose a category');
+    if (payload.customCategoryName?.length > 80) throw operationError('Category name is too long');
+  }
+  if (input.kind === 'notification.clear' && (typeof payload.before !== 'string' || !Number.isFinite(Date.parse(payload.before)))) throw operationError('A notification cutoff is required');
   if (['entry.create', 'entry.update'].includes(input.kind)) {
     if (typeof payload.title !== 'string' || !payload.title.trim() || !Number.isFinite(payload.amount) || payload.amount <= 0) throw operationError('A title and positive amount are required');
     if (payload.transactionDirection && !['DEBIT', 'CREDIT'].includes(payload.transactionDirection)) throw operationError('Invalid transaction direction');
