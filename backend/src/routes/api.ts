@@ -12,11 +12,21 @@ import { PushController } from '../controllers/pushController';
 import { secureApiMiddleware } from '../middleware/authMiddleware';
 import { SnapshotController } from '../controllers/snapshotController';
 import { trackSnapshotChanges } from '../middleware/snapshotRevision';
+import { OperationController } from '../controllers/operationController';
+import { recoverOperations } from '../services/operationQueue';
+import { waitUntil } from '@vercel/functions';
 
 const router = Router();
 
 // Apply cryptographic API secret middleware to all /api routes
 router.use(secureApiMiddleware);
+router.use((req, _res, next) => {
+  if (req.method === 'GET' && ['/ingest', '/notifications/digest'].includes(req.path)) waitUntil(recoverOperations());
+  next();
+});
+router.post('/operations', OperationController.accept);
+router.get('/operations', OperationController.statuses);
+router.post('/operations/:id/resolve', OperationController.resolve);
 router.use(trackSnapshotChanges);
 router.get('/sync/status', SnapshotController.status);
 router.get('/sync/snapshot', SnapshotController.snapshot);
