@@ -94,6 +94,7 @@ export class ChatService {
             friendPaidSpend: friend,
             onlineSpend: total - cash - friend,
             totalCredits: report.summary.totalCredits,
+            pendingReviews: report.summary.pendingReviews,
             netAmount: report.summary.netAmount,
             categories: report.categoryBreakdown,
             totalTransactions: report.summary.totalTransactions,
@@ -167,7 +168,7 @@ App State Snapshot:
 
 Read-Only Tool Access:
 You have a special tool 'query_database' with STRICT READ-ONLY access to search transactions, pull financial summaries, check active rules, and fetch recent receipts. Use this tool whenever the user asks for specific amounts, past payments, category spending, or rule details.
-Never pretend you can delete or mutate records. All your database access is read-only. Use tools for complete financial totals; the recent-entry context is only a preview, not the whole ledger. Distinguish incoming credits from outgoing debits; never count credits as spending.
+Never pretend you can delete or mutate records. All your database access is read-only. Use tools for complete financial totals; the recent-entry context is only a preview, not the whole ledger. Distinguish incoming credits from outgoing debits; never count credits as spending. Never treat a missing field as zero; query it or say that it is unavailable.
 Keep responses concise and use short plain-text lines, not markdown tables or markers. Use INR (₹) for monetary amounts.`;
 
     // Manage conversation history for session
@@ -225,51 +226,45 @@ Keep responses concise and use short plain-text lines, not markdown tables or ma
         ...sessionHistory.map((m) => ({ role: m.role, content: m.content }))
       ];
 
-      // First call to Groq
-      const firstResponse = await client.chat.completions.create({
-        model: 'qwen/qwen3.8-27b',
-        ...{ reasoning_effort: 'none' },
-        messages,
-        tools,
-        tool_choice: 'auto',
-        temperature: 0.3,
-        max_tokens: 512
-      });
-
-      const choice = firstResponse.choices[0];
-      const toolCalls = choice?.message?.tool_calls;
-
-      if (toolCalls && toolCalls.length > 0) {
-        messages.push(choice.message);
-        const toolResponses = await Promise.all(toolCalls.map(async toolCall => {
-          let queryResult;
-          try {
-            const args = JSON.parse(toolCall.function.arguments || '{}');
-            queryResult = toolCall.function.name === 'query_database' ? await this.executeDatabaseQuery(args, params.clientState) : { error: 'Unsupported read-only tool' };
-          } catch { queryResult = { error: 'Invalid tool arguments' }; }
-          return { role: 'tool' as const, tool_call_id: toolCall.id, content: JSON.stringify(queryResult) };
-        }));
-        messages.push(...toolResponses);
-
-        const secondResponse = await client.chat.completions.create({
+      let usedTools = false;
+      // Keep tool definitions on follow-up requests so additional calls stay structured.
+      for (let round = 0; round < 3; round++) {
+        const response = await client.chat.completions.create({
           model: 'qwen/qwen3.8-27b',
           ...{ reasoning_effort: 'none' },
           messages,
-          temperature: 0.3, max_tokens: 512
+          tools,
+          tool_choice: 'auto',
+          temperature: 0.3,
+          max_tokens: 512
         });
 
-        const finalReply = secondResponse.choices[0]?.message?.content || 'Here are the details from your ledger.';
-        sessionHistory.push({ role: 'assistant', content: finalReply });
+        const choice = response.choices[0];
+        const toolCalls = choice?.message?.tool_calls;
+
+        if (toolCalls && toolCalls.length > 0) {
+          usedTools = true;
+          messages.push(choice.message);
+          const toolResponses = await Promise.all(toolCalls.map(async toolCall => {
+            let queryResult;
+            try {
+              const args = JSON.parse(toolCall.function.arguments || '{}');
+              queryResult = toolCall.function.name === 'query_database' ? await this.executeDatabaseQuery(args, params.clientState) : { error: 'Unsupported read-only tool' };
+            } catch { queryResult = { error: 'Invalid tool arguments' }; }
+            return { role: 'tool' as const, tool_call_id: toolCall.id, content: JSON.stringify(queryResult) };
+          }));
+          messages.push(...toolResponses);
+          continue;
+        }
+
+        const directReply = choice?.message?.content;
+        if (!directReply?.trim() || /<tool_call>|<function[=\s]/i.test(directReply)) throw new Error('AI returned no readable answer');
+        sessionHistory.push({ role: 'assistant', content: directReply });
         this.conversationHistory.set(params.sessionId, sessionHistory);
 
-        return { reply: finalReply, toolUsed: 'query_database' };
+        return { reply: directReply, ...(usedTools ? { toolUsed: 'query_database' } : {}) };
       }
-
-      const directReply = choice?.message?.content || 'How can I help you manage your Lekka ledger today?';
-      sessionHistory.push({ role: 'assistant', content: directReply });
-      this.conversationHistory.set(params.sessionId, sessionHistory);
-
-      return { reply: directReply };
+      throw new Error('AI exceeded its read-only query limit');
     } catch (err: any) {
       const status = Number(err.status) || 0;
       console.error('[Chat] Provider request failed', { status, code: err.code || err.name });
