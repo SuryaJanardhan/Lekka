@@ -37,6 +37,7 @@ import { CategoryPicker } from './CategoryPicker';
 import { SnapshotCache, SyncMetadata } from './cacheStore';
 import { DataSync } from './dataSync';
 import { RulesPanel } from './RulesPanel';
+import { Dropdown } from './Dropdown';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
@@ -814,7 +815,7 @@ export function App() {
               {manual.paymentMode === 'FRIEND_PAID' && (
                 <label>Friend name<input value={manual.friendName} onChange={(event) => setManual({ ...manual, friendName: event.target.value })} placeholder="Who paid?" /></label>
               )}
-              <label>Category<select value={manual.categoryId} onChange={(event) => setManual({ ...manual, categoryId: event.target.value })}>{categories.filter((c) => c._id !== 'all').map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select></label>
+              <label>Category<Dropdown label="Category" placeholder="Choose category" value={manual.categoryId} onValueChange={(value) => setManual({ ...manual, categoryId: value })} options={categories.filter((c) => c._id !== 'all').map(category => ({ value: category._id, label: category.name }))} /></label>
               <label>Date<input type="date" value={manual.date} onChange={(event) => setManual({ ...manual, date: event.target.value })} /></label>
               <label>Notes<textarea value={manual.notes} onChange={(event) => setManual({ ...manual, notes: event.target.value })} placeholder="Optional" /></label>
               <button className="primary-button" type="submit" disabled={savingManual}>{savingManual ? 'Saving...' : `Save ${manual.transactionDirection === 'CREDIT' ? 'credit' : 'debit'}`}</button>
@@ -1161,10 +1162,10 @@ function EntrySheet({
           </>
         ) : (
           <form className="pin-form sheet-form" onSubmit={submit}>
-            <label>Direction<select value={form.transactionDirection} onChange={event => setForm({ ...form, transactionDirection: event.target.value as 'DEBIT' | 'CREDIT' })}><option value="DEBIT">Debit</option><option value="CREDIT">Credit</option></select></label>
+            <label>Direction<Dropdown label="Direction" value={form.transactionDirection} onValueChange={value => setForm({ ...form, transactionDirection: value as 'DEBIT' | 'CREDIT' })} options={[{ value: 'DEBIT', label: 'Debit' }, { value: 'CREDIT', label: 'Credit' }]} /></label>
             <label>Amount<input inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} required /></label>
             <label>Title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
-            <label>Mode<select value={form.paymentMode} onChange={(event) => setForm({ ...form, paymentMode: event.target.value as PaymentMode })}>{(['CASH', 'UPI', 'CARD', 'FRIEND_PAID'] as PaymentMode[]).map((mode) => <option key={mode} value={mode}>{mode.replace('_', ' ')}</option>)}</select></label>
+            <label>Mode<Dropdown label="Mode" value={form.paymentMode} onValueChange={(value) => setForm({ ...form, paymentMode: value as PaymentMode })} options={(['CASH', 'UPI', 'CARD', 'FRIEND_PAID'] as PaymentMode[]).map(value => ({ value, label: value.replace('_', ' ') }))} /></label>
             {form.paymentMode === 'FRIEND_PAID' && <label>Friend name<input value={form.friendName} onChange={(event) => setForm({ ...form, friendName: event.target.value })} /></label>}
             <CategoryPicker categories={categories} value={categoryId} onChange={setCategoryId} onCreate={onCreateCategory} />
             <label>Date<input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>

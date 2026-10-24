@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Category } from './types';
 import { CategoryCreateForm } from './CategoryCreateForm';
+import { Dropdown } from './Dropdown';
 
 export function CategoryPicker({ categories, value, onChange, onCreate }: {
   categories: Category[];
@@ -13,14 +14,10 @@ export function CategoryPicker({ categories, value, onChange, onCreate }: {
   const [saving, setSaving] = useState(false);
 
   return <div className="category-picker">
-    <label>Category<select aria-label="Category" required disabled={saving} value={creating ? '__new__' : value} onChange={(event) => {
-      if (event.target.value === '__new__') { setPreviousValue(value); onChange(''); setCreating(true); }
-      else { setCreating(false); onChange(event.target.value); }
-    }}>
-      <option value="" disabled>Choose category</option>
-      {categories.map(category => <option key={category._id} value={category._id}>{category.name}</option>)}
-      <option value="__new__">New category...</option>
-    </select></label>
+    <label>Category<Dropdown label="Category" placeholder="Choose category" required disabled={saving} value={creating ? '__new__' : value} onValueChange={(next) => {
+      if (next === '__new__') { setPreviousValue(value); onChange(''); setCreating(true); }
+      else { setCreating(false); onChange(next); }
+    }} options={[...categories.map(category => ({ value: category._id, label: category.name })), { value: '__new__', label: 'New category...' }]} /></label>
     {creating && <CategoryCreateForm onCreate={onCreate} onSavingChange={setSaving} onCreated={(category) => { onChange(category._id); setCreating(false); }} onCancel={() => { setCreating(false); onChange(previousValue); }} />}
   </div>;
 }

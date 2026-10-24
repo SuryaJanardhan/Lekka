@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { Category, Rule } from './types';
+import { Dropdown } from './Dropdown';
 
 type Condition = Rule['conditions'][number];
 const initial: Condition = { field: 'subject', operator: 'contains', value: '' };
@@ -34,17 +35,17 @@ export function RulesPanel({ rules, categories, onSave, onDelete }: {
       <h3>{editing ? 'Edit rule' : 'New rule'}</h3>
       {conditions.map((condition, index) => <div key={index} style={{ display: 'grid', gap: 8, borderBottom: '1px solid var(--line)', paddingBottom: 12 }}>
         <div className="two-col">
-          <label>Field {index + 1}<select aria-label={`Rule field ${index + 1}`} disabled={saving} value={condition.field} onChange={event => patch(index, { field: event.target.value as Condition['field'], operator: event.target.value === 'direction' ? 'equals' : condition.operator, value: event.target.value === 'direction' ? 'DEBIT' : '' })}>{['sender', 'subject', 'body', 'direction'].map(field => <option key={field} value={field}>{field}</option>)}</select></label>
-          <label>Match {index + 1}<select aria-label={`Rule match ${index + 1}`} disabled={saving || condition.field === 'direction'} value={condition.operator} onChange={event => patch(index, { operator: event.target.value as Condition['operator'] })}>{['contains', 'equals', 'startsWith', 'regex'].map(operator => <option key={operator} value={operator}>{operator}</option>)}</select></label>
+          <label>Field {index + 1}<Dropdown label={`Rule field ${index + 1}`} disabled={saving} value={condition.field} onValueChange={value => patch(index, { field: value as Condition['field'], operator: value === 'direction' ? 'equals' : condition.operator, value: value === 'direction' ? 'DEBIT' : '' })} options={['sender', 'subject', 'body', 'direction'].map(value => ({ value, label: value }))} /></label>
+          <label>Match {index + 1}<Dropdown label={`Rule match ${index + 1}`} disabled={saving || condition.field === 'direction'} value={condition.operator} onValueChange={value => patch(index, { operator: value as Condition['operator'] })} options={['contains', 'equals', 'startsWith', 'regex'].map(value => ({ value, label: value }))} /></label>
         </div>
         <div className="category-create-actions">
-          <label style={{ flex: 1, minWidth: 0 }}>Value {index + 1}{condition.field === 'direction' ? <select aria-label={`Rule value ${index + 1}`} disabled={saving} value={condition.value} onChange={event => patch(index, { value: event.target.value })}><option value="DEBIT">Debit</option><option value="CREDIT">Credit</option></select> : <input aria-label={`Rule value ${index + 1}`} required maxLength={240} disabled={saving} value={condition.value} onChange={event => patch(index, { value: event.target.value })} />}</label>
+          <label style={{ flex: 1, minWidth: 0 }}>Value {index + 1}{condition.field === 'direction' ? <Dropdown label={`Rule value ${index + 1}`} disabled={saving} value={condition.value} onValueChange={value => patch(index, { value })} options={[{ value: 'DEBIT', label: 'Debit' }, { value: 'CREDIT', label: 'Credit' }]} /> : <input aria-label={`Rule value ${index + 1}`} required maxLength={240} disabled={saving} value={condition.value} onChange={event => patch(index, { value: event.target.value })} />}</label>
           <button className="icon-button danger" type="button" title="Remove condition" aria-label={`Remove condition ${index + 1}`} disabled={saving || conditions.length === 1} onClick={() => setConditions(previous => previous.filter((_, i) => i !== index))}><Trash2 size={17} /></button>
         </div>
       </div>)}
       <button className="secondary-button" type="button" disabled={saving || conditions.length >= 8} onClick={() => setConditions(previous => [...previous, { ...initial }])}><Plus size={17} />Add condition</button>
       <div className="two-col">
-        <label>Category<select aria-label="Rule category" required={!customName.trim()} disabled={saving} value={categoryId} onChange={event => setCategoryId(event.target.value)}><option value="">Choose category</option>{categories.map(category => <option key={category._id} value={category._id}>{category.name}</option>)}</select></label>
+        <label>Category<Dropdown label="Rule category" placeholder="Choose category" allowEmpty required={!customName.trim()} disabled={saving} value={categoryId} onValueChange={setCategoryId} options={categories.map(category => ({ value: category._id, label: category.name }))} /></label>
         <label>Priority<input type="number" min={0} max={1000} step={1} required disabled={saving} value={priority} onChange={event => setPriority(event.target.value)} /></label>
       </div>
       {!editing && <label>New category<input maxLength={80} disabled={saving} value={customName} onChange={event => setCustomName(event.target.value)} placeholder="Optional" /></label>}
