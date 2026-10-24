@@ -61,8 +61,11 @@ test('offline or partial snapshots never overwrite the last good local snapshot'
 });
 test('storage failure keeps persisted data intact and requests recovery next open', async () => {
   const f = fixture(); f.state.failStorage = true;
-  const result = await f.create().synchronize(true);
+  const sync = f.create();
+  const result = await sync.synchronize(true);
   assert.equal(result.persisted, false);
+  assert.equal(sync.isPersisted('1'), true);
+  assert.equal(sync.isPersisted(result.snapshot.revision), false);
   assert.equal(f.state.saved.revision, '1');
   assert.equal(f.state.meta.dirty, true);
 });
