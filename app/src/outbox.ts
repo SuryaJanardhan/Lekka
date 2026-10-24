@@ -17,17 +17,24 @@ export class Outbox {
   private running = false;
   private observedRevision = '0';
   private authPaused = false;
+  private lastRows: LocalOperation[] = [];
   private timer?: ReturnType<typeof setTimeout>;
   constructor(private store: Store, private api: Api, private changed: (operations: LocalOperation[]) => void, private settled: () => Promise<void>, private failed: (message: string) => void) {}
   private visible(rows: LocalOperation[]) {
     return rows.filter(op => !(op.state === 'DONE' && op.revision && /^\d+$/.test(op.revision) && BigInt(op.revision) <= BigInt(this.observedRevision)));
   }
-  private async notify() { const rows = this.visible(await this.store.list()); this.changed(rows); return rows; }
+  private async notify() { const rows = this.visible(await this.store.list()); this.lastRows = rows; this.changed(rows); return rows; }
   async start() { this.running = true; await this.notify(); void this.pump(); }
   stop() { this.running = false; clearTimeout(this.timer); }
   async enqueue(kind: OperationKind, targetId: string, payload: Record<string, any>, base?: any) {
     const op = await this.store.enqueue(kind, targetId, payload, base);
-    await this.notify(); void this.pump(); return op;
+    try { await this.notify(); }
+    catch {
+      // The write is already durable: a failed reread must not invite a duplicate form submission.
+      this.lastRows = this.visible([...this.lastRows.filter(row => row.id !== op.id), op]);
+      this.changed(this.lastRows); this.failed('Change saved on device; loading pending status will retry');
+    }
+    void this.pump(); return op;
   }
   async reconcile(revision: string) {
     if (!/^\d+$/.test(revision)) return;

@@ -70,6 +70,14 @@ test('storage failure cannot produce an optimistic change or a backend request',
   assert.equal(changed, false); assert.equal(sent, false);
 });
 
+test('a reread failure after durable enqueue does not falsely fail the save or invite a second submission', async () => {
+  const store = new Store(); store.list = async () => { throw new Error('Read unavailable'); };
+  let visible = [];
+  const queue = new Outbox(store, apiDefaults(), rows => { visible = rows; }, async () => {}, () => {});
+  const op = await queue.enqueue('entry.create', 'entry', { title: 'Lunch', amount: 100 });
+  assert.equal(store.rows.length, 1); assert.equal(visible[0].id, op.id);
+});
+
 test('pending projections remain visible without changing confirmed analytics or source snapshots', () => {
   const snapshot = { entries: [], categories: [], rules: [], notifications: [], analytics: { summary: { totalFinancialAmount: 250 } } };
   const projected = projectOutbox(snapshot, [{ id: 'op', kind: 'entry.create', targetId: 'entry', sequence: 1, state: 'LOCAL', createdAt: '2026-10-24T00:00:00.000Z', payload: { title: 'Lunch', amount: 100, date: '2026-10-24', paymentMode: 'UPI', transactionDirection: 'DEBIT' } }]);
