@@ -1,4 +1,5 @@
 export interface Category {
+  updatedAt?: string;
   _id: string;
   name: string;
   slug: string;
@@ -23,6 +24,10 @@ export interface DataSnapshot extends SyncStatus {
 }
 
 export interface EmailRecord {
+  updatedAt?: string;
+  syncState?: 'pending' | 'blocked';
+  syncOperationId?: string;
+  pendingDelete?: boolean;
   _id: string;
   messageId: string;
   sender: string;
@@ -41,6 +46,7 @@ export interface EmailRecord {
 }
 
 export interface Rule {
+  updatedAt?: string;
   _id: string;
   categoryId: Category;
   conditions: Array<{
