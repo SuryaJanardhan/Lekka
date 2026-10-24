@@ -259,7 +259,7 @@ export function App() {
     dataSync.invalidate();
     const result = await dataSync.synchronize(true);
     applySnapshot(result.snapshot);
-    await outbox.reconcile(result.snapshot.revision);
+    if (result.persisted) await outbox.reconcile(result.snapshot.revision);
   }, message => logEvent('pending sync', message)), [api, dataSync]);
 
   const queueChange = async (kind: OperationKind, targetId: string, payload: Record<string, any>, base?: any) => {
@@ -273,7 +273,7 @@ export function App() {
       if (force) dataSync.invalidate();
       const result = await dataSync.synchronize(force);
       applySnapshot(result.snapshot);
-      await outbox.reconcile(result.snapshot.revision);
+      if (result.persisted) await outbox.reconcile(result.snapshot.revision);
       setConnection(result.network ? 'online' : 'cached');
       if (!result.persisted) showToast('Server data loaded; local cache could not be saved');
       logEvent(result.network ? 'server sync ok' : 'saved data loaded', `${result.snapshot.entries.length} entries`);
@@ -315,7 +315,7 @@ export function App() {
   useEffect(() => {
     if (!isUnlocked) return;
     void outbox.start().catch(error => showToast(error.message || 'Could not read pending changes'));
-    const resume = () => { void outbox.pump(); };
+    const resume = () => { if (document.visibilityState === 'visible') void outbox.retryNow(); };
     window.addEventListener('online', resume);
     document.addEventListener('visibilitychange', resume);
     return () => { outbox.stop(); window.removeEventListener('online', resume); document.removeEventListener('visibilitychange', resume); };
@@ -909,7 +909,7 @@ export function App() {
             <CategorySettings categories={categories.filter((category) => category._id !== 'all')} onCreate={createCategory} onRename={async (id, name) => {
               await queueChange('category.rename', id, { name }, categories.find(row => row._id === id));
             }} />
-            <OutboxPanel operations={pendingOperations} onResolve={async (id, action) => {
+            <OutboxPanel operations={pendingOperations} onRetry={() => { void outbox.retryNow(); }} onResolve={async (id, action) => {
               try { await outbox.resolve(id, action); }
               catch (error: any) { setToast(error.message || 'Could not resolve pending change'); }
             }} />

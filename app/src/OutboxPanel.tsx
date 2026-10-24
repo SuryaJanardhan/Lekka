@@ -1,9 +1,10 @@
 import { RefreshCw, Trash2 } from 'lucide-react';
 import type { LocalOperation } from './outboxTypes';
 
-export function OutboxPanel({ operations, onResolve }: { operations: LocalOperation[]; onResolve: (id: string, action: 'retry' | 'discard') => Promise<void> }) {
+export function OutboxPanel({ operations, onResolve, onRetry }: { operations: LocalOperation[]; onResolve: (id: string, action: 'retry' | 'discard') => Promise<void>; onRetry: () => void }) {
   return <section className="stack outbox-panel">
     <h2>Pending changes <small>{operations.length}</small></h2>
+    {operations.length > 0 && <button className="secondary-button" type="button" onClick={onRetry}><RefreshCw size={16} />Retry sync</button>}
     {operations.length === 0 && <p className="mini-status">All changes synced</p>}
     {operations.map(op => <article className="outbox-row" key={op.id}>
       <div><strong>{op.payload.title || op.payload.name || op.kind.replace('.', ' ')}</strong><span>{op.state === 'BLOCKED' ? 'Needs attention' : op.state === 'DONE' ? 'Saved; refreshing' : op.accepted ? 'Accepted by server' : 'Saved on this device'}</span>{op.error && <p role={op.state === 'BLOCKED' ? 'alert' : undefined}>{op.error}</p>}</div>

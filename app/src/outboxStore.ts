@@ -26,7 +26,8 @@ export class OutboxStore {
       const store = tx.objectStore('operations'); const tail = tx.objectStore('tails').get(this.scope); const existing = store.getAll();
       let operation: LocalOperation;
       existing.onsuccess = () => {
-        const previous = existing.result.filter((op: LocalOperation) => op.scope === this.scope && op.targetId === targetId).sort((a: LocalOperation, b: LocalOperation) => b.sequence - a.sequence)[0];
+        const previous = existing.result.filter((op: LocalOperation) => op.scope === this.scope && op.targetId === targetId &&
+          (op.state !== 'DONE' || !base?.updatedAt || op.result?.updatedAt === base.updatedAt)).sort((a: LocalOperation, b: LocalOperation) => b.sequence - a.sequence)[0];
         operation = { id: crypto.randomUUID(), scope: this.scope, kind, targetId, payload: structuredClone(payload), base: base ? structuredClone(base) : undefined,
           sequence: (tail.result?.sequence || 0) + 1, state: 'LOCAL', accepted: false, attempts: 0, nextAttemptAt: 0, createdAt: new Date().toISOString(),
           ...(tail.result?.id ? { predecessorId: tail.result.id } : {}),
