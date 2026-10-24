@@ -39,6 +39,7 @@ export class CategoryController {
       if (existing) return res.status(409).json({ success: false, error: 'Category already exists' });
 
       const category = new CategoryModel({
+        ...(req.body._id ? { _id: req.body._id } : {}),
         name,
         slug,
         colorCode: colorCode || '#3B82F6',

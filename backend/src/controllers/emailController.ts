@@ -63,7 +63,7 @@ export class EmailController {
 
   public static async createManualTransaction(req: Request, res: Response) {
     try {
-      const populated = await LedgerService.createManualEntry(req.body);
+      const populated = await LedgerService.createManualEntry(req.body, req.body._id);
 
       res.status(201).json({ success: true, message: 'Manual transaction saved successfully', data: populated });
     } catch (error: any) {

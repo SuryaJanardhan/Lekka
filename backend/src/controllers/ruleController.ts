@@ -68,6 +68,7 @@ export class RuleController {
       }
 
       const rule = new RuleModel({
+        ...(req.body._id ? { _id: req.body._id } : {}),
         categoryId: finalCategoryId,
         conditions: normalizedConditions,
         priority: normalizedPriority,

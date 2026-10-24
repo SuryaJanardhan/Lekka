@@ -62,7 +62,7 @@ export class LedgerService {
     return EmailModel.findById(id).populate('categoryId');
   }
 
-  public static async createManualEntry(input: CreateManualLedgerEntryInput) {
+  public static async createManualEntry(input: CreateManualLedgerEntryInput, id?: string) {
     if (!input.title?.trim()) {
       throw new Error('Title is required');
     }
@@ -87,6 +87,7 @@ export class LedgerService {
     else if (paymentMode === 'CARD') senderName = 'Card Entry';
 
     const email = new EmailModel({
+      ...(id ? { _id: new Types.ObjectId(id) } : {}),
       messageId: `manual_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
       sender: senderName,
       subject: input.title.trim(),
