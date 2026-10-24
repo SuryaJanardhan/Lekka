@@ -28,7 +28,7 @@ import {
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { ApiClient } from './api';
 import { Category, DashboardStats, EmailRecord, NotificationItem, Rule, DataSnapshot } from './types';
-import { amountOf, money, moneyExact, shortDate, timeAgo, directionOf, modeOf, categorySource } from './format';
+import { amountOf, money, moneyExact, shortDate, timeAgo, directionOf, modeOf } from './format';
 import { LockScreen } from './LockScreen';
 import { ChatMessage, Conversation, loadConversations, saveConversations, newConversationId } from './chatHistory';
 import { startRemotePush, stopRemotePush } from './remotePush';
@@ -1152,7 +1152,6 @@ function EntrySheet({
               <Metric label="Sender" value={entry.sender} />
               <Metric label="Date" value={shortDate(entry.receivedAt)} />
               <Metric label="Mode" value={modeOf(entry)} />
-              <Metric label="Category source" value={categorySource(entry.categorySource)} />
               <Metric label="Direction" value={directionOf(entry) === 'CREDIT' ? 'Credit' : 'Debit'} />
             </div>
             <CategoryPicker categories={categories} value={categoryId} onChange={setCategoryId} onCreate={onCreateCategory} />

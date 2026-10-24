@@ -33,7 +33,3 @@ export function modeOf(entry: { parsedJson?: Record<string, any> }): string {
   const mode = entry.parsedJson?.paymentMode;
   return ['CASH', 'UPI', 'CARD', 'FRIEND_PAID'].includes(mode) ? mode : 'UPI';
 }
-
-export function categorySource(source: string): string {
-  return ({ USER_MANUAL: 'You', RULE: 'Saved rule', GROQ_AI: 'AI suggestion', UNASSIGNED: 'Needs category' } as Record<string, string>)[source] || source;
-}
