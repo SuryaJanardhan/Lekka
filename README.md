@@ -60,7 +60,7 @@ Lekka/
 │   ├── src/models/       # Mongoose data schemas
 │   ├── src/services/     # Groq AI, Gmail IMAP, OCR, Rule engine
 │   └── src/server.ts     # Express server entry point
-├── docker-compose.yml    # MongoDB container configuration
+├── docker-compose.yml    # Web preview and optional Atlas-backed API containers
 └── README.md
 ```
 
@@ -68,18 +68,11 @@ Lekka/
 
 ## Quick Start
 
-### 1. Start Local MongoDB
-If you have Docker installed, spin up MongoDB with one command:
-```bash
-docker compose up -d mongodb
-```
-MongoDB will start listening on port 27017.
-
-### 2. Configure Backend Environment
+### 1. Configure Backend Environment
 Edit `backend/.env` with your credentials:
 ```env
 PORT=5000
-MONGODB_URI=mongodb://localhost:27017/lekka_db
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/<database>
 GROQ_API_KEY=your_groq_api_key_here
 GROQ_API_KEY_1=optional_backup_groq_key
 GROQ_API_KEY_2=optional_backup_groq_key
@@ -111,21 +104,44 @@ samf@kfintech.com
 enq_k@camsonline.com
 ```
 
-### 3. Run Backend Server
+### 2. Run Backend Server (Optional)
 ```bash
 cd backend
-npm install
-npm run dev
+npm ci
+npm run build
+npm start
 ```
-The backend API will run on `http://localhost:5000`.
+This optional API runner uses the Atlas URI you configured. The mobile app continues to call the deployed Vercel backend, not this local runner. Avoid running duplicate ingestion schedulers alongside Vercel.
 
-### 4. Run Mobile App
+### 3. Run Mobile App
 ```bash
 cd app
 npm install
 npm run dev
 ```
 The app will run locally on `http://localhost:5173`.
+
+### Docker
+
+Dockerfiles exist for both the backend and web preview. No local MongoDB container or database fallback is used.
+
+The web image reads `app/.env.production` through a BuildKit secret during compilation. It must contain the production HTTPS `VITE_BACKEND_URL` and `VITE_LEKKA_API_SECRET`. Only put browser configuration in this file; never MongoDB, Gmail, Groq or Firebase server credentials. Vite values become part of the browser bundle, as they do in the APK.
+
+```bash
+docker compose build app
+docker compose up -d app
+```
+
+Open `http://localhost:5174`. Stop the Vite preview on that port before starting the container. The containerized web app still calls production Vercel.
+
+The backend is opt-in so the normal Docker web preview does not start a second ingestion scheduler:
+
+```bash
+docker compose --profile backend build backend
+docker compose --profile backend up -d backend
+```
+
+It reads `backend/.env` at runtime and uses its explicit Atlas connection, with no database override. Check that the URI targets your intended database before running it. Do not leave its scheduler running beside the deployed Vercel cron. Neither server env files nor Firebase credentials are included in image build contexts.
 
 ---
 
