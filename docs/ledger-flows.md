@@ -18,6 +18,6 @@ Enabled native biometrics prompt once when launching locked. Cancellation leaves
 
 Legacy APK snapshot/list requests remain debit-only. Credit-aware clients explicitly request includeCredits=true and use a separate local cache scope. Legacy ignored-credit recovery targets only real ignored-credit receipts, never test mail, and does not rewind the regular ingestion cursor or import today's new debit mail early. Message-ID deduplication and deleted-record receipts remain in place.
 
-## Responsiveness proposal, not enabled
+## Responsive Writes
 
-For personal use, a durable IndexedDB operation outbox is preferable to adding Redis/MQ. A future implementation should persist a pending operation before changing the UI, show Pending sync honestly, assign idempotency keys for server-side duplicate protection, preserve per-record operation ordering, and retry only safe operations. Pending money must be distinguished from confirmed totals. Until separately approved, writes remain DB-first with immediate loading feedback; there is no offline financial-write queue.
+Changes are persisted in a local IndexedDB outbox before the UI advances. Pending sync is not a claim of server success, and pending money is excluded from confirmed totals. A MongoDB journal and private Vercel queue worker provide atomic commits, duplicate protection and server-side retry after acceptance. See [durable writes](durable-writes.md) for ordering, conflict handling, recovery and limitations. Legacy APK endpoints still wait for their normal direct response.

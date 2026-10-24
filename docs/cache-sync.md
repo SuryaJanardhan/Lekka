@@ -14,9 +14,9 @@ The app stores production ledger entries, categories, rules, reports and notific
 
 ## Writes
 
-Add, edit, delete, category, rule and notification actions still call the production server immediately. The cache is marked dirty before the request. The backend commits the write and bumps its data revision before acknowledging success. The app then makes one snapshot request, replacing all related local data together, including updated stats, learned rules and removed notifications.
+Add, edit, delete, category, rule and notification actions persist a local operation before projecting the change. Uploading and server-side processing happen without holding the form open. Pending amounts do not change confirmed statistics. Server operation completion commits its data revision atomically, then the app refreshes a complete snapshot covering that revision. See [durable writes](durable-writes.md).
 
-There is no offline write queue and no automatic replay of mutations. A failed write never becomes a fake saved expense. If the write succeeds but its follow-up refresh fails, the app reports that it was saved on the server with refresh pending; the dirty flag survives reopening and recovery only reads data, never repeats the write.
+Only stable-ID outbox commands are automatically replayed; direct legacy writes, ingestion, chat and push registration are not blindly replayed. A failed upload stays pending. A saved server operation stays projected until a covering snapshot is persisted. Completed local receipts are retained for stale-tab and offline-cache recovery, not counted as new pending work once reconciled. A successful server write followed by a failed cache refresh never becomes a second financial transaction.
 
 Snapshot persistence uses one IndexedDB transaction. Arrays are replaced, not merged, so deleted entries cannot return. A failed download, incomplete payload or storage failure keeps the last persisted snapshot intact. Storage failures leave sync pending instead of claiming that the new data was cached.
 
