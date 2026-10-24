@@ -300,9 +300,13 @@ export function App() {
   useEffect(() => {
     if (!isUnlocked) return;
     let active = true;
-    void dataSync.hydrate().then(snapshot => {
+    void dataSync.hydrate().then(async snapshot => {
       if (!active) return;
-      if (snapshot) { applySnapshot(snapshot); setConnection('cached'); }
+      if (snapshot) {
+        applySnapshot(snapshot);
+        if (dataSync.isPersisted(snapshot.revision)) await outbox.reconcile(snapshot.revision);
+        setConnection('cached');
+      }
       void refresh(false);
     });
     const resume = () => { if (document.visibilityState === 'visible') void refresh(false, true); };

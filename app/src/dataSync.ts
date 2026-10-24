@@ -35,9 +35,11 @@ export class DataSync {
   private inFlight: Promise<SyncResult> | null = null;
   private generation = 0;
   private memoryDirty = false;
+  private persistedRevision: string | null = null;
   constructor(private api: SyncApi, private cache: Cache, private metadata: Metadata, private now: () => Date = () => new Date()) {}
 
   private meta(): CacheMetadata { try { return this.metadata.read() || {}; } catch { return {}; } }
+  isPersisted(revision: string) { return this.persistedRevision === revision; }
   private saveMeta(meta: CacheMetadata) { try { this.metadata.write(meta); } catch { this.memoryDirty = true; } }
 
   invalidate(pushKey?: string): boolean {
@@ -52,7 +54,7 @@ export class DataSync {
   hydrate(): Promise<DataSnapshot | null> {
     if (this.snapshot) return Promise.resolve(this.snapshot);
     if (!this.hydration) this.hydration = this.cache.read().then(value => {
-      if (validSnapshot(value)) this.snapshot = value;
+      if (validSnapshot(value)) { this.snapshot = value; this.persistedRevision = value.revision; }
       return this.snapshot;
     }).catch(() => null);
     return this.hydration;
@@ -93,7 +95,7 @@ export class DataSync {
     if (!validSnapshot(snapshot)) throw new Error('Incomplete server snapshot; saved data was kept');
     this.snapshot = snapshot;
     let persisted = true;
-    try { await this.cache.write(snapshot); }
+    try { await this.cache.write(snapshot); this.persistedRevision = snapshot.revision; }
     catch { persisted = false; }
     const currentMeta = this.meta();
     const stillDirty = !persisted || generation !== this.generation;
