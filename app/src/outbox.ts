@@ -79,7 +79,10 @@ export class Outbox {
       }
       const current = await this.notify();
       if (current.some(op => op.state === 'DONE')) await this.settled();
-    } catch (error: any) { this.failed(error.message || 'Pending changes kept; sync will retry'); }
+    } catch (error: any) {
+      if ([401, 403].includes(error.status)) this.authPaused = true;
+      this.failed(error.message || 'Pending changes kept; sync will retry');
+    }
     finally {
       this.pumping = false;
       if (this.running) {

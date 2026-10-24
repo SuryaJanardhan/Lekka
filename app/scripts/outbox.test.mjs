@@ -87,3 +87,12 @@ test('authentication rejection pauses uploads until an explicit retry', async t 
   assert.equal(calls, 1); assert.equal(store.rows[0].state, 'LOCAL');
   await queue.retryNow(); await tick(); assert.equal(calls, 2);
 });
+
+test('authentication rejection while polling accepted work also pauses automatically', async t => {
+  const store = new Store(); let polls = 0;
+  const queue = new Outbox(store, apiDefaults({ operationStatuses: async () => { polls++; throw Object.assign(new Error('Forbidden'), { status: 403 }); } }), () => {}, async () => {}, () => {}); t.after(() => queue.stop());
+  await queue.enqueue('entry.create', 'entry', { title: 'Lunch', amount: 100 });
+  await queue.start(); await tick(); await queue.pump();
+  assert.equal(polls, 1); assert.equal(store.rows[0].state, 'ACCEPTED');
+  await queue.retryNow(); await tick(); assert.equal(polls, 2);
+});
