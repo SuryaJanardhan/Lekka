@@ -307,8 +307,6 @@ textarea { resize: vertical; min-height: 74px; }
 .legend-list > span > span { min-width: 0; overflow-wrap: anywhere; }
 .flow-toggle { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .amount-credit { color: var(--green); }
-.receipt-details { margin-bottom: 12px; }
-.receipt-details summary { color: var(--muted); font-size: .8rem; cursor: pointer; }
 .mode-chart {
   height: 112px;
   display: grid;

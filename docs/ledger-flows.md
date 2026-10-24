@@ -12,7 +12,7 @@ Every database category appears in the category legend, including zero-value cat
 
 ## Notes and biometrics
 
-AI notes are validated five-word descriptions, separate from the original receipt. The receipt remains available in a collapsed section. Blank notes and unambiguous old automatic copies of long receipts can be backfilled in bounded batches. Nonempty custom notes and notes marked USER are not overwritten. New imports get summaries during parsing; automatic nightly ingestion also enriches a bounded batch of remaining blank notes. Provider failures leave notes blank rather than copying the receipt or inventing a description.
+AI notes are validated five-word descriptions, separate from the original receipt. Transaction details show the core fields and short note, not the full email. Original receipt data stays in the backend for parsing, rules and exports. Blank notes and unambiguous old automatic copies of long receipts can be backfilled in bounded batches. Nonempty custom notes and notes marked USER are not overwritten. New imports get summaries during parsing; automatic nightly ingestion also enriches a bounded batch of remaining blank notes. Provider failures leave notes blank rather than copying the receipt or inventing a description.
 
 Enabled native biometrics prompt once when launching locked. Cancellation leaves PIN/manual biometric unlock available and does not cause a prompt loop. Authentication must complete before unlocking. No APK build is required for backend fixes, but native/UI changes need a later APK to verify on the phone.
 

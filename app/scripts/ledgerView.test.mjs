@@ -19,4 +19,7 @@ test('transaction detail omits classification provenance while retaining payment
   const app = fs.readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   assert.doesNotMatch(app, /label="Category source"/);
   assert.match(app, /label="Mode" value=\{modeOf\(entry\)\}/);
+  assert.doesNotMatch(app, /Original receipt|className="receipt-details"/);
+  assert.doesNotMatch(app, /label="Sender"|\{entry.sender\} ·/);
+  assert.match(app, /className="transaction-notes"/);
 });

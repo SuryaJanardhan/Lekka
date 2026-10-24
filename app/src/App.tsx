@@ -1001,7 +1001,7 @@ function EntryList({ entries, onSelect, empty }: { entries: EmailRecord[]; onSel
         <article className="entry-row" key={entry._id} onClick={() => onSelect(entry)}>
           <div className="entry-main">
             <strong>{entry.parsedJson?.merchantName || entry.subject}</strong>
-            <span>{entry.sender} · {shortDate(entry.receivedAt)}</span>
+            <span>{shortDate(entry.receivedAt)}</span>
             <small>{entry.categoryId?.name || 'Unassigned'} · {modeOf(entry)} · {directionOf(entry) === 'CREDIT' ? 'Credit' : 'Debit'}</small>
           </div>
           <div className="entry-side">
@@ -1145,11 +1145,9 @@ function EntrySheet({
         </div>
         <h2>{entry.parsedJson?.merchantName || entry.subject}</h2>
         {entry.parsedJson?.notes && <p className="transaction-notes">{entry.parsedJson.notes}</p>}
-        {entry.rawTextBody && <details className="receipt-details"><summary>Original receipt</summary><p>{entry.rawTextBody}</p></details>}
         {!editing ? (
           <>
             <div className="detail-grid">
-              <Metric label="Sender" value={entry.sender} />
               <Metric label="Date" value={shortDate(entry.receivedAt)} />
               <Metric label="Mode" value={modeOf(entry)} />
               <Metric label="Direction" value={directionOf(entry) === 'CREDIT' ? 'Credit' : 'Debit'} />
