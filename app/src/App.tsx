@@ -604,7 +604,6 @@ export function App() {
       await queueChange('notification.clear', entityId(), { before: confirmedSnapshot.current?.generatedAt || new Date().toISOString() });
       setNotificationExit(true);
       await new Promise((resolve) => setTimeout(resolve, 220));
-      setNotifications([]);
     } catch (error: any) {
       showToast(error.message || 'Could not clear notifications');
     } finally {

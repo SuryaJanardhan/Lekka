@@ -4,6 +4,7 @@ import { OperationModel, StoredOperation } from '../models/Operation';
 import { OperationCommand, operationError, operationHash, validateOperation } from './operationCommand';
 import { executeOperation } from './operationExecutor';
 import { bumpDataRevision } from './dataRevisionService';
+import { PushService } from './pushService';
 
 mongoose.set('transactionAsyncLocalStorage', true);
 
@@ -12,6 +13,14 @@ export function operationStatus(op: StoredOperation) {
 }
 
 export class OperationService {
+  private static async deliverConfirmation(op: StoredOperation) {
+    if (!op.notificationDue) return;
+    if (PushService.isConfigured()) {
+      const result = await PushService.send('Lekka transaction saved', `${op.payload.title}: INR ${op.payload.amount}. ${op.payload.transactionDirection === 'CREDIT' ? 'Credit' : 'Debit'} saved.`, `operation-${op._id}`, 'ledger');
+      if (result.failed) throw new Error('Transaction saved; confirmation delivery will retry');
+    }
+    await OperationModel.updateOne({ _id: op._id, state: 'DONE' }, { $set: { notificationDue: false } });
+  }
   static async accept(input: unknown) {
     const command = validateOperation(input);
     const hash = operationHash(command);
@@ -26,7 +35,8 @@ export class OperationService {
 
   static async process(id: string) {
     let op = await OperationModel.findById(id).lean();
-    if (!op || ['DONE', 'BLOCKED', 'CANCELLED'].includes(op.state)) return;
+    if (!op || ['BLOCKED', 'CANCELLED'].includes(op.state)) return;
+    if (op.state === 'DONE') { await this.deliverConfirmation(op); return; }
     if (op.predecessorId) {
       const previous = await OperationModel.findById(op.predecessorId).lean();
       if (!previous || !['DONE', 'CANCELLED'].includes(previous.state)) throw operationError('Waiting for earlier change', 425);
@@ -44,7 +54,7 @@ export class OperationService {
         const result = await executeOperation(current);
         const revision = await bumpDataRevision();
         const updated = await OperationModel.updateOne({ _id: id, owner, state: 'PROCESSING' }, {
-          $set: { state: 'DONE', result, revision }, $unset: { owner: '', leaseUntil: '', error: '' }
+          $set: { state: 'DONE', result, revision, notificationDue: current.kind === 'entry.create' }, $unset: { owner: '', leaseUntil: '', error: '' }
         });
         if (updated.modifiedCount !== 1) throw operationError('Processing lease changed', 425);
       }, { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority', j: true }, readPreference: 'primary', maxCommitTimeMS: 10000 });
@@ -56,6 +66,8 @@ export class OperationService {
       });
       if (!permanent) throw error;
     }
+    const completed = await OperationModel.findById(id).lean();
+    if (completed?.state === 'DONE') await this.deliverConfirmation(completed);
   }
 
   static async resolve(id: string, action: 'retry' | 'discard') {

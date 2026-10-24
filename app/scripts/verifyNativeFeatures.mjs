@@ -9,6 +9,7 @@ const apiSource = readFileSync(resolve(root, 'src/api.ts'), 'utf8');
 const capacitorConfig = readFileSync(resolve(root, 'capacitor.config.json'), 'utf8');
 const androidManifest = readFileSync(resolve(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
 const remotePushSource = readFileSync(resolve(root, 'src/remotePush.ts'), 'utf8');
+const operationSource = readFileSync(resolve(root, '../backend/src/services/operationService.ts'), 'utf8');
 
 const checks = [
   {
@@ -52,8 +53,8 @@ const checks = [
     pass: appSource.includes('channelId: notificationChannelId')
   },
   {
-    name: 'real app flows can trigger device notifications',
-    pass: appSource.includes("'Gmail sync', true") && appSource.includes("'Lekka transaction', true")
+    name: 'Gmail sync can notify locally and queued transaction confirmations are sent only after commit',
+    pass: appSource.includes("'Gmail sync', true") && operationSource.includes("completed?.state === 'DONE'") && operationSource.includes('PushService.send(')
   },
   {
     name: 'settings verifies biometric before enabling preference',

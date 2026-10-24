@@ -12,7 +12,7 @@ export async function publishOperation(id: string) {
 export async function recoverOperations() {
   const now = new Date();
   const pending = await OperationModel.find({
-    $or: [{ state: 'PENDING', nextAttemptAt: { $lte: now } }, { state: 'PROCESSING', leaseUntil: { $lt: now } }],
+    $or: [{ state: 'PENDING', nextAttemptAt: { $lte: now } }, { state: 'PROCESSING', leaseUntil: { $lt: now } }, { state: 'DONE', notificationDue: true }],
     $and: [{ $or: [{ publishedAt: { $exists: false } }, { publishedAt: { $lt: new Date(Date.now() - 3600000) } }] }]
   }).sort({ createdAt: 1 }).limit(20).lean();
   for (const op of pending) {
