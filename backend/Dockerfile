@@ -23,6 +23,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /usr/src/app/dist ./dist
+RUN chown node:node /usr/src/app
 
 EXPOSE 5000
 
