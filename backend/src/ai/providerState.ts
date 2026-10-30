@@ -7,3 +7,6 @@ const schema = new Schema({
 });
 schema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 export const AiProviderState = model('AiProviderState', schema);
+const cache = new Schema({ _id: String, response: Schema.Types.Mixed, expiresAt: Date });
+cache.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+export const AiResponseCache = model('AiResponseCache', cache);

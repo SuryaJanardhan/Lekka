@@ -11,6 +11,7 @@ function summaryLines(result: any, request: SkillRequest) {
 export function formatSkillReply(result: any, request: SkillRequest, previous?: any): string {
   if (result.kind === 'summary') {
     if (!previous) return summaryLines(result, request).join('\n');
+    if (request.direction === 'BOTH') return [formatSkillReply(result, { ...request, direction: 'DEBIT' }, previous), formatSkillReply(result, { ...request, direction: 'CREDIT' }, previous)].join('\n\n');
     const old = request.direction === 'CREDIT' ? previous.creditPaise : previous.debitPaise, current = request.direction === 'CREDIT' ? result.creditPaise : result.debitPaise;
     const delta = current - old;
     return [`${request.direction === 'CREDIT' ? 'Credits received' : 'Debit spending'}${request.category ? ` / ${request.category}` : ''}`,
@@ -25,6 +26,6 @@ export function formatSkillReply(result: any, request: SkillRequest, previous?: 
     else lines.push(`${new Date(row.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}: ${row.title} / ${row.direction} ${inr(Number(row.amount))} / ${row.category || 'Needs category'} / ${row.mode}${row.notes ? `\n${row.notes}` : ''}`);
   }
   if (!result.count) lines.push('No matching records in this period.');
-  else if (request.page < pages) lines.push(`More results: @${request.skill} ${request.term || request.category || ''} page ${request.page + 1}`);
+  else if (request.page < pages) lines.push('More results available. Reply with the next page number to keep these filters.');
   return lines.join('\n');
 }
