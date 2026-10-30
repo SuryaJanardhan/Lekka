@@ -54,8 +54,8 @@ export function RulesPanel({ rules, categories, onSave, onDelete }: {
       {editing && <button className="secondary-button" type="button" disabled={saving} onClick={reset}>Cancel edit</button>}
     </form>
     <div className="list">{rules.map(rule => <article className="rule-row" key={rule._id}>
-      <div style={{ minWidth: 0 }}><strong>{rule.categoryId?.name || 'Unassigned'}</strong><span style={{ overflowWrap: 'anywhere' }}>{rule.conditions.map(condition => `${condition.field} ${condition.operator} ${condition.value}`).join(' and ')}</span><small>Priority {rule.priority}</small></div>
-      <div className="category-create-actions">
+      <div className="rule-content"><strong>{rule.categoryId?.name || 'Unassigned'}</strong><span>{rule.conditions.map(condition => `${condition.field} ${condition.operator} ${condition.value}`).join(' and ')}</span><small>Priority {rule.priority}</small></div>
+      <div className="rule-actions">
         <button className="icon-button" type="button" title="Edit rule" aria-label={`Edit rule for ${rule.categoryId?.name || 'Unassigned'}`} onClick={() => {
           setEditing(rule._id); setCategoryId(rule.categoryId?._id || ''); setCustomName(''); setPriority(String(rule.priority)); setError('');
           const next = rule.conditions.map(condition => ({ ...condition }));

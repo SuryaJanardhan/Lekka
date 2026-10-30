@@ -184,6 +184,12 @@ h2 { font-size: 1.05rem; line-height: 1.2; }
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 .entry-row:active, .rule-row:active { transform: scale(0.985); }
+.rule-row { display: grid; grid-template-columns: minmax(0, 1fr) 88px; align-items: center; }
+.rule-row .rule-content { min-width: 0; overflow-wrap: anywhere; }
+.rule-row .rule-content strong { white-space: normal; }
+.rule-row .rule-content span { overflow: visible; text-overflow: clip; }
+.rule-row .rule-actions { display: grid; grid-template-columns: repeat(2, 40px); width: 88px; min-width: 88px; gap: 8px; }
+.rule-actions .icon-button { width: 40px; min-width: 40px; height: 40px; }
 .entry-main, .entry-side, .rule-row div, .note-row div { min-width: 0; }
 .entry-main strong, .rule-row strong, .note-row strong {
   display: block;
