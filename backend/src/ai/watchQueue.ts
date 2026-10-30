@@ -16,5 +16,5 @@ export async function scheduleWatch(now = new Date()) {
 export async function recoverWatches() {
   if (!process.env.MONGODB_READONLY_URI) return;
   const runs = await AiWatchRun.find({ state: { $ne: 'DONE' }, $or: [{ publishedAt: { $exists: false } }, { publishedAt: { $lt: new Date(Date.now() - 3600000) } }] }).sort({ createdAt: 1 }).limit(10).lean();
-  for (const run of runs) { try { await publish(run._id); } catch { break; } }
+  for (const run of runs) { if (!run._id) continue; try { await publish(run._id); } catch { break; } }
 }

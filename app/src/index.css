@@ -412,6 +412,33 @@ textarea { resize: vertical; min-height: 74px; }
 .conversation-composer:focus-within { border-color: var(--green); }
 .assistant-input.conversation-composer button { width: 40px; height: 40px; padding: 0; border-radius: 8px; display: grid; place-items: center; }
 .conversation-composer button:disabled { opacity: .45; }
+.chat-compose-zone { position: relative; flex-shrink: 0; min-width: 0; }
+.skill-picker { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 30; max-height: min(280px, 32dvh); overflow-y: auto; overscroll-behavior: contain; background: var(--panel); border: 1px solid #b7d8d1; border-radius: 8px; padding: 5px; box-shadow: 0 8px 24px rgba(15,76,69,.15); }
+.skill-picker > button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 5px; text-align: left; background: transparent; color: var(--ink); }
+.skill-picker > button.highlighted, .skill-picker > button:hover { background: #e3f6ef; }
+.skill-picker > button > svg { flex-shrink: 0; color: var(--green); }
+.skill-picker > button > span { display: block; min-width: 0; flex: 1; }
+.skill-picker strong { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .8rem; }
+.skill-picker strong small { font-size: .65rem; font-weight: 500; color: var(--muted); }
+.skill-picker > button > span > span { display: block; margin-top: 3px; font-size: .72rem; color: var(--muted); }
+.composer-limit { display: block; margin: 3px 4px 0; font-size: .65rem; text-align: right; color: var(--muted); }
+.composer-limit.over-limit { color: var(--red); }
+.ai-reference { border-block: 1px solid var(--line); }
+.ai-reference-body { padding: 0 12px 14px; }
+.ai-reference h3 { font-size: .83rem; margin: 0; }
+.ai-budget { margin: 12px 0; }
+.ai-budget > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin: 8px 0; font-size: .74rem; overflow-wrap: anywhere; }
+.ai-budget dt { color: var(--muted); }
+.ai-budget dd { margin: 0; text-align: right; font-weight: 600; }
+.ai-skill-reference { margin: 0; }
+.ai-skill-reference > div { padding: 14px 0; border-top: 1px solid var(--line); }
+.ai-skill-reference dt { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ai-skill-reference dt button { border: 0; background: none; color: var(--green); padding: 0; min-height: 32px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
+.ai-skill-reference dt small { font-size: .7rem; color: var(--muted); }
+.ai-skill-reference dd { margin: 4px 0 0; font-size: .78rem; line-height: 1.6; color: var(--ink); }
+.ai-skill-reference dd span, .ai-skill-reference code { display: block; margin-top: 5px; color: var(--muted); font-size: .71rem; overflow-wrap: anywhere; }
+.ai-watch-schedule, .ai-setup-error, .ai-reference [role="alert"] { color: var(--muted); font-size: .74rem; line-height: 1.6; margin-top: 10px; }
+.ai-setup-error, .ai-reference [role="alert"] { color: var(--amber); }
 .mini-status { color: var(--green); font-size: 0.74rem; font-weight: 800; }
 .assistant-input {
   display: grid;

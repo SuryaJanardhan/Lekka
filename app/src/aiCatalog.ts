@@ -8,8 +8,9 @@ export const aiCatalog = [
 ] as const;
 
 export function skillMention(text: string, cursor: number) {
+  cursor = Math.max(0, Math.min(text.length, cursor));
   const match = /(?:^|\s)@([a-z]*)$/i.exec(text.slice(0, cursor));
-  return match ? { query: match[1].toLowerCase(), from: cursor - match[1].length - 1, to: cursor } : null;
+  return match ? { query: match[1].toLowerCase(), from: cursor - match[1].length - 1, to: cursor + (/^[a-z]*/i.exec(text.slice(cursor))?.[0].length || 0) } : null;
 }
 export function insertMention(text: string, mention: { from: number; to: number }, id: string) {
   const prefix = text.slice(0, mention.from) + '@' + id + ' ';
