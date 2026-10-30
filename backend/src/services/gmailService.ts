@@ -16,6 +16,8 @@ import { InboxCursor, InboxMail, InboxSettings, scanImapInbox } from './imapInbo
 import { transactionDirection } from './expensePolicy';
 import { fiveWordNote } from './transactionNotes';
 import { LedgerService } from './ledgerService';
+import { waitUntil } from '@vercel/functions';
+import { scheduleWatch } from '../ai/watchQueue';
 
 export interface IngestionResult {
   totalProcessed: number;
@@ -114,6 +116,7 @@ export class GmailService {
         { $set: { lastSuccessfulSyncAt: new Date(), ...(nextCursor ? { imapCursor: nextCursor } : {}), ...(nextOAuthCursor ? { oauthCursor: nextOAuthCursor } : {}) }, $unset: { lastError: '' } }
       );
       if (!saved.matchedCount) throw new Error('Gmail ingestion lease expired before progress was committed');
+      if (source === 'automatic' && result.newIngested > 0) waitUntil(scheduleWatch().catch(() => console.error('[Watch] Daily check remains eligible for recovery')));
       await notificationService.addNotification(
         'Gmail sync complete',
         result.newIngested + ' transactions added (' + (result.debitsAdded || 0) + ' debits, ' + (result.creditsAdded || 0) + ' credits), ' + result.needsReviewCount + ' need category review, ' + result.notificationOnlyCount + ' emails need a manual amount check.',
