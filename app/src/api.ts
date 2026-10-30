@@ -192,6 +192,7 @@ export class ApiClient {
   async exportContext() {
     return this.request<Record<string, any>>('/api/export');
   }
+  aiStatus() { return this.request<any>('/api/ai/status'); }
 
   submitOperation(command: OperationCommand) {
     return this.request<OperationReceipt>('/api/operations', { method: 'POST', body: JSON.stringify(command) });

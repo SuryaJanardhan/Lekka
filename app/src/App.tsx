@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core';
 import {
   BarChart3,
-  ArrowUp,
   History,
   Bell,
   Bot,
@@ -40,6 +39,8 @@ import { RulesPanel } from './RulesPanel';
 import { Dropdown } from './Dropdown';
 import { SpendingSummary } from './SpendingSummary';
 import { receiptPreview } from './receiptPreview';
+import { ChatComposer } from './ChatComposer';
+import { AiReference } from './AiReference';
 import { Outbox } from './outbox';
 import { OutboxStore } from './outboxStore';
 import { projectOutbox } from './outboxProjection';
@@ -644,6 +645,7 @@ export function App() {
   const askAssistant = async (preset?: string) => {
     const message = (preset || chatInput).trim();
     if (!message || chatLoading) return;
+    if (message.length > 240) { setToast('Keep the question under 240 characters for the small AI budget'); return; }
 
     const nextHistory: ChatMessage[] = [...chatMessages, { role: 'user', content: message }];
     const requestConversationId = conversationId;
@@ -661,45 +663,7 @@ export function App() {
       const response = await api.sendChatMessage({
         sessionId: requestConversationId,
         message,
-        clientState: {
-          backendUrl: api.getBaseUrl(),
-          totals: {
-            today: periodTotals.today,
-            week: periodTotals.week,
-            month: periodTotals.month,
-            quarter: periodTotals.quarter,
-            year: periodTotals.year,
-            cash: totals.cash,
-            friendPaid: totals.friend,
-            online: totals.online,
-            pendingReviews: totals.pending,
-            transactionCount: entries.length
-          },
-          analytics,
-          categories: categories.filter((category) => category._id !== 'all'),
-          recentEntries: entries.slice(0, 25).map((entry) => ({
-            id: entry._id,
-            title: entry.parsedJson?.merchantName || entry.subject,
-            sender: entry.sender,
-            amount: amountOf(entry),
-            category: entry.categoryId?.name || 'Unassigned',
-            paymentMode: modeOf(entry),
-            transactionDirection: directionOf(entry),
-            date: entry.receivedAt,
-            needsReview: entry.needsUserReview
-          })),
-          reviewEntries: reviewEntries.slice(0, 20).map((entry) => ({
-            id: entry._id,
-            title: entry.parsedJson?.merchantName || entry.subject,
-            amount: amountOf(entry),
-            sender: entry.sender,
-            date: entry.receivedAt
-          })),
-          rules: rules.slice(0, 30),
-          notifications: notifications.slice(0, 20),
-          responseStyle: 'Use short plain text. Do not use markdown markers like **. Use simple lines when useful.'
-        },
-        history: nextHistory.slice(-8)
+        history: nextHistory.slice(-4).map(item => ({ role: item.role, content: item.content.slice(0, 240) }))
       });
       appendReply(response.reply);
       logEvent('ai ok', response.toolUsed ? `tool ${response.toolUsed}` : 'direct');
@@ -810,10 +774,7 @@ export function App() {
                 ))}
                 {chatLoading && <TypingDots />}
               </div>
-              <form className="assistant-input conversation-composer" onSubmit={(event) => { event.preventDefault(); askAssistant(); }}>
-                <textarea ref={chatComposer} rows={1} aria-label="Message AI" value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask about your ledger" />
-                <button type="submit" aria-label="Send message" title="Send message" disabled={chatLoading || !chatInput.trim()}><ArrowUp size={20} /></button>
-              </form>
+              <ChatComposer value={chatInput} onChange={setChatInput} onSend={() => { void askAssistant(); }} busy={chatLoading} inputRef={chatComposer} />
           </section>
         )}
 
@@ -916,6 +877,10 @@ export function App() {
             <OutboxPanel operations={pendingOperations} onRetry={() => { void outbox.retryNow(); }} onResolve={async (id, action) => {
               try { await outbox.resolve(id, action); }
               catch (error: any) { setToast(error.message || 'Could not resolve pending change'); }
+            }} />
+            <AiReference api={api} onChoose={prefix => {
+              setChatInput(previous => prefix + previous.replace(/^@[a-z]+\s*/i, ''));
+              setTab('ai'); setTimeout(() => chatComposer.current?.focus(), 80);
             }} />
             <div className="form-card">
               <div className="settings-row">
