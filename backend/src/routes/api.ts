@@ -15,13 +15,17 @@ import { trackSnapshotChanges } from '../middleware/snapshotRevision';
 import { OperationController } from '../controllers/operationController';
 import { recoverOperations } from '../services/operationQueue';
 import { waitUntil } from '@vercel/functions';
+import { AiController } from '../ai/controller';
+import { recoverWatches } from '../ai/watchQueue';
 
 const router = Router();
 
 // Apply cryptographic API secret middleware to all /api routes
 router.use(secureApiMiddleware);
 router.use((req, _res, next) => {
-  if (req.method === 'GET' && ['/ingest', '/notifications/digest'].includes(req.path)) waitUntil(recoverOperations());
+  if (req.method === 'GET' && ['/ingest', '/notifications/digest'].includes(req.path)) {
+    waitUntil(recoverOperations()); waitUntil(recoverWatches());
+  }
   next();
 });
 router.post('/operations', OperationController.accept);
@@ -30,6 +34,7 @@ router.post('/operations/:id/resolve', OperationController.resolve);
 router.use(trackSnapshotChanges);
 router.get('/sync/status', SnapshotController.status);
 router.get('/sync/snapshot', SnapshotController.snapshot);
+router.get('/ai/status', AiController.status);
 
 // Email routes
 router.get('/emails', EmailController.getEmails);

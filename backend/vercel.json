@@ -7,6 +7,10 @@
     "api/operations-worker.ts": {
       "maxDuration": 60,
       "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "lekka-operations" }]
+    },
+    "api/watch-worker.ts": {
+      "maxDuration": 60,
+      "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "lekka-watch" }]
     }
   },
   "rewrites": [
