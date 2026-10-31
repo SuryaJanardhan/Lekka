@@ -1,5 +1,5 @@
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
-export type Conversation = { id: string; title: string; messages: ChatMessage[]; updatedAt: string };
+export type Conversation = { id: string; title: string; messages: ChatMessage[]; updatedAt: string; context?: Record<string, unknown> };
 const storageKey = 'lekka_chat_history';
 export function newConversationId() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;

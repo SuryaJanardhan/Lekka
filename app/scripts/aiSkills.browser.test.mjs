@@ -46,6 +46,7 @@ try {
   assert.equal(await input.evaluate(element => element.selectionStart), 8, 'Caret must enter the existing mention');
   await page.getByRole('option').filter({ hasText: '@spending' }).click({ timeout: 3000 }); assert.equal(await input.inputValue(), 'Show @spending for Food');
   await input.fill('@'); await input.press('Escape'); assert.equal(await page.getByRole('listbox').count(), 0);
+  await input.fill('@r'); await input.press('Shift+Tab'); assert.equal(await input.inputValue(), '@r'); assert.equal(await page.getByRole('listbox').count(), 0);
   await input.fill('x'.repeat(241)); assert.equal(await page.getByRole('button', { name: 'Send message', exact: true }).isDisabled(), true);
   await input.fill('@watch'); await input.press('Escape'); await page.getByRole('button', { name: 'Send message', exact: true }).click(); assert.equal(await page.evaluate(() => window.sent), '@watch');
   const screenshots = join(tmpdir(), 'lekka-ai-skills'); await mkdir(screenshots, { recursive: true });

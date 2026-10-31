@@ -180,8 +180,8 @@ export class ApiClient {
     return this.request<Rule>(`/api/rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
   }
 
-  sendChatMessage(payload: { sessionId: string; message: string; clientState?: Record<string, any>; history?: Array<{ role: string; content: string }> }) {
-    return this.request<{ reply: string; toolUsed?: string | null }>('/api/chat', {
+  sendChatMessage(payload: { sessionId: string; message: string; clientState?: Record<string, any>; history?: Array<{ role: string; content: string }>; context?: Record<string, unknown> }) {
+    return this.request<{ reply: string; toolUsed?: string | null; context?: Record<string, unknown> }>('/api/chat', {
       method: 'POST',
       body: JSON.stringify({
         ...payload

@@ -651,21 +651,22 @@ export function App() {
     const requestConversationId = conversationId;
     setConversations((previous) => {
       const existing = previous.find((item) => item.id === requestConversationId);
-      return [{ id: requestConversationId, title: existing?.title || message.slice(0, 60), messages: nextHistory, updatedAt: new Date().toISOString() }, ...previous.filter((item) => item.id !== requestConversationId)];
+      return [{ id: requestConversationId, title: existing?.title || message.slice(0, 60), messages: nextHistory, updatedAt: new Date().toISOString(), context: existing?.context }, ...previous.filter((item) => item.id !== requestConversationId)];
     });
     setChatInput('');
     setChatLoading(true);
-    const appendReply = (content: string) => setConversations((previous) => previous.map((item) =>
-      item.id === requestConversationId ? { ...item, messages: [...item.messages, { role: 'assistant', content }], updatedAt: new Date().toISOString() } : item
+    const appendReply = (content: string, context?: Record<string, unknown>) => setConversations((previous) => previous.map((item) =>
+      item.id === requestConversationId ? { ...item, messages: [...item.messages, { role: 'assistant', content }], updatedAt: new Date().toISOString(), context: context || item.context } : item
     ));
 
     try {
       const response = await api.sendChatMessage({
         sessionId: requestConversationId,
         message,
+        context: conversations.find(item => item.id === requestConversationId)?.context,
         history: nextHistory.slice(-4).map(item => ({ role: item.role, content: item.content.slice(0, 240) }))
       });
-      appendReply(response.reply);
+      appendReply(response.reply, response.context);
       logEvent('ai ok', response.toolUsed ? `tool ${response.toolUsed}` : 'direct');
     } catch (error: any) {
       logEvent('ai failed', error.message || 'unknown');
