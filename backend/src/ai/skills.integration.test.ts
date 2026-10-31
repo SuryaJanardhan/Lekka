@@ -107,3 +107,15 @@ integration('watch without findings consumes no AI request and retries do not du
   await AiWatchRun.create({ _id: 'watch-repeated', checkedAt: now }); await processWatch('watch-repeated');
   assert.equal(await NotificationModel.countDocuments({ type: 'REMINDER' }), 1);
 });
+
+integration('cooling keys and oversized email context do not consume another reservation', async t => {
+  let calls = 0;
+  t.mock.method(Completions.prototype, 'create', function() { calls++; return { withResponse: async () => { throw { status: 401 }; } } as any; });
+  const params = { model: 'qwen/qwen3.8-27b', messages: [{ role: 'user' as const, content: 'hello' }] };
+  await assert.rejects(() => AiProvider.complete(params), /cooling down/);
+  assert.equal(calls, 2); const before = (await AiProvider.status()).dailyCalls;
+  await assert.rejects(() => AiProvider.complete({ ...params, messages: [{ role: 'user', content: 'another' }] }), /No request was reserved/);
+  assert.equal((await AiProvider.status()).dailyCalls, before); assert.equal(calls, 2);
+  await assert.rejects(() => AiProvider.complete({ ...params, messages: [{ role: 'user', content: 'x'.repeat(7000) }] }, 'email'), (error: any) => error.status === 413);
+  assert.equal((await AiProvider.status()).dailyCalls, before); assert.equal(calls, 2);
+});

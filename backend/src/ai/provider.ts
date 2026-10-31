@@ -47,7 +47,7 @@ export class AiProvider {
         const { data, response } = await client.chat.completions.create({ ...params, max_tokens: output }).withResponse();
         const number = (header: string) => { const value = response.headers.get(header); return value !== null && Number.isFinite(Number(value)) ? Number(value) : undefined; };
         const content = data.choices[0]?.message?.content;
-        if (content && /<tool_call>|<function[=\s]/i.test(content)) throw aiError('AI did not return a readable answer', 502);
+        if (typeof content !== 'string' || !content.trim() || /<tool_call>|<function[=\s]/i.test(content)) throw aiError('AI did not return a readable answer', 502);
         try {
           await AiProviderState.updateOne({ _id: 'usage:last' }, { $set: { inputTokens: data.usage?.prompt_tokens, outputTokens: data.usage?.completion_tokens, remainingTokens: number('x-ratelimit-remaining-tokens'), remainingRequests: number('x-ratelimit-remaining-requests') } }, { upsert: true });
           await AiResponseCache.updateOne({ _id: cacheId }, { $set: { response: data, expiresAt: new Date(Date.now() + 300000) } }, { upsert: true });
