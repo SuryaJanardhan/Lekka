@@ -49,5 +49,6 @@ const EmailSchema = new Schema<IEmail>(
 
 EmailSchema.index({ receivedAt: -1, categoryId: 1 });
 EmailSchema.index({ needsUserReview: 1, receivedAt: -1 });
+EmailSchema.index({ processedAt: 1, _id: 1 });
 
 export const EmailModel = model<IEmail>('Email', EmailSchema);
