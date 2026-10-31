@@ -31,6 +31,7 @@ export function buildRequest(skill: SkillId, message: string, categories: string
   if (skill === 'search') {
     const explicit = /(?:^|\s)@search\b/i.test(message);
     term = quoted || stripPeriods(text.replace(/\bpage\s+\d+\b/gi, ''))
+      .replace(/\b(?:debits?|credits?|income)\b/gi, '')
       .replace(/^(?:find|search(?: for)?|show(?: me)?|look for)\s+/i, '').replace(/^(?:transactions?|payments?|receipts?)\s*(?:(?:to|from|at|for)\s+)?/i, '').trim();
     if (!explicit && /^(?:the|my|all|recent|latest)?\s*$/i.test(term)) term = undefined;
     if (term && term.length > 80) throw aiError('Use a shorter merchant or search phrase.');

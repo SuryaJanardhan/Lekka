@@ -38,3 +38,16 @@ test('long user messages are rejected before making model requests', async t => 
   await assert.rejects(() => ChatService.processChatMessage({ sessionId: 'long', userMessage: 'x'.repeat(241) }), /under 240/);
   assert.equal(called, false);
 });
+
+test('persisted filters survive repeated page commands and category-only followups', async t => {
+  const queries: any[] = [];
+  t.mock.method(ReadGateway.prototype, 'categories', async () => [{ name: 'Food' }, { name: 'Travel' }] as any);
+  t.mock.method(ReadGateway.prototype, 'execute', async (request: any) => { queries.push(request); return { kind: 'search', records: [], count: 12, period: request.range }; });
+  const first = await ChatService.processChatMessage({ sessionId: 'paging', userMessage: '@search "Shop" last month' });
+  const second = await ChatService.processChatMessage({ sessionId: 'paging', userMessage: 'next page', context: first.context });
+  const third = await ChatService.processChatMessage({ sessionId: 'paging', userMessage: '3', context: second.context });
+  assert.equal(third.context?.page, 3); assert.equal(queries[2].term, 'Shop'); assert.equal(queries[2].range.start, queries[0].range.start);
+  const food = await ChatService.processChatMessage({ sessionId: 'filters', userMessage: '@spending Food last month' });
+  await ChatService.processChatMessage({ sessionId: 'filters', userMessage: 'and Travel', context: food.context });
+  assert.equal(queries.at(-1).category, 'Travel'); assert.equal(queries.at(-1).range.start, food.context?.range.start);
+});

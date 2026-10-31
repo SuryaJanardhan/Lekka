@@ -1,4 +1,4 @@
-import { Db } from 'mongodb';
+import { Db, ObjectId } from 'mongodb';
 import { aiReadDatabase } from './readConnection';
 import { aiError, escapeRegex, PAGE_SIZE, SkillRequest, validateRequest } from './contract';
 
@@ -53,11 +53,11 @@ export class ReadGateway {
     ], options).toArray();
     return { kind: request.skill, records, count, page: request.page, pageSize: PAGE_SIZE, period: request.range };
   }
-  async watchData(now = new Date()) {
+  async watchData(now = new Date(), from = new Date(now.getTime() - 26 * 3600000), excludedIds: string[] = []) {
     const db = await this.database(); const today = new Date(new Date(now.getTime() + 330 * 60000).toISOString().slice(0, 10) + 'T00:00:00+05:30');
-    const recent = await db.collection('emails').find({ processedAt: { $gte: new Date(now.getTime() - 26 * 3600000), $lte: now }, 'parsedJson.transactionDirection': { $ne: 'CREDIT' } }, {
-      ...options, projection: { receivedAt: 1, categoryId: 1, subject: 1, 'parsedJson.detectedAmount': 1, 'parsedJson.merchantName': 1 }
-    }).sort({ receivedAt: -1 }).limit(201).toArray();
+    const recent = await db.collection('emails').find({ processedAt: { $gte: from, $lte: now }, _id: { $nin: excludedIds.filter(id => /^[a-f0-9]{24}$/i.test(id)).map(id => new ObjectId(id)) }, 'parsedJson.transactionDirection': { $ne: 'CREDIT' } }, {
+      ...options, projection: { processedAt: 1, receivedAt: 1, categoryId: 1, subject: 1, 'parsedJson.detectedAmount': 1, 'parsedJson.merchantName': 1 }
+    }).sort({ processedAt: 1, _id: 1 }).limit(201).toArray();
     const baseline = await db.collection('emails').aggregate([
       { $match: { _id: { $nin: recent.map(row => row._id) }, receivedAt: { $gte: new Date(today.getTime() - 90 * 86400000), $lt: today }, 'parsedJson.transactionDirection': { $ne: 'CREDIT' } } },
       { $group: { _id: null, average: { $avg: paise }, count: { $sum: 1 } } }
@@ -66,6 +66,7 @@ export class ReadGateway {
       { $match: { receivedAt: { $gte: new Date(today.getTime() - 13 * 86400000), $lte: now }, 'parsedJson.transactionDirection': { $ne: 'CREDIT' } } },
       { $group: { _id: { category: '$categoryId', current: { $gte: ['$receivedAt', new Date(today.getTime() - 6 * 86400000)] } }, amount: { $sum: paise }, count: { $sum: 1 } } }
     ], options).toArray();
-    return { recent: recent.slice(0, 200), truncated: recent.length > 200, average: Number(baseline[0]?.average || 0), baselineCount: baseline[0]?.count || 0, growth, categories: await this.categories() };
+    return { recent: recent.slice(0, 200), truncated: recent.length > 200, average: Number(baseline[0]?.average || 0), baselineCount: baseline[0]?.count || 0, growth, categories: await this.categories(),
+      windowKey: today.toISOString(), coveredThrough: recent.length > 200 ? new Date(recent[199].processedAt) : now };
   }
 }

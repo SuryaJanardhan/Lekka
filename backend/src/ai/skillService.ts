@@ -25,7 +25,7 @@ export class SkillService {
     if (skill === 'watch') {
       const data = await gateway.watchData(); const findings = detectWatchFindings(data);
       const facts = findings.map(row => row.message).join('\n');
-      const coverage = data.truncated ? 'Checked the latest 200 newly processed debit records; additional records were not inspected.' : `Checked ${data.recent.length} newly processed debit records. No records were changed.`;
+      const coverage = data.truncated ? 'Checked 200 newly processed debit records; additional records were not inspected.' : `Checked ${data.recent.length} newly processed debit records. No records were changed.`;
       if (!findings.length) return { reply: `${coverage}\nNo matching spending-watch flags. This is a limited heuristic check, not a fraud guarantee.`, toolUsed: 'watch', aiCalls: 0 };
       let explanation = '';
       const messages: any[] = [{ role: 'system', content: 'Explain these spending flags briefly. They are possibilities, not proof. Do not invent facts, recalculate totals or recommend automatic changes.' }, { role: 'user', content: facts }];
