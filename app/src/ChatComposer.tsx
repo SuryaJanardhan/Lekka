@@ -1,4 +1,4 @@
-import { RefObject, useEffect, useId, useState } from 'react';
+import { RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowUp, Bot, AtSign } from 'lucide-react';
 import { aiCatalog, insertMention, skillMention } from './aiCatalog';
 
@@ -9,16 +9,22 @@ export function ChatComposer({ value, onChange, onSend, busy, inputRef }: {
   const [highlight, setHighlight] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const listId = useId();
+  const selection = useRef<{ text: string; cursor: number } | null>(null);
   const mention = skillMention(value, cursor);
   const options = mention ? aiCatalog.filter(skill => skill.id.startsWith(mention.query)) : [];
   const open = !busy && !dismissed && Boolean(mention) && options.length > 0;
   useEffect(() => { setHighlight(0); setDismissed(false); }, [mention?.query, mention?.from]);
   useEffect(() => { if (open) document.getElementById(`${listId}-${options[highlight]?.id}`)?.scrollIntoView({ block: 'nearest' }); }, [highlight, open]);
+  useLayoutEffect(() => {
+    const pending = selection.current;
+    if (pending && pending.text === value) { inputRef.current?.focus(); inputRef.current?.setSelectionRange(pending.cursor, pending.cursor); }
+    selection.current = null;
+  }, [value]);
   const choose = (id: string) => {
     if (!mention) return;
     const inserted = insertMention(value, mention, id);
+    selection.current = inserted;
     onChange(inserted.text); setCursor(inserted.cursor); setDismissed(true);
-    requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.setSelectionRange(inserted.cursor, inserted.cursor); });
   };
   return <div className="chat-compose-zone">
     {open && <div className="skill-picker" role="listbox" id={listId} aria-label="AI skills and agents">
@@ -34,6 +40,7 @@ export function ChatComposer({ value, onChange, onSend, busy, inputRef }: {
           if (!open || event.nativeEvent.isComposing) return;
           if (event.key === 'Escape') { event.preventDefault(); setDismissed(true); }
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setHighlight(previous => (previous + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length); }
+          if (event.key === 'Tab' && event.shiftKey) { setDismissed(true); return; }
           if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); choose(options[highlight]?.id || options[0].id); }
         }} />
       <button type="submit" aria-label="Send message" title="Send message" disabled={busy || !value.trim() || value.trim().length > 240}><ArrowUp size={20} /></button>
