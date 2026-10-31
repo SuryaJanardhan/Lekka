@@ -20,9 +20,15 @@ export async function processWatch(id: string) {
     let findings: WatchFinding[] = run.findings;
     let reply = run.reply || '';
     if (!findings) {
-      const data = await new ReadGateway().watchData(run.checkedAt);
+      const previous = await AiWatchRun.findOne({ _id: { $ne: id }, state: 'DONE', completedThrough: { $lte: run.checkedAt } }).sort({ completedThrough: -1 }).lean();
+      const from = previous?.completedThrough ? new Date(previous.completedThrough.getTime() - (previous.partial ? 0 : 600000)) : new Date(0);
+      const data = await new ReadGateway().watchData(run.checkedAt, from, previous?.processedIds || []);
       findings = [];
-      for (const finding of detectWatchFindings(data)) {
+      const candidates = detectWatchFindings(data, 500);
+      const claimed = await AiWatchFinding.find({ _id: { $in: candidates.map(row => row.id) }, runId: { $ne: id } }).select('_id').lean();
+      const claimedIds = new Set(claimed.map(row => row._id));
+      for (const finding of candidates.filter(row => !claimedIds.has(row.id))) {
+        if (findings.length >= 3) break;
         const saved = await AiWatchFinding.findOneAndUpdate({ _id: finding.id }, { $setOnInsert: { runId: id } }, { upsert: true, new: true }).lean();
         if (saved?.runId === id) findings.push(finding);
       }
@@ -32,9 +38,11 @@ export async function processWatch(id: string) {
         if (inputUpperBound(messages) <= 800) {
           try { const response = await AiProvider.complete({ model: 'qwen/qwen3.8-27b', messages, temperature: 0, ...{ reasoning_effort: 'none' } }, 'watch'); const explanation = response.choices[0]?.message?.content; if (explanation) reply += '\n' + explanation; } catch {}
         }
-        if (data.truncated) reply += '\nCoverage: latest 200 newly processed debit records only.';
+        if (data.truncated) reply += '\nCoverage: 200 newly processed debit records; backlog remains for a later check.';
       }
-      await AiWatchRun.updateOne({ _id: id, owner }, { $set: { findings, reply } });
+      const boundaryIds = data.truncated ? data.recent.filter(row => new Date(row.processedAt).getTime() === data.coveredThrough.getTime()).map(row => String(row._id)) : data.recent.map(row => String(row._id));
+      const carry = data.truncated && previous?.partial && previous.completedThrough?.getTime() === data.coveredThrough.getTime() ? previous.processedIds : [];
+      await AiWatchRun.updateOne({ _id: id, owner }, { $set: { findings, reply, completedThrough: data.coveredThrough, processedIds: [...new Set([...(carry || []), ...boundaryIds])], partial: data.truncated } });
     }
     if (findings.length) {
       if (!await AiWatchRun.exists({ _id: id, owner })) throw Error('Watch lease changed');

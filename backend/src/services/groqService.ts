@@ -126,7 +126,8 @@ Use a positive detectedAmount for both directions. For unclear transactions or m
         detectedDate: parsed.detectedDate,
         referenceNumber: parsed.referenceNumber
       };
-    } catch (error) {
+    } catch (error: any) {
+      if (error.status === 413) return null;
       console.error('[AI] Financial extraction unavailable; keeping mail eligible for retry');
       throw new Error('AI extraction unavailable; mail will retry on the next sync');
     }
@@ -144,6 +145,7 @@ Use a positive detectedAmount for both directions. For unclear transactions or m
 
   public static async summarizeBatch(entries: Array<{ _id: unknown; sender: string; subject: string; rawTextBody: string; parsedJson?: Record<string, any> }>): Promise<Map<string, string>> {
     if (!groqApiKey() || !entries.length) return new Map();
+    entries = entries.slice(0, 5);
     const context = entries.map(entry => ({ id: String(entry._id), sender: entry.sender, subject: entry.subject,
       merchant: entry.parsedJson?.merchantName, amount: entry.parsedJson?.detectedAmount, paymentMode: entry.parsedJson?.paymentMode || 'UPI',
       direction: entry.parsedJson?.transactionDirection || 'DEBIT', body: entry.rawTextBody.slice(0, 300) }));

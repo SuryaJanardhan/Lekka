@@ -21,10 +21,13 @@ export class AiProvider {
     const cacheId = createHash('sha256').update(JSON.stringify({ params, purpose, output })).digest('hex');
     const cached = await AiResponseCache.findOne({ _id: cacheId, expiresAt: { $gt: new Date() } }).lean();
     if (cached?.response) return cached.response as Groq.Chat.Completions.ChatCompletion;
-    const reserved = (purpose === 'email' ? Math.ceil(bytes / 2) : bytes) + output;
+    const reserved = bytes + output;
+    if (reserved > AI_LIMITS.minuteTokens) throw aiError('Email context exceeds the free-tier request budget. Manual review is required.', 413);
     const now = Date.now(); const minute = Math.floor(now / 60000), day = Math.floor(now / 86400000);
     const cooldown = await AiProviderState.findById('cooldown:model').lean();
     if (cooldown?.until && cooldown.until.getTime() > now) throw Object.assign(aiError('AI is cooling down. Calculated results are still available.', 429), { retryAfter: Math.ceil((cooldown.until.getTime() - now) / 1000) });
+    const available = await AiProviderState.find({ _id: { $in: keys.map(key => `key:${fingerprint(key)}`) } }).lean();
+    if (keys.every(key => available.some(state => state._id === `key:${fingerprint(key)}` && state.until && state.until.getTime() > now))) throw aiError('AI keys are cooling down or need attention. No request was reserved.', 429);
     // Database reservations survive serverless restarts; keys do not multiply the shared budget.
     await mongoose.connection.transaction(async session => {
     for (const [id, maxCalls, maxTokens, lifetime] of [[`day:${day}`, AI_LIMITS.dailyCalls, AI_LIMITS.dailyTokens, 3 * 86400000], [`minute:${minute}`, AI_LIMITS.minuteCalls, AI_LIMITS.minuteTokens, 120000]] as const) {
