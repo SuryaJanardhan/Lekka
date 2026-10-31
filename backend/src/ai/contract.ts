@@ -11,6 +11,8 @@ export function aiError(message: string, status = 400) { return Object.assign(ne
 export const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export function validateRequest(value: SkillRequest): SkillRequest {
+  if (!value || typeof value !== 'object' || !value.range || typeof value.range !== 'object') throw aiError('Invalid skill filters');
+  if (Object.keys(value).some(key => !['skill', 'range', 'previous', 'category', 'direction', 'mode', 'term', 'page'].includes(key))) throw aiError('Only named skill filters are allowed');
   if (!skillIds.includes(value.skill) || !['DEBIT', 'CREDIT', 'BOTH'].includes(value.direction)) throw aiError('Unsupported read-only skill');
   for (const range of [value.range, value.previous].filter(Boolean) as DateRange[]) {
     const start = Date.parse(range.start), end = Date.parse(range.end);

@@ -1,0 +1,15 @@
+services:
+  mongo:
+    image: mongo:7.0
+    ports:
+      - "127.0.0.1:27130:27130"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: test-admin
+      MONGO_INITDB_ROOT_PASSWORD: isolated-ai-test-only
+    entrypoint: ["/bin/bash", "-lc"]
+    command:
+      - >-
+        umask 077;
+        head -c 512 /dev/urandom | base64 > /tmp/lekka-ai-key;
+        chown mongodb:mongodb /tmp/lekka-ai-key;
+        exec /usr/local/bin/docker-entrypoint.sh mongod --replSet lekka-ai-test --bind_ip_all --port 27130 --keyFile /tmp/lekka-ai-key
