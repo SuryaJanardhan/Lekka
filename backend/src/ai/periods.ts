@@ -3,11 +3,11 @@ import { aiError, DateRange } from './contract';
 const DAY = 86400000, IST = 330 * 60000;
 const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 export function hasPeriod(text: string) {
-  return /\b(?:this|last|current|previous)\s+(?:(?:7|seven)\s+days|month|week|year)|\btoday\b|\byesterday\b|\b20\d{2}-\d{2}-\d{2}\b/i.test(text) || new RegExp(`\\b(?:${months.map(name => `${name.slice(0, 3)}(?:${name.slice(3)})?`).join('|')})\\b`, 'i').test(text);
+  return /\b(?:this|last|current|previous)\s+(?:(?:7|seven)\s+days|month|week|year|quarter)|\btoday\b|\byesterday\b|\b20\d{2}\b/i.test(text) || new RegExp(`\\b(?:${months.map(name => `${name.slice(0, 3)}(?:${name.slice(3)})?`).join('|')})\\b`, 'i').test(text);
 }
 export function stripPeriods(text: string) {
-  return text.replace(/\b(?:this|last|current|previous)\s+(?:(?:7|seven)\s+days|month|week|year)\b|\btoday\b|\byesterday\b|\b20\d{2}-\d{2}-\d{2}\b/gi, '')
-    .replace(new RegExp(`\\b(?:${months.map(name => `${name.slice(0, 3)}(?:${name.slice(3)})?`).join('|')})(?:\\s+20\\d{2})?\\b`, 'gi'), '');
+  return text.replace(/\b(?:this|last|current|previous)\s+(?:(?:7|seven)\s+days|month|week|year|quarter)\b|\btoday\b|\byesterday\b|\b20\d{2}-\d{2}-\d{2}\b/gi, '')
+    .replace(new RegExp(`\\b(?:${months.map(name => `${name.slice(0, 3)}(?:${name.slice(3)})?`).join('|')})(?:\\s+20\\d{2})?\\b`, 'gi'), '').replace(/\b20\d{2}\b/g, '');
 }
 const iso = (year: number, month: number, day = 1) => new Date(Date.UTC(year, month, day) - IST).toISOString();
 export function namedPeriod(name: string, now = new Date()): DateRange {
@@ -25,13 +25,16 @@ export function namedPeriod(name: string, now = new Date()): DateRange {
     case 'last_month': start = iso(year, month - 1); end = iso(year, month); break;
     case 'this_year': start = iso(year, 0); end = iso(year + 1, 0); break;
     case 'last_year': start = iso(year - 1, 0); end = iso(year, 0); break;
+    case 'this_quarter': start = iso(year, Math.floor(month / 3) * 3); end = iso(year, Math.floor(month / 3) * 3 + 3); break;
+    case 'last_quarter': start = iso(year, Math.floor(month / 3) * 3 - 3); end = iso(year, Math.floor(month / 3) * 3); break;
     default: throw aiError('Unsupported period');
   }
   return { start, end, label: `${start.slice(0, 10)} to ${new Date(Date.parse(end) - 1).toISOString().slice(0, 10)} (IST boundaries)` };
 }
 
 export function parsePeriods(text: string, compare: boolean, now = new Date()): DateRange[] {
-  const lowered = text.toLowerCase();
+  const lowered = text.toLowerCase().replace(/["\u201c][^"\u201d]*["\u201d]/g, '');
+  if (/\ball[ -]time\b|\b(?:last|past|previous)\s+(?!7\s+days\b)\d+\s+(?:days?|weeks?|months?|years?)\b/i.test(lowered)) throw aiError('Use named periods or explicit YYYY-MM-DD start/end dates for this range.');
   const exact = [...lowered.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g)].map(match => match[1]);
   if (exact.length) {
     if (exact.length > 2) throw aiError('Use one date or a start and end date');
@@ -41,6 +44,10 @@ export function parsePeriods(text: string, compare: boolean, now = new Date()): 
     return [{ start: a.toISOString(), end: new Date(b.getTime() + DAY).toISOString(), label: `${exact[0]} to ${exact[1] || exact[0]} (IST)` }];
   }
   const named: Array<{ index: number; range: DateRange }> = [];
+  for (const key of ['this_quarter', 'last_quarter']) {
+    const match = new RegExp(`\\b${key.replace('_', '\\s+')}\\b`).exec(lowered);
+    if (match) named.push({ index: match.index, range: { ...namedPeriod(key, now), label: key.replace('_', ' ') } });
+  }
   const definitions = [['previous\\s+7\\s+days', 'previous_7_days'], ['last\\s+7\\s+days', 'last_7_days'], ['(?:this|current)\\s+month', 'this_month'], ['last\\s+month', 'last_month'], ['(?:this|current)\\s+week', 'this_week'], ['last\\s+week', 'last_week'], ['(?:this|current)\\s+year', 'this_year'], ['last\\s+year', 'last_year'], ['yesterday', 'yesterday'], ['today', 'today']];
   for (const [pattern, key] of definitions) {
     const match = new RegExp(`\\b${pattern}\\b`, 'i').exec(lowered);
@@ -51,6 +58,10 @@ export function parsePeriods(text: string, compare: boolean, now = new Date()): 
   for (const match of lowered.matchAll(monthPattern)) {
     const month = months.findIndex(name => name.startsWith(match[1])); const selectedYear = Number(match[2] || year);
     named.push({ index: match.index!, range: { start: iso(selectedYear, month), end: iso(selectedYear, month + 1), label: `${months[month]} ${selectedYear}` } });
+  }
+  if (!named.length) for (const match of lowered.matchAll(/\b(20\d{2})\b/g)) {
+    const selectedYear = Number(match[1]);
+    named.push({ index: match.index!, range: { start: iso(selectedYear, 0), end: iso(selectedYear + 1, 0), label: String(selectedYear) } });
   }
   const periods = named.sort((a, b) => a.index - b.index).map(item => item.range);
   if (periods.length > 2) throw aiError('Choose at most two periods');

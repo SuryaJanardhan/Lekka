@@ -8,7 +8,9 @@ export class ReadGateway {
   constructor(private database: () => Promise<Db> = aiReadDatabase) {}
   async categories() {
     const db = await this.database();
-    return db.collection('categories').find({}, { ...options, projection: { name: 1 } }).sort({ name: 1 }).limit(201).toArray();
+    const rows = await db.collection('categories').find({}, { ...options, projection: { name: 1 } }).sort({ name: 1 }).limit(1001).toArray();
+    if (rows.length > 1000) throw aiError('Category catalog exceeds the compact dispatcher limit. Narrow the catalog before using this skill.');
+    return rows;
   }
   async execute(input: SkillRequest) {
     const request = validateRequest(input); const db = await this.database();
@@ -36,11 +38,15 @@ export class ReadGateway {
     }
     if (request.skill === 'spending' || request.skill === 'compare') {
       const rows = await db.collection('emails').aggregate([
-        { $match: match }, { $addFields: { amount: paise, flow: { $cond: [{ $eq: ['$parsedJson.transactionDirection', 'CREDIT'] }, 'CREDIT', 'DEBIT'] } } },
-        { $group: { _id: '$flow', amount: { $sum: '$amount' }, count: { $sum: 1 } } }
+        { $match: match }, { $addFields: { amount: paise, flow: { $cond: [{ $eq: ['$parsedJson.transactionDirection', 'CREDIT'] }, 'CREDIT', 'DEBIT'] },
+          payment: { $cond: [{ $in: ['$parsedJson.paymentMode', ['CASH', 'CARD', 'FRIEND_PAID']] }, '$parsedJson.paymentMode', 'UPI'] } } },
+        { $group: { _id: { flow: '$flow', mode: '$payment' }, amount: { $sum: '$amount' }, count: { $sum: 1 } } }
       ], options).toArray();
+      const amount = (flow: string, mode?: string) => rows.filter(row => row._id.flow === flow && (!mode || row._id.mode === mode)).reduce((sum, row) => sum + Number(row.amount), 0);
       return { kind: 'summary', period: request.range, category: request.category, mode: request.mode,
-        debitPaise: Number(rows.find(row => row._id !== 'CREDIT')?.amount || 0), creditPaise: Number(rows.find(row => row._id === 'CREDIT')?.amount || 0), count: rows.reduce((sum, row) => sum + row.count, 0) };
+        debitPaise: amount('DEBIT'), creditPaise: amount('CREDIT'), count: rows.reduce((sum, row) => sum + row.count, 0),
+        debitCount: rows.filter(row => row._id.flow === 'DEBIT').reduce((sum, row) => sum + row.count, 0), creditCount: rows.filter(row => row._id.flow === 'CREDIT').reduce((sum, row) => sum + row.count, 0),
+        modes: ['CASH', 'UPI', 'CARD', 'FRIEND_PAID'].map(mode => ({ mode, debitPaise: amount('DEBIT', mode), creditPaise: amount('CREDIT', mode) })) };
     }
     if (request.skill === 'review') match.$and = [{ $or: [{ needsUserReview: true }, { categoryId: null }, { categorySource: 'UNASSIGNED' }] }];
     const count = await db.collection('emails').countDocuments(match, options);

@@ -24,6 +24,10 @@ export function buildRequest(skill: SkillId, message: string, categories: string
   const credit = /\b(credits?|income|received|refunds?)\b/i.test(directionText), debit = /\b(debits?|spend|spending|spent)\b/i.test(directionText);
   const category = categories.slice().sort((a, b) => b.length - a.length).find(name => new RegExp(`(?:^|\\W)${escapeRegex(name)}(?:$|\\W)`, 'i').test(text));
   if (/\bcategory\s*[:=]/i.test(text) && !category) throw aiError('Category not found. Use its exact name from Settings.');
+  if (['spending', 'compare'].includes(skill) && !category) {
+    const unrecognized = stripPeriods(text).replace(/\b(?:what|how|much|did|do|does|have|i|we|my|the|is|are|was|were|show|me|please|recorded|total|totals|amount|transactions?|payments?|spending|spend|spent|debits?|credits?|income|received|refunds?|cash|online|upi|card|friend|paid|in|on|for|to|from|at|and|or|vs|versus|compare|with|of|between|explain|why|insights?|more|less|than|page)\b/gi, '').replace(/[\d\s.,?!:;=+\-/]/g, '');
+    if (unrecognized) throw aiError('I could not identify that category or filter. Use its exact name from Settings, or @search for a merchant.');
+  }
   const periods = parsePeriods(text, skill === 'compare', now);
   const mode = /\bfriend[ -]paid\b/i.test(text) ? 'FRIEND_PAID' : /\bcash\b/i.test(text) ? 'CASH' : /\bupi\b/i.test(text) ? 'UPI' : /\bcard\b/i.test(text) ? 'CARD' : undefined;
   const quoted = /["\u201c]([^"\u201d]{1,80})["\u201d]/.exec(text)?.[1];
