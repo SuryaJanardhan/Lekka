@@ -4,7 +4,7 @@ export type Flow = 'DEBIT' | 'CREDIT' | 'BOTH';
 export interface DateRange { start: string; end: string; label: string }
 export interface SkillRequest {
   skill: SkillId; range: DateRange; previous?: DateRange; category?: string;
-  direction: Flow; mode?: 'UPI' | 'CASH' | 'CARD' | 'FRIEND_PAID'; term?: string; page: number; view?: 'modes';
+  direction: Flow; mode?: 'UPI' | 'CASH' | 'CARD' | 'FRIEND_PAID' | 'ONLINE'; term?: string; page: number; view?: 'modes';
 }
 export const PAGE_SIZE = 3;
 export function aiError(message: string, status = 400) { return Object.assign(new Error(message), { status }); }
@@ -22,6 +22,6 @@ export function validateRequest(value: SkillRequest): SkillRequest {
   if (!Number.isInteger(value.page) || value.page < 1 || value.page > 100) throw aiError('Choose a page from 1 to 100');
   if (value.term && (typeof value.term !== 'string' || value.term.length > 80)) throw aiError('Use a search term of at most 80 characters');
   if (value.category && (typeof value.category !== 'string' || value.category.length > 80)) throw aiError('Invalid category');
-  if (value.mode && !['UPI', 'CASH', 'CARD', 'FRIEND_PAID'].includes(value.mode)) throw aiError('Invalid payment mode');
+  if (value.mode && !['UPI', 'CASH', 'CARD', 'FRIEND_PAID', 'ONLINE'].includes(value.mode)) throw aiError('Invalid payment mode');
   return value;
 }

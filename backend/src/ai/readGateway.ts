@@ -16,7 +16,7 @@ export class ReadGateway {
     const request = validateRequest(input); const db = await this.database();
     const match: Record<string, any> = { receivedAt: { $gte: new Date(request.range.start), $lt: new Date(request.range.end) } };
     if (request.direction !== 'BOTH') match['parsedJson.transactionDirection'] = request.direction === 'DEBIT' ? { $ne: 'CREDIT' } : 'CREDIT';
-    if (request.mode) match['parsedJson.paymentMode'] = request.mode === 'UPI' ? { $nin: ['CASH', 'CARD', 'FRIEND_PAID'] } : request.mode;
+    if (request.mode) match['parsedJson.paymentMode'] = request.mode === 'UPI' ? { $nin: ['CASH', 'CARD', 'FRIEND_PAID'] } : request.mode === 'ONLINE' ? { $nin: ['CASH', 'FRIEND_PAID'] } : request.mode;
     if (request.category) {
       const category = await db.collection('categories').findOne({ name: new RegExp(`^${escapeRegex(request.category)}$`, 'i') }, { ...options, projection: { _id: 1 } });
       if (!category) throw aiError('Category not found. Use its name from Settings.');
