@@ -4,7 +4,7 @@ import { ChatService } from '../services/chatService';
 export class ChatController {
   public static async sendMessage(req: Request, res: Response) {
     try {
-      const { message, sessionId = 'default_user', clientState, history } = req.body;
+      const { message, sessionId = 'default_user', clientState, history, context } = req.body;
       if (!message || typeof message !== 'string' || !message.trim()) {
         return res.status(400).json({ success: false, error: 'A valid message string is required' });
       }
@@ -13,14 +13,15 @@ export class ChatController {
         sessionId,
         userMessage: message.trim(),
         clientState,
-        history
+        history, context
       });
 
       res.json({
         success: true,
         data: {
           reply: result.reply,
-          toolUsed: result.toolUsed || null
+          toolUsed: result.toolUsed || null,
+          context: 'context' in result ? result.context : null
         }
       });
     } catch (error: any) {

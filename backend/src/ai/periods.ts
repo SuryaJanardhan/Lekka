@@ -2,6 +2,13 @@ import { aiError, DateRange } from './contract';
 
 const DAY = 86400000, IST = 330 * 60000;
 const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+export function hasPeriod(text: string) {
+  return /\b(?:this|last|current|previous)\s+(?:(?:7|seven)\s+days|month|week|year)|\btoday\b|\byesterday\b|\b20\d{2}-\d{2}-\d{2}\b/i.test(text) || new RegExp(`\\b(?:${months.map(name => `${name.slice(0, 3)}(?:${name.slice(3)})?`).join('|')})\\b`, 'i').test(text);
+}
+export function stripPeriods(text: string) {
+  return text.replace(/\b(?:this|last|current|previous)\s+(?:(?:7|seven)\s+days|month|week|year)\b|\btoday\b|\byesterday\b|\b20\d{2}-\d{2}-\d{2}\b/gi, '')
+    .replace(new RegExp(`\\b(?:${months.map(name => `${name.slice(0, 3)}(?:${name.slice(3)})?`).join('|')})(?:\\s+20\\d{2})?\\b`, 'gi'), '');
+}
 const iso = (year: number, month: number, day = 1) => new Date(Date.UTC(year, month, day) - IST).toISOString();
 export function namedPeriod(name: string, now = new Date()): DateRange {
   const shifted = new Date(now.getTime() + IST), year = shifted.getUTCFullYear(), month = shifted.getUTCMonth(), day = shifted.getUTCDate();

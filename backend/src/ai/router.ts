@@ -1,8 +1,8 @@
 import { aiError, escapeRegex, SkillId, skillIds, SkillRequest } from './contract';
-import { parsePeriods } from './periods';
+import { parsePeriods, stripPeriods } from './periods';
 
 export function chooseSkill(message: string): SkillId | undefined {
-  const explicit = /^\s*@([a-z]+)\b/i.exec(message);
+  const explicit = /(?:^|\s)@([a-z]+)\b/i.exec(message);
   if (explicit) {
     if (!skillIds.includes(explicit[1].toLowerCase() as SkillId)) throw aiError('Unknown skill. Choose @spending, @compare, @search, @review, @rules or @watch.');
     return explicit[1].toLowerCase() as SkillId;
@@ -17,7 +17,7 @@ export function chooseSkill(message: string): SkillId | undefined {
 }
 
 export function buildRequest(skill: SkillId, message: string, categories: string[], now = new Date()): SkillRequest {
-  const text = message.replace(/^\s*@[a-z]+\s*/i, '').trim();
+  const text = message.replace(/(?:^|\s)@[a-z]+\b/gi, ' ').replace(/^(?:and|what about|same|instead)\s+/i, '').trim();
   if (text.length > 240) throw aiError('Keep the skill question under 240 characters so its context stays small.');
   if (/\b(balance|bank balance)\b/i.test(text)) throw aiError('Lekka tracks transactions, not your bank balance. Ask for recorded debits, credits or net flow.');
   const directionText = text.replace(/credit\s+card/gi, 'card');
@@ -29,14 +29,13 @@ export function buildRequest(skill: SkillId, message: string, categories: string
   const quoted = /["\u201c]([^"\u201d]{1,80})["\u201d]/.exec(text)?.[1];
   let term: string | undefined;
   if (skill === 'search') {
-    const explicit = /^\s*@search\b/i.test(message);
-    term = quoted || text.replace(/\bpage\s+\d+\b/gi, '').replace(/\b(?:this|last|current)\s+(?:month|week|year)\b|\btoday\b|\byesterday\b/gi, '')
-      .replace(/\b20\d{2}-\d{2}-\d{2}\b/g, '')
+    const explicit = /(?:^|\s)@search\b/i.test(message);
+    term = quoted || stripPeriods(text.replace(/\bpage\s+\d+\b/gi, ''))
       .replace(/^(?:find|search(?: for)?|show(?: me)?|look for)\s+/i, '').replace(/^(?:transactions?|payments?|receipts?)\s*(?:(?:to|from|at|for)\s+)?/i, '').trim();
     if (!explicit && /^(?:the|my|all|recent|latest)?\s*$/i.test(term)) term = undefined;
     if (term && term.length > 80) throw aiError('Use a shorter merchant or search phrase.');
   }
   const page = Number(/\bpage\s+(\d+)\b/i.exec(text)?.[1] || 1);
   return { skill, range: periods[0], previous: periods[1], category, mode, term, page,
-    direction: credit && debit ? 'BOTH' : credit ? 'CREDIT' : ['search', 'review'].includes(skill) ? 'BOTH' : 'DEBIT' };
+    direction: credit && debit ? 'BOTH' : credit ? 'CREDIT' : debit ? 'DEBIT' : ['search', 'review'].includes(skill) ? 'BOTH' : 'DEBIT' };
 }
