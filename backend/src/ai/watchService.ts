@@ -14,7 +14,8 @@ export async function processWatch(id: string) {
   const run = await AiWatchRun.findOneAndUpdate({ _id: id, state: { $ne: 'DONE' }, $or: [{ leaseUntil: { $exists: false } }, { leaseUntil: { $lt: new Date() } }] }, { $set: { owner, leaseUntil: new Date(Date.now() + 90000), state: 'PROCESSING' } }, { new: true }).lean();
   if (!run) throw Error('Watch check already processing');
   try {
-    if (!run.checkedAt || Date.now() - run.checkedAt.getTime() > 48 * 3600000) {
+    if (!run.checkedAt || (Date.now() - run.checkedAt.getTime() > 48 * 3600000 && !run.findings)) {
+      await AiWatchFinding.deleteMany({ runId: id });
       await AiWatchRun.updateOne({ _id: id, owner }, { state: 'DONE', findings: [], reply: 'Skipped stale watch check' }); return;
     }
     let findings: WatchFinding[] = run.findings;

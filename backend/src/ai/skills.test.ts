@@ -15,6 +15,9 @@ test('skill periods use IST boundaries across month and year transitions', () =>
   assert.equal(parsePeriods('2026-10-01 to 2026-10-02', false, now)[0].end, '2026-10-02T18:30:00.000Z');
   assert.throws(() => parsePeriods('2026-02-30', false, now), /Invalid calendar/);
   assert.throws(() => parsePeriods('September', true, now), /both comparison/);
+  assert.equal(parsePeriods('2025', false, now)[0].start, '2024-12-31T18:30:00.000Z');
+  assert.equal(parsePeriods('last quarter', false, now)[0].start, '2026-06-30T18:30:00.000Z');
+  assert.throws(() => parsePeriods('all time', false, now), /named periods/);
 });
 test('skills resolve exact category mode direction and bounded pagination', () => {
   assert.equal(chooseSkill('@compare'), 'compare');
@@ -29,6 +32,7 @@ test('skills resolve exact category mode direction and bounded pagination', () =
   assert.equal(buildRequest('search', '@search HungerBox September 2026', [], now).term, 'HungerBox');
   assert.throws(() => validateRequest({ ...request, page: 1000 }), /page/);
   assert.throws(() => buildRequest('spending', 'bank balance', [], now), /not your bank balance/);
+  assert.throws(() => buildRequest('spending', '@spending Fod last month', ['Food'], now), /could not identify/);
 });
 test('watch flags possible duplicates without treating them as proven or editing anything', () => {
   const recent = [{ _id: 'one', subject: 'Shop', receivedAt: new Date('2026-10-29T20:00:00Z'), parsedJson: { detectedAmount: 120, merchantName: 'Shop' } }, { _id: 'two', subject: 'Shop', receivedAt: new Date('2026-10-29T20:04:00Z'), parsedJson: { detectedAmount: 120, merchantName: 'Shop' } }];
