@@ -19,9 +19,7 @@ export function chooseSkill(message: string): SkillId | undefined {
 export function buildRequest(skill: SkillId, message: string, categories: string[], now = new Date()): SkillRequest {
   const text = message.replace(/(?:^|\s)@[a-z]+\b/gi, ' ').replace(/^(?:and|what about|same|instead)\s+/i, '').trim();
   if (text.length > 240) throw aiError('Keep the skill question under 240 characters so its context stays small.');
-  if (/\b(balance|bank balance)\b/i.test(text)) throw aiError('Lekka tracks transactions, not your bank balance. Ask for recorded debits, credits or net flow.');
-  const directionText = text.replace(/credit\s+card/gi, 'card');
-  const credit = /\b(credits?|income|received|refunds?)\b/i.test(directionText), debit = /\b(debits?|spend|spending|spent)\b/i.test(directionText);
+  if (['spending', 'compare'].includes(skill) && /\b(balance|bank balance)\b/i.test(text)) throw aiError('Lekka tracks transactions, not your bank balance. Ask for recorded debits, credits or net flow.');
   const category = categories.slice().sort((a, b) => b.length - a.length).find(name => new RegExp(`(?:^|\\W)${escapeRegex(name)}(?:$|\\W)`, 'i').test(text));
   if (category && categories.some(name => name !== category && new RegExp(`(?:^|\\W)${escapeRegex(name)}(?:$|\\W)`, 'i').test(text.replace(new RegExp(escapeRegex(category), 'i'), '')))) throw aiError('Choose one category per question so the result is unambiguous.');
   if (/\bcategory\s*[:=]/i.test(text) && !category) throw aiError('Category not found. Use its exact name from Settings.');
@@ -29,8 +27,11 @@ export function buildRequest(skill: SkillId, message: string, categories: string
     const unrecognized = stripPeriods(text).replace(/\b(?:what|how|much|did|do|does|have|i|we|my|the|is|are|was|were|show|me|please|recorded|total|totals|amount|transactions?|payments?|spending|spend|spent|debits?|credits?|income|received|refunds?|cash|online|upi|card|friend|paid|in|on|for|to|from|at|and|or|vs|versus|compare|with|of|between|explain|why|insights?|more|less|than|page)\b/gi, '').replace(/[\d\s.,?!:;=+\-/]/g, '');
     if (unrecognized) throw aiError('I could not identify that category or filter. Use its exact name from Settings, or @search for a merchant.');
   }
-  const periods = parsePeriods(text, skill === 'compare', now);
-  const mode = /\bfriend[ -]paid\b/i.test(text) ? 'FRIEND_PAID' : /\bcash\b/i.test(text) ? 'CASH' : /\bupi\b/i.test(text) ? 'UPI' : /\bcard\b/i.test(text) ? 'CARD' : /\bonline\b/i.test(text) ? 'ONLINE' : undefined;
+  const scope = (category ? text.replace(new RegExp(escapeRegex(category), 'i'), ' ') : text).replace(/["\u201c][^"\u201d]*["\u201d]/g, '');
+  const directionText = scope.replace(/credit\s+card/gi, 'card');
+  const credit = /\b(credits?|income|received|refunds?)\b/i.test(directionText), debit = /\b(debits?|spend|spending|spent)\b/i.test(directionText);
+  const periods = parsePeriods(scope, skill === 'compare', now);
+  const mode = /\bfriend[ -]paid\b/i.test(scope) ? 'FRIEND_PAID' : /\bcash\b/i.test(scope) ? 'CASH' : /\bupi\b/i.test(scope) ? 'UPI' : /\bcard\b/i.test(scope) ? 'CARD' : /\bonline\b/i.test(scope) ? 'ONLINE' : undefined;
   const quoted = /["\u201c]([^"\u201d]{1,80})["\u201d]/.exec(text)?.[1];
   let term: string | undefined;
   if (skill === 'search') {

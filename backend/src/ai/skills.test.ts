@@ -30,6 +30,8 @@ test('skills resolve exact category mode direction and bounded pagination', () =
   const debitSearch = buildRequest('search', '@search HungerBox debits September 2026', [], now);
   assert.equal(debitSearch.direction, 'DEBIT'); assert.equal(debitSearch.term, 'HungerBox'); assert.equal(debitSearch.range.start, '2026-08-31T18:30:00.000Z');
   assert.equal(buildRequest('search', '@search HungerBox September 2026', [], now).term, 'HungerBox');
+  assert.equal(buildRequest('spending', '@spending Shopping online', ['Shopping online'], now).mode, undefined);
+  assert.equal(buildRequest('search', '@search "Credit Union"', [], now).direction, 'BOTH');
   assert.throws(() => validateRequest({ ...request, page: 1000 }), /page/);
   assert.throws(() => buildRequest('spending', 'bank balance', [], now), /not your bank balance/);
   assert.throws(() => buildRequest('spending', '@spending Fod last month', ['Food'], now), /could not identify/);

@@ -10,8 +10,10 @@ const gateway = new ReadGateway();
 export class SkillService {
   static async respond(message: string, history: Array<{ role: string; content: string }> = [], context?: SkillRequest) {
     if (message.length > 240) throw aiError('Keep the question under 240 characters for the small AI budget.');
-    const modeComparison = /\bcash\b/i.test(message) && /\bonline\b/i.test(message);
-    let skill = modeComparison ? 'spending' as const : chooseSkill(message);
+    const selected = chooseSkill(message);
+    const modeText = message.replace(/["\u201c][^"\u201d]*["\u201d]/g, '');
+    const modeComparison = (!selected || ['spending', 'compare'].includes(selected)) && /\bcash\b/i.test(modeText) && /\bonline\b/i.test(modeText);
+    let skill = modeComparison ? 'spending' as const : selected;
     const previousRequest = context ? validateRequest(context) : undefined;
     const prior = history.filter(row => row.role === 'user' && row.content !== message).at(-1);
     const followup = !/(?:^|\s)@/.test(message) && /^(?:(?:and |what about |same |instead )|(?:next )?page\s*\d*\s*$|\d{1,3}$|(?:last|this) (?:month|week|year)\s*[?!.]*$)/i.test(message);
