@@ -135,7 +135,7 @@ export class ApiClient {
   }
 
   syncGmail() {
-    return this.request<{ newIngested: number; notificationOnlyCount: number; duplicatesSkipped: number }>('/api/ingest', {
+    return this.request<{ runId: string; scheduled: boolean; resumed: boolean }>('/api/ingest', {
       method: 'POST'
     });
   }

@@ -511,8 +511,8 @@ export function App() {
     setSyncing(true);
     try {
       const result = await api.syncGmail();
-      logEvent('gmail ingestion ok', `${result.newIngested} synced`);
-      await afterWrite(`${result.newIngested} expenses synced, ${result.notificationOnlyCount} emails flagged`, 'Gmail sync', true);
+      logEvent('gmail ingestion scheduled', result.runId);
+      showToast(result.resumed ? 'Existing Gmail recovery resumed safely' : 'Gmail recovery queued; updates will arrive in the background');
     } catch (error: any) {
       logEvent('gmail ingestion failed', error.message || 'unknown');
       showToast(error.message || 'Gmail sync failed');

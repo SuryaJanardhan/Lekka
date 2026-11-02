@@ -17,6 +17,7 @@ import { recoverOperations } from '../services/operationQueue';
 import { waitUntil } from '@vercel/functions';
 import { AiController } from '../ai/controller';
 import { recoverWatches } from '../ai/watchQueue';
+import { recoverMailIngestions } from '../services/mailIngestionQueue';
 
 const router = Router();
 
@@ -25,6 +26,7 @@ router.use(secureApiMiddleware);
 router.use((req, _res, next) => {
   if (req.method === 'GET' && ['/ingest', '/notifications/digest'].includes(req.path)) {
     waitUntil(recoverOperations()); waitUntil(recoverWatches());
+    waitUntil(recoverMailIngestions());
   }
   next();
 });

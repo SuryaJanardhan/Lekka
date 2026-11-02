@@ -11,6 +11,10 @@
     "api/watch-worker.ts": {
       "maxDuration": 60,
       "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "lekka-watch" }]
+    },
+    "api/mail-ingestion-worker.ts": {
+      "maxDuration": 60,
+      "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "lekka-mail-ingestion" }]
     }
   },
   "rewrites": [

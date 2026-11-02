@@ -35,5 +35,9 @@ NotificationSchema.index({ 'metadata.entryId': 1 }, {
   unique: true,
   partialFilterExpression: { type: 'REVIEW', 'metadata.reviewKind': 'category' }
 });
+NotificationSchema.index({ type: 1, 'metadata.ingestionRunId': 1 }, {
+  unique: true,
+  partialFilterExpression: { type: 'SYNC', 'metadata.ingestionRunId': { $type: 'string' } }
+});
 
 export const NotificationModel = model<INotification>('Notification', NotificationSchema);

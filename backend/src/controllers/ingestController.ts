@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { GmailService } from '../services/gmailService';
 import { recordJobRun, requestJobSource } from '../services/jobRunService';
 import { bumpDataRevision } from '../services/dataRevisionService';
+import { scheduleMailIngestion } from '../services/mailIngestionQueue';
 
 export class IngestController {
   public static async recoverCredits(req: Request, res: Response) {
@@ -23,15 +24,8 @@ export class IngestController {
   public static async triggerManualIngestion(req: Request, res: Response) {
     try {
       const source = requestJobSource(req);
-      const result = await recordJobRun('gmail-ingestion', source, () =>
-        GmailService.processIngestionPipeline(source === 'VERCEL_CRON' ? 'automatic' : 'manual')
-      );
-      if (result.skipped) return res.status(409).json({ success: false, error: result.skipped, data: result });
-      res.json({
-        success: true,
-        message: 'Email ingestion pipeline executed successfully',
-        data: result
-      });
+      const result = await recordJobRun('gmail-ingestion-schedule', source, () => scheduleMailIngestion(source));
+      res.status(202).json({ success: true, message: 'Email ingestion scheduled safely', data: result });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }

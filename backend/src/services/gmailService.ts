@@ -46,13 +46,13 @@ export class GmailService {
     return { recovered: result.creditsAdded || 0, matched: candidates.length, reviews: result.needsReviewCount, remainingOutsideInbox: receipts.length - candidates.length };
   }
 
-  private static inboxSettings(): InboxSettings {
+  private static inboxSettings(processLimit = runtimeConfig.gmailIngestLimit): InboxSettings {
     return {
       user: runtimeConfig.gmail.user, password: runtimeConfig.gmail.appPassword,
       selectedSenders: runtimeConfig.targetSenderEmails,
       trustedForwarders: runtimeConfig.trustedForwarderEmails,
       testRecipient: runtimeConfig.ingestionTestRecipient,
-      scanLimit: runtimeConfig.gmailImapScanLimit, processLimit: runtimeConfig.gmailIngestLimit
+      scanLimit: runtimeConfig.gmailImapScanLimit, processLimit
     };
   }
 
@@ -79,7 +79,7 @@ export class GmailService {
     return { ...scan.diagnostics, readOnly: true, matchedMessages };
   }
 
-  public static async processIngestionPipeline(source: 'manual' | 'automatic' = 'automatic'): Promise<IngestionResult> {
+  public static async processIngestionPipeline(source: 'manual' | 'automatic' = 'automatic', processLimit = runtimeConfig.gmailIngestLimit, notify = true): Promise<IngestionResult> {
     const token = randomUUID();
     const startedAt = new Date();
     let syncState;
@@ -101,7 +101,7 @@ export class GmailService {
       let nextCursor: InboxCursor | undefined;
       let nextOAuthCursor: ISyncState['oauthCursor'];
       if (runtimeConfig.gmail.user && runtimeConfig.gmail.appPassword) {
-        const scan = await scanImapInbox(this.inboxSettings(), syncState.imapCursor);
+        const scan = await scanImapInbox(this.inboxSettings(processLimit), syncState.imapCursor);
         result = await this.processIncomingMails(scan.mails);
         result.diagnostics = scan.diagnostics;
         nextCursor = scan.cursor;
@@ -110,14 +110,14 @@ export class GmailService {
         result = page.result;
         nextOAuthCursor = page.cursor;
       }
-      if (source === 'automatic') await LedgerService.backfillNotes(10).catch(() => console.error('[Notes] Scheduled enrichment deferred'));
+      if (source === 'automatic' && result.diagnostics?.hasMore !== true) await LedgerService.backfillNotes(5).catch(() => console.error('[Notes] Scheduled enrichment deferred'));
       const saved = await SyncStateModel.updateOne(
         { key: 'gmail', ingestionLockToken: token },
         { $set: { lastSuccessfulSyncAt: new Date(), ...(nextCursor ? { imapCursor: nextCursor } : {}), ...(nextOAuthCursor ? { oauthCursor: nextOAuthCursor } : {}) }, $unset: { lastError: '' } }
       );
       if (!saved.matchedCount) throw new Error('Gmail ingestion lease expired before progress was committed');
       if (source === 'automatic') waitUntil(scheduleWatch().catch(() => console.error('[Watch] Daily check remains eligible for recovery')));
-      await notificationService.addNotification(
+      if (notify) await notificationService.addNotification(
         'Gmail sync complete',
         result.newIngested + ' transactions added (' + (result.debitsAdded || 0) + ' debits, ' + (result.creditsAdded || 0) + ' credits), ' + result.needsReviewCount + ' need category review, ' + result.notificationOnlyCount + ' emails need a manual amount check.',
         'SYNC', { ...result, source }

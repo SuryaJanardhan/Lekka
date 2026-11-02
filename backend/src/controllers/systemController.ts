@@ -3,14 +3,16 @@ import { SyncStateModel } from '../models/SyncState';
 import { JobRunModel } from '../models/JobRun';
 import { NotificationModel } from '../models/Notification';
 import { groqApiKey } from '../config/groqCredentials';
+import { MailIngestionRunModel } from '../models/MailIngestionRun';
 
 export class SystemController {
   public static async getSyncStatus(_req: Request, res: Response) {
     try {
-      const [gmail, jobs, lastSync] = await Promise.all([
+      const [gmail, jobs, lastSync, activeRun] = await Promise.all([
         SyncStateModel.findOne({ key: 'gmail' }).lean(),
         JobRunModel.find({}).sort({ startedAt: -1 }).limit(15).lean(),
-        NotificationModel.findOne({ type: 'SYNC' }).sort({ createdAt: -1 }).select('createdAt metadata').lean()
+        NotificationModel.findOne({ type: 'SYNC' }).sort({ createdAt: -1 }).select('createdAt metadata').lean(),
+        MailIngestionRunModel.findOne({ state: { $ne: 'DONE' } }).sort({ createdAt: 1 }).select('state source batches error createdAt updatedAt').lean()
       ]);
       res.json({
         success: true,
@@ -40,7 +42,8 @@ export class SystemController {
             { job: 'notifications-morning', timeZone: 'Asia/Kolkata', scheduledTime: '09:00 daily, pending items only' },
             { job: 'notifications-evening', timeZone: 'Asia/Kolkata', scheduledTime: '21:00 daily', notificationWhen: 'Sundays and last day of month only' }
           ],
-          jobs
+          jobs,
+          activeIngestionRun: activeRun || null
         }
       });
     } catch (error: any) {

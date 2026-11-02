@@ -10,6 +10,7 @@ const capacitorConfig = readFileSync(resolve(root, 'capacitor.config.json'), 'ut
 const androidManifest = readFileSync(resolve(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
 const remotePushSource = readFileSync(resolve(root, 'src/remotePush.ts'), 'utf8');
 const operationSource = readFileSync(resolve(root, '../backend/src/services/operationService.ts'), 'utf8');
+const mailQueueSource = readFileSync(resolve(root, '../backend/src/services/mailIngestionQueue.ts'), 'utf8');
 
 const checks = [
   {
@@ -53,8 +54,8 @@ const checks = [
     pass: appSource.includes('channelId: notificationChannelId')
   },
   {
-    name: 'Gmail sync can notify locally and queued transaction confirmations are sent only after commit',
-    pass: appSource.includes("'Gmail sync', true") && operationSource.includes("completed?.state === 'DONE'") && operationSource.includes('PushService.send(')
+    name: 'Gmail recovery sends one grouped alert and queued transaction confirmations are sent only after commit',
+    pass: mailQueueSource.includes("'Gmail recovery complete'") && mailQueueSource.includes('notificationService.addNotification') && operationSource.includes("completed?.state === 'DONE'") && operationSource.includes('PushService.send(')
   },
   {
     name: 'settings verifies biometric before enabling preference',
