@@ -6,6 +6,7 @@ import { NotificationModel } from '../models/Notification';
 import { DigestKind, digestPeriod, digestText } from './pushSummary';
 import { bumpDataRevision } from './dataRevisionService';
 import { notificationTitle } from './notificationFormat';
+import { InsightReportService } from './insightReportService';
 
 function credentials() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
@@ -63,8 +64,9 @@ export class PushService {
   static async sendDigest(kind: DigestKind, now = new Date()) {
     const period = digestPeriod(kind, now);
     if (!period.report) return { skipped: 'No weekly or month-end report due', sent: 0 };
-    if (!this.isConfigured()) throw new Error('Firebase Cloud Messaging is not configured');
-    if (!await PushDeviceModel.exists({})) return { skipped: 'No registered phones', sent: 0 };
+    const insight = await InsightReportService.generateForDigest(period.report, period, now);
+    if (!this.isConfigured()) return { skipped: 'Remote push is not configured', reportKey: insight?.periodKey, sent: 0 };
+    if (!await PushDeviceModel.exists({})) return { skipped: 'No registered phones', reportKey: insight?.periodKey, sent: 0 };
     const uncategorizedQuery = { $or: [{ categoryId: null }, { categorySource: 'UNASSIGNED' }] };
     const pendingQuery = { $or: [{ needsUserReview: true }, ...uncategorizedQuery.$or] };
     const reviewEmailQuery = { type: 'REVIEW', read: false, 'metadata.reviewKind': { $ne: 'category' } };
@@ -115,7 +117,7 @@ export class PushService {
       }, now);
       title = notificationTitle(title, period.report === 'review' ? 'REVIEW' : 'REMINDER');
       const notification = await NotificationModel.findOneAndUpdate({ type: 'REMINDER', 'metadata.key': key }, {
-        $setOnInsert: { title, message, type: 'REMINDER', metadata: { key, report: period.report } }
+        $setOnInsert: { title, message, type: 'REMINDER', metadata: { key, report: period.report, reportKey: insight?.periodKey } }
       }, { upsert: true, new: true });
       await bumpDataRevision();
       const result = await this.send(title, message, key, period.report === 'review' ? 'review' : 'insights');

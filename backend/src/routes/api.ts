@@ -15,6 +15,7 @@ import { trackSnapshotChanges } from '../middleware/snapshotRevision';
 import { OperationController } from '../controllers/operationController';
 import { recoverOperations } from '../services/operationQueue';
 import { waitUntil } from '@vercel/functions';
+import { ReportController } from '../controllers/reportController';
 import { AiController } from '../ai/controller';
 import { recoverWatches } from '../ai/watchQueue';
 import { recoverMailIngestions } from '../services/mailIngestionQueue';
@@ -37,6 +38,8 @@ router.use(trackSnapshotChanges);
 router.get('/sync/status', SnapshotController.status);
 router.get('/sync/snapshot', SnapshotController.snapshot);
 router.get('/ai/status', AiController.status);
+router.get('/reports', ReportController.list);
+router.get('/reports/:periodKey', ReportController.get);
 
 // Email routes
 router.get('/emails', EmailController.getEmails);
