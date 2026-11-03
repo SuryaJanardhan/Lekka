@@ -38,6 +38,18 @@ test('unpaid invoice amount goes to review when AI cannot confirm a debit', asyn
   assert.equal(notice.mock.callCount(), 1);
   assert.equal(store.mock.callCount(), 0);
 });
+test('non-transaction policy notices bypass incidental credit wording and AI extraction', async (t) => {
+  const extract = t.mock.method(GroqService, 'extractFinancialFields', async () => { throw Error('AI must not run'); });
+  const notifications: any[] = [];
+  t.mock.method(notificationService, 'addNotification', async (...args: any[]) => { notifications.push(args); return undefined; });
+  const result = await classify({
+    messageId: 'policy-notice', sender: 'noreply@groww.in', subject: 'Change in pledge handling policy',
+    rawTextBody: 'If you buy shares and your account is credited later, review the new policy.', parsedJson: {},
+    receivedAt: new Date(), isTest: false, transportSender: 'noreply@groww.in'
+  });
+  assert.equal(result.notificationOnly, true); assert.equal(extract.mock.callCount(), 0);
+  assert.match(notifications[0][0], /Review non-transaction email/);
+});
 test('existing category rule handles a completed debit without classification AI', async (t) => {
   t.mock.method(RuleEngine, 'evaluateEmail', async () => 'category-id');
   let stored: Record<string, any> | undefined;

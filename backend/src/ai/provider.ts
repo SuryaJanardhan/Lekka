@@ -16,13 +16,14 @@ export class AiProvider {
     const keys = groqApiKeys();
     if (!keys.length) throw aiError('AI is not configured', 503);
     const bytes = inputUpperBound(params.messages);
-    if (purpose !== 'email' && bytes > AI_LIMITS.input) throw aiError('Request is too large for the small AI budget. Narrow the question or use a skill.', 413);
-    const output = purpose === 'email' ? Math.min(Number(params.max_tokens || 512), 1600) : AI_LIMITS.output;
+    const limits = purpose === 'email' ? { input: 2400, output: 160, minuteCalls: 3, minuteTokens: 5000, dailyCalls: 12, dailyTokens: 24000 } : AI_LIMITS;
+    if (bytes > limits.input) throw aiError('Request is too large for the small AI budget. Narrow it or send it to manual review.', 413);
+    const output = Math.min(Number(params.max_tokens || 512), limits.output);
     const cacheId = createHash('sha256').update(JSON.stringify({ params, purpose, output })).digest('hex');
     const cached = await AiResponseCache.findOne({ _id: cacheId, expiresAt: { $gt: new Date() } }).lean();
     if (cached?.response) return cached.response as Groq.Chat.Completions.ChatCompletion;
     const reserved = bytes + output;
-    if (reserved > AI_LIMITS.minuteTokens) throw aiError('Email context exceeds the free-tier request budget. Manual review is required.', 413);
+    if (reserved > limits.minuteTokens) throw aiError('Request exceeds the free-tier AI budget. Manual review is required.', 413);
     const now = Date.now(); const minute = Math.floor(now / 60000), day = Math.floor(now / 86400000);
     const cooldown = await AiProviderState.findById('cooldown:model').lean();
     if (cooldown?.until && cooldown.until.getTime() > now) throw Object.assign(aiError('AI is cooling down. Calculated results are still available.', 429), { retryAfter: Math.ceil((cooldown.until.getTime() - now) / 1000) });
@@ -30,7 +31,8 @@ export class AiProvider {
     if (keys.every(key => available.some(state => state._id === `key:${fingerprint(key)}` && state.until && state.until.getTime() > now))) throw aiError('AI keys are cooling down or need attention. No request was reserved.', 429);
     // Database reservations survive serverless restarts; keys do not multiply the shared budget.
     await mongoose.connection.transaction(async session => {
-    for (const [id, maxCalls, maxTokens, lifetime] of [[`day:${day}`, AI_LIMITS.dailyCalls, AI_LIMITS.dailyTokens, 3 * 86400000], [`minute:${minute}`, AI_LIMITS.minuteCalls, AI_LIMITS.minuteTokens, 120000]] as const) {
+    const prefix = purpose === 'email' ? 'email:' : '';
+    for (const [id, maxCalls, maxTokens, lifetime] of [[`${prefix}day:${day}`, limits.dailyCalls, limits.dailyTokens, 3 * 86400000], [`${prefix}minute:${minute}`, limits.minuteCalls, limits.minuteTokens, 120000]] as const) {
       await AiProviderState.updateOne({ _id: id }, { $setOnInsert: { calls: 0, tokens: 0, expiresAt: new Date(now + lifetime) } }, { upsert: true, session });
       const reservation = await AiProviderState.findOneAndUpdate({ _id: id, calls: { $lt: maxCalls }, tokens: { $lte: maxTokens - reserved } }, { $inc: { calls: 1, tokens: reserved } }, { new: true, session }).lean();
       if (!reservation) throw Object.assign(aiError('Free-tier AI budget is busy. Calculated results are still available.', 429), { retryAfter: id.startsWith('day:') ? Math.ceil((86400000 - now % 86400000) / 1000) : Math.ceil((60000 - now % 60000) / 1000) });
@@ -72,6 +74,7 @@ export class AiProvider {
   }
   static async status() {
     const day = await AiProviderState.findById(`day:${Math.floor(Date.now() / 86400000)}`).lean();
-    return { limits: AI_LIMITS, dailyCalls: day?.calls || 0, dailyReservedTokens: day?.tokens || 0, keyCount: groqApiKeys().length, readOnlyConfigured: Boolean(process.env.MONGODB_READONLY_URI) };
+    const emailDay = await AiProviderState.findById(`email:day:${Math.floor(Date.now() / 86400000)}`).lean();
+    return { limits: AI_LIMITS, dailyCalls: day?.calls || 0, dailyReservedTokens: day?.tokens || 0, emailDailyCalls: emailDay?.calls || 0, emailDailyReservedTokens: emailDay?.tokens || 0, keyCount: groqApiKeys().length, readOnlyConfigured: Boolean(process.env.MONGODB_READONLY_URI) };
   }
 }

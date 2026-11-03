@@ -87,7 +87,7 @@ Balances, unpaid invoices, failed/pending payments and promotional prices are NO
 
 Sender: ${sender}
 Subject: ${subject}
-Body: ${bodyText.substring(0, 2500)}
+Body: ${bodyText.substring(0, 1200)}
 
 Respond ONLY as JSON. Replace noteWords with five one-word elements forming a natural phrase about the actual purpose or merchant. Do not repeat keywords, include amounts/currency, or copy example placeholders:
 {
@@ -128,6 +128,7 @@ Use a positive detectedAmount for both directions. For unclear transactions or m
       };
     } catch (error: any) {
       if (error.status === 413) return null;
+      if (error?.status === 429 || error?.status === 413) return null;
       console.error('[AI] Financial extraction unavailable; keeping mail eligible for retry');
       throw new Error('AI extraction unavailable; mail will retry on the next sync');
     }

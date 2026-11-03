@@ -303,7 +303,7 @@ export class GmailService {
     transportSender: string;
   }): Promise<{ needsUserReview: boolean; notificationOnly: boolean; ignoredCredit?: boolean; direction?: string }> {
     let direction = transactionDirection(emailData.subject, emailData.rawTextBody);
-    if (direction === 'UNKNOWN' && nonTransactionNotice(emailData.subject, emailData.rawTextBody)) {
+    if (nonTransactionNotice(emailData.subject, emailData.rawTextBody)) {
       await notificationService.addNotification(
         `Review non-transaction email: ${emailData.sender}`,
         `"${emailData.subject}" is a statement, policy, report, trade summary, or cancelled instruction rather than one confirmed transaction. Add a manual entry only if needed.`,
