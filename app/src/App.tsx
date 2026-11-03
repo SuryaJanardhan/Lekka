@@ -27,7 +27,7 @@ import {
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { ApiClient } from './api';
 import { Category, DashboardStats, EmailRecord, NotificationItem, Rule, DataSnapshot } from './types';
-import { amountOf, money, moneyExact, shortDate, timeAgo, directionOf, modeOf } from './format';
+import { amountOf, money, moneyExact, shortDate, timeAgo, directionOf, modeOf, newestFirst } from './format';
 import { LockScreen } from './LockScreen';
 import { ChatMessage, Conversation, loadConversations, saveConversations, newConversationId } from './chatHistory';
 import { startRemotePush, stopRemotePush } from './remotePush';
@@ -388,7 +388,8 @@ export function App() {
     };
   }, [confirmedEntries]);
 
-  const filteredEntries = entries.filter((entry) => {
+  const orderedEntries = newestFirst(entries);
+  const filteredEntries = orderedEntries.filter((entry) => {
     const matchesSearch = search.trim()
       ? `${entry.sender} ${entry.subject} ${entry.rawTextBody}`.toLowerCase().includes(search.toLowerCase())
       : true;
@@ -396,7 +397,7 @@ export function App() {
     return matchesSearch && matchesCategory;
   });
 
-  const reviewEntries = entries.filter(requiresReview);
+  const reviewEntries = orderedEntries.filter(requiresReview);
 
   const unlockWithPin = (value: string) => {
     if (value === savedPin) {
@@ -746,7 +747,7 @@ export function App() {
             </div>
 
             <SectionTitle title="Recent ledger" action="View all" onAction={() => setTab('ledger')} />
-            <EntryList entries={entries.slice(0, 6)} onSelect={setSelectedEntry} empty="No expenses yet" />
+            <EntryList entries={orderedEntries.slice(0, 6)} onSelect={setSelectedEntry} empty="No expenses yet" />
           </section>
         )}
 

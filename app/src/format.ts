@@ -33,3 +33,11 @@ export function modeOf(entry: { parsedJson?: Record<string, any> }): string {
   const mode = entry.parsedJson?.paymentMode;
   return ['CASH', 'UPI', 'CARD', 'FRIEND_PAID'].includes(mode) ? mode : 'UPI';
 }
+
+export function newestFirst<T extends { receivedAt?: string; processedAt?: string }>(entries: T[]): T[] {
+  return [...entries].sort((left, right) => {
+    const leftTime = Date.parse(left.receivedAt || left.processedAt || '') || 0;
+    const rightTime = Date.parse(right.receivedAt || right.processedAt || '') || 0;
+    return rightTime - leftTime;
+  });
+}
