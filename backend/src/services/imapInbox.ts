@@ -14,7 +14,7 @@ export interface InboxMail {
   arrivedAt: Date;
   isTest: boolean;
   admissionReason: string;
-  attachments: Array<{ contentType: string; content: Buffer }>;
+  attachments: Array<{ contentType: string; content: Buffer; filename?: string; disposition?: string; related?: boolean }>;
 }
 export interface InboxSettings extends MailFilters {
   user: string;
@@ -92,7 +92,10 @@ export async function scanImapInbox(settings: InboxSettings, savedCursor?: Inbox
             body: mail.text || (typeof mail.html === 'string' ? mail.html : '') || mail.subject || subject,
             receivedAt: validDate(mail.date) || arrivedAt, arrivedAt,
             isTest: result.isTest, admissionReason: result.reason,
-            attachments: mail.attachments.map(attachment => ({ contentType: attachment.contentType, content: attachment.content }))
+            attachments: mail.attachments.map(attachment => ({
+              contentType: attachment.contentType, content: attachment.content,
+              filename: attachment.filename, disposition: attachment.contentDisposition, related: attachment.related
+            }))
           });
         } else ignored++;
         checkpoint = header.uid;

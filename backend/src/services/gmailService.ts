@@ -35,6 +35,11 @@ export interface IngestionResult {
 
 type IncomingMail = InboxMail;
 
+export function shouldOcrAttachment(attachment: InboxMail['attachments'][number]) {
+  return attachment.contentType.startsWith('image/') && attachment.content.length >= 15000 && attachment.content.length <= 5 * 1024 * 1024 &&
+    attachment.disposition !== 'inline' && attachment.related !== true;
+}
+
 export class GmailService {
   public static async recoverIgnoredCredits() {
     const receipts = await ProcessedMailModel.find({ outcome: 'IGNORED_CREDIT', isTest: { $ne: true } }).select('messageId').lean();
@@ -236,8 +241,10 @@ export class GmailService {
       structuredJson.transportSender = mail.transportSender;
       structuredJson.mailArrivedAt = mail.arrivedAt.toISOString();
       let ocrText = '';
+      let ocrImages = 0;
       for (const attachment of mail.attachments || []) {
-        if (attachment.contentType.startsWith('image/')) {
+        if (shouldOcrAttachment(attachment) && ocrImages < 2) {
+          ocrImages++;
           ocrText += await ParserService.processAttachmentImage(attachment.content);
         }
       }
