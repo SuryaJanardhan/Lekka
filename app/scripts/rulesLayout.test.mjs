@@ -85,6 +85,10 @@ try {
   const saved = await page.evaluate(() => window.layoutSaved);
   assert.equal(saved.id, 'rule-0'); assert.equal(saved.payload.conditions.length, 3); assert.equal(saved.payload.priority, 20);
   await page.getByRole('button', { name: 'Delete rule for Food', exact: true }).first().click();
+  const category = page.getByRole('combobox', { name: 'Rule category', exact: true });
+  await category.click(); await page.getByRole('textbox', { name: 'Search Rule category', exact: true }).fill('LongCategory');
+  assert.equal(await page.getByRole('option').filter({ hasText: 'LongCategory' }).count(), 1); await page.getByRole('option').filter({ hasText: 'LongCategory' }).click();
+  assert.equal(await category.innerText(), 'LongCategoryName'.repeat(10));
   assert.equal(await page.evaluate(() => window.layoutDeleted), 'rule-0');
   assert.deepEqual(pageErrors, []);
   console.log('PASS Rules layout: 18 viewport/text-size combinations, long conditions, aligned actions, edit/save/delete.');

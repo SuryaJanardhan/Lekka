@@ -818,7 +818,7 @@ export function App() {
               {manual.paymentMode === 'FRIEND_PAID' && (
                 <label>Friend name<input value={manual.friendName} onChange={(event) => setManual({ ...manual, friendName: event.target.value })} placeholder="Who paid?" /></label>
               )}
-              <label>Category<Dropdown label="Category" placeholder="Choose category" value={manual.categoryId} onValueChange={(value) => setManual({ ...manual, categoryId: value })} options={categories.filter((c) => c._id !== 'all').map(category => ({ value: category._id, label: category.name }))} /></label>
+              <label>Category<Dropdown searchable label="Category" placeholder="Choose category" value={manual.categoryId} onValueChange={(value) => setManual({ ...manual, categoryId: value })} options={categories.filter((c) => c._id !== 'all').map(category => ({ value: category._id, label: category.name }))} /></label>
               <label>Date<input type="date" value={manual.date} onChange={(event) => setManual({ ...manual, date: event.target.value })} /></label>
               <label>Notes<textarea value={manual.notes} onChange={(event) => setManual({ ...manual, notes: event.target.value })} placeholder="Optional" /></label>
               <button className="primary-button" type="submit" disabled={savingManual}>{savingManual ? 'Saving...' : `Save ${manual.transactionDirection === 'CREDIT' ? 'credit' : 'debit'}`}</button>
