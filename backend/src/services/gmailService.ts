@@ -13,7 +13,7 @@ import { NotificationModel } from '../models/Notification';
 import { ProcessedMailModel } from '../models/ProcessedMail';
 import { admitMail, exactSenderMatch } from './mailAdmission';
 import { InboxCursor, InboxMail, InboxSettings, scanImapInbox } from './imapInbox';
-import { transactionDirection } from './expensePolicy';
+import { explicitPostedCredit, nonTransactionNotice, transactionDirection } from './expensePolicy';
 import { fiveWordNote } from './transactionNotes';
 import { LedgerService } from './ledgerService';
 import { waitUntil } from '@vercel/functions';
@@ -303,7 +303,17 @@ export class GmailService {
     transportSender: string;
   }): Promise<{ needsUserReview: boolean; notificationOnly: boolean; ignoredCredit?: boolean; direction?: string }> {
     let direction = transactionDirection(emailData.subject, emailData.rawTextBody);
-    if (direction === 'CREDIT' || direction === 'UNKNOWN' || !emailData.parsedJson.detectedAmount) {
+    if (direction === 'UNKNOWN' && nonTransactionNotice(emailData.subject, emailData.rawTextBody)) {
+      await notificationService.addNotification(
+        `Review non-transaction email: ${emailData.sender}`,
+        `"${emailData.subject}" is a statement, policy, report, trade summary, or cancelled instruction rather than one confirmed transaction. Add a manual entry only if needed.`,
+        'REVIEW', { messageId: emailData.messageId, sender: emailData.sender, subject: emailData.subject, receivedAt: emailData.receivedAt,
+          ingestionTest: emailData.isTest, transportSender: emailData.transportSender, transactionDirection: 'UNKNOWN' }
+      );
+      return { needsUserReview: false, notificationOnly: true };
+    }
+    const postedCredit = direction === 'CREDIT' && explicitPostedCredit(emailData.subject, emailData.rawTextBody) && emailData.parsedJson.detectedAmount;
+    if ((direction === 'CREDIT' && !postedCredit) || direction === 'UNKNOWN' || !emailData.parsedJson.detectedAmount) {
       const aiFields = await GroqService.extractFinancialFields(
         emailData.sender,
         emailData.subject,

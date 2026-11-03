@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { transactionDirection } from './expensePolicy';
+import { explicitPostedCredit, nonTransactionNotice, transactionDirection } from './expensePolicy';
 import { learningConditions } from './categoryLearning';
 
 test('credits, refunds, income and reversals are not spending', () => {
@@ -12,6 +12,22 @@ test('completed debits are spending, a credit card name alone is not a credit', 
   for (const body of ['Your credit card was debited INR 200', 'You paid INR 25 to Shop', 'Paid INR 123.45 to Lekka Test Shop', 'Payment successful INR 90']) {
     assert.equal(transactionDirection('Receipt', body), 'DEBIT', body);
   }
+});
+test('completed stock SIP orders are deterministic debits while failed or pending orders remain unknown', () => {
+  assert.equal(transactionDirection('Stock SIP order: Successful', 'Additional shares have been added to your holdings. SIP AMOUNT ₹565'), 'DEBIT');
+  assert.equal(transactionDirection('Stock SIP order pending', 'SIP AMOUNT ₹565'), 'UNKNOWN');
+  assert.equal(transactionDirection('Stock SIP order failed', 'SIP AMOUNT ₹565'), 'UNKNOWN');
+});
+test('successful PhonePe investments are debits and cancelled instructions or reports are not transactions', () => {
+  assert.equal(transactionDirection('Congrats! Your investment of ₹ 10 is successful', 'PhonePe Wealth Broking'), 'DEBIT');
+  assert.equal(transactionDirection('AutoPay for your SIP removed', 'SIP amount ₹10'), 'UNKNOWN');
+  assert.equal(nonTransactionNotice('AutoPay for your SIP removed', 'SIP amount ₹10'), true);
+  assert.equal(nonTransactionNotice('Report: Daily Margin Statement | 02-11-2026', ''), true);
+});
+test('only explicit posted account-credit wording bypasses semantic amount verification', () => {
+  assert.equal(explicitPostedCredit('INR 6915.00 was credited to your A/c.', ''), true);
+  assert.equal(explicitPostedCredit('Your available balance is INR 6915.00', ''), false);
+  assert.equal(explicitPostedCredit('Cashback up to INR 6915.00', ''), false);
 });
 test('bills, balances, mixed statements and failures are not confirmed debits', () => {
   for (const body of ['Available balance INR 100', 'Invoice total INR 200 due tomorrow', 'INR 200 debited and INR 50 refunded', 'Payment failed INR 100', 'INR 200 will be debited tomorrow', 'Payment successful? No, payment failed INR 100']) {
