@@ -41,6 +41,7 @@ import { SpendingSummary } from './SpendingSummary';
 import { receiptPreview } from './receiptPreview';
 import { ChatComposer } from './ChatComposer';
 import { AiReference } from './AiReference';
+import { ReportsPanel } from './ReportsPanel';
 import { Outbox } from './outbox';
 import { OutboxStore } from './outboxStore';
 import { projectOutbox } from './outboxProjection';
@@ -96,6 +97,7 @@ export function App() {
   const [savingManual, setSavingManual] = useState(false);
   const manualWriteBusy = useRef(false);
   const [statsDirection, setStatsDirection] = useState<'DEBIT' | 'CREDIT'>('DEBIT');
+  const [statsView, setStatsView] = useState<'live' | 'reports'>('live');
 
   const [entries, setEntries] = useState<EmailRecord[]>([]);
   const [confirmedEntries, setConfirmedEntries] = useState<EmailRecord[]>([]);
@@ -840,6 +842,11 @@ export function App() {
 
         {tab === 'insights' && (
           <section className="stack">
+            <div className="mode-grid flow-toggle stats-view-toggle">
+              <button type="button" className={statsView === 'live' ? 'selected' : ''} onClick={() => setStatsView('live')}>Live stats</button>
+              <button type="button" className={statsView === 'reports' ? 'selected' : ''} onClick={() => setStatsView('reports')}>Reports</button>
+            </div>
+            {statsView === 'reports' ? <ReportsPanel api={api} /> : <>
             <div className="stat-grid">
               <Metric label="Debits this month" value={money(analytics?.summary.totalFinancialAmount)} />
               <Metric label="Credits this month" value={money(analytics?.summary.totalCredits)} />
@@ -864,6 +871,7 @@ export function App() {
             <ReportBars title="Daily trend" rows={(analytics?.dailyTrend || []).map((item, index) => ({ label: item.date.slice(8), value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#14b8a6', '#2563eb', '#f59e0b', '#ef4444'][index % 4] }))} />
             <ReportBars title="Monthly trend" rows={(analytics?.monthlyTrend || []).map((item, index) => ({ label: new Date(Number(item.month.slice(0, 4)), Number(item.month.slice(5, 7)) - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }), value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))} />
             <ReportBars title="Yearly trend" rows={(analytics?.yearlyTrend || []).map((item, index) => ({ label: item.year, value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#2563eb', '#0f766e', '#b45309', '#dc2626'][index % 4] }))} />
+            </>}
           </section>
         )}
 

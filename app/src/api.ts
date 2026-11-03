@@ -193,6 +193,8 @@ export class ApiClient {
     return this.request<Record<string, any>>('/api/export');
   }
   aiStatus() { return this.request<any>('/api/ai/status'); }
+  getReports(limit = 24) { return this.request<any[]>(`/api/reports?limit=${limit}`); }
+  getReport(periodKey: string) { return this.request<any>(`/api/reports/${encodeURIComponent(periodKey)}`); }
 
   submitOperation(command: OperationCommand) {
     return this.request<OperationReceipt>('/api/operations', { method: 'POST', body: JSON.stringify(command) });
