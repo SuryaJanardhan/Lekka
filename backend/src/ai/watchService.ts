@@ -6,6 +6,7 @@ import { AiProvider, inputUpperBound } from './provider';
 import { NotificationModel } from '../models/Notification';
 import { PushService } from '../services/pushService';
 import { bumpDataRevision } from '../services/dataRevisionService';
+import { notificationTitle } from '../services/notificationFormat';
 
 export async function processWatch(id: string) {
   const existing = await AiWatchRun.findById(id).lean();
@@ -49,7 +50,7 @@ export async function processWatch(id: string) {
       if (!await AiWatchRun.exists({ _id: id, owner })) throw Error('Watch lease changed');
       const notificationId = createHash('sha256').update(`watch:${id}`).digest('hex').slice(0, 24);
       await NotificationModel.updateOne({ _id: notificationId }, { $setOnInsert: {
-        title: `Spending Watch: ${findings.length} ${findings.length === 1 ? 'flag' : 'flags'}`,
+        title: notificationTitle(`Spending Watch: ${findings.length} ${findings.length === 1 ? 'flag' : 'flags'}`, 'REMINDER'),
         message: reply, type: 'REMINDER', metadata: { watchRunId: id, findingIds: findings.map(row => row.id) }
       } }, { upsert: true });
       await bumpDataRevision();

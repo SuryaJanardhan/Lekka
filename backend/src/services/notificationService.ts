@@ -3,6 +3,7 @@ import { NotificationModel, NotificationType } from '../models/Notification';
 import { PushService } from './pushService';
 import { remoteNotificationTarget } from './pushPolicy';
 import { bumpDataRevision } from './dataRevisionService';
+import { notificationTitle } from './notificationFormat';
 
 export interface NotificationLog {
   id: string;
@@ -39,6 +40,7 @@ class NotificationService {
     type: NotificationType,
     metadata: Record<string, any> = {}
   ): Promise<NotificationLog> {
+    title = notificationTitle(title, type);
     const notification = await NotificationModel.create({
       title,
       message,

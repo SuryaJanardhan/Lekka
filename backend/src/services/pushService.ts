@@ -5,6 +5,7 @@ import { EmailModel } from '../models/Email';
 import { NotificationModel } from '../models/Notification';
 import { DigestKind, digestPeriod, digestText } from './pushSummary';
 import { bumpDataRevision } from './dataRevisionService';
+import { notificationTitle } from './notificationFormat';
 
 function credentials() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
@@ -20,6 +21,8 @@ export class PushService {
   static isConfigured() { return Boolean(credentials()); }
 
   static async send(title: string, body: string, key: string, screen: string, progress?: { skipInstallationIds?: string[]; onDelivered?: (installationId: string) => Promise<void> }) {
+    const type = screen === 'review' ? 'REVIEW' : screen === 'ledger' ? 'TRANSACTION' : screen === 'settings' ? 'SYNC' : 'REMINDER';
+    title = notificationTitle(title, type);
     const account = credentials();
     if (!account) throw new Error('Firebase Cloud Messaging is not configured');
     const devices = await PushDeviceModel.find({}).lean();
@@ -69,8 +72,8 @@ export class PushService {
       EmailModel.countDocuments(pendingQuery),
       EmailModel.countDocuments(uncategorizedQuery),
       NotificationModel.countDocuments(reviewEmailQuery),
-      EmailModel.findOne(pendingQuery).sort({ receivedAt: 1 }).select('subject parsedJson receivedAt').lean(),
-      NotificationModel.findOne(reviewEmailQuery).sort({ createdAt: 1 }).select('metadata title').lean()
+      EmailModel.findOne(pendingQuery).sort({ receivedAt: -1 }).select('subject parsedJson receivedAt').lean(),
+      NotificationModel.findOne(reviewEmailQuery).sort({ createdAt: -1 }).select('metadata title').lean()
     ]);
     const pending = pendingEntries + emailReviews;
     if (period.report === 'review' && !pending) return { skipped: 'No items need review or categorization', sent: 0 };
@@ -106,10 +109,11 @@ export class PushService {
         examples.push(`${entryExample.parsedJson?.transactionDirection === 'CREDIT' ? 'Credit: ' : ''}${label}${amount > 0 ? `: INR ${amount.toLocaleString('en-IN')}` : ''}`);
       }
       if (emailExample) examples.push(`${String(emailExample.metadata?.sender || 'Email').slice(0, 40)}: ${String(emailExample.metadata?.subject || emailExample.title).slice(0, 55)} (amount missing)`);
-      const { title, message } = digestText(period.report, {
+      let { title, message } = digestText(period.report, {
         ...spending, monthSpend: monthly.spend, weekSpend: weekly.spend, pending,
         pendingEntries, uncategorized, emailReviews, examples, includeWeek: period.weekEnd
       }, now);
+      title = notificationTitle(title, period.report === 'review' ? 'REVIEW' : 'REMINDER');
       const notification = await NotificationModel.findOneAndUpdate({ type: 'REMINDER', 'metadata.key': key }, {
         $setOnInsert: { title, message, type: 'REMINDER', metadata: { key, report: period.report } }
       }, { upsert: true, new: true });
