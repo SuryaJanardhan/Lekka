@@ -27,7 +27,7 @@ import {
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { ApiClient } from './api';
 import { Category, DashboardStats, EmailRecord, NotificationItem, Rule, DataSnapshot } from './types';
-import { amountOf, money, moneyExact, shortDate, timeAgo, directionOf, modeOf, newestFirst } from './format';
+import { amountOf, money, moneyExact, shortDate, shortDateTime, timeAgo, directionOf, modeOf, newestFirst } from './format';
 import { LockScreen } from './LockScreen';
 import { ChatMessage, Conversation, loadConversations, saveConversations, newConversationId } from './chatHistory';
 import { startRemotePush, stopRemotePush } from './remotePush';
@@ -1019,7 +1019,7 @@ function EntryList({ entries, onSelect, empty }: { entries: EmailRecord[]; onSel
         <article className="entry-row" key={entry._id} onClick={() => onSelect(entry)}>
           <div className="entry-main">
             <strong>{entry.parsedJson?.merchantName || entry.subject}</strong>
-            <span>{shortDate(entry.receivedAt)}</span>
+            <span>{shortDateTime(entry.receivedAt)}</span>
             <small>{entry.categoryId?.name || 'Unassigned'} · {modeOf(entry)} · {directionOf(entry) === 'CREDIT' ? 'Credit' : 'Debit'}</small>
           </div>
           <div className="entry-side">

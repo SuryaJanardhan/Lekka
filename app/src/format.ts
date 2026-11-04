@@ -11,6 +11,11 @@ export function shortDate(value?: string) {
   return new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 
+export function shortDateTime(value?: string) {
+  if (!value) return '';
+  return new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
 export function timeAgo(value?: string) {
   if (!value) return '';
   const date = new Date(value);
@@ -38,6 +43,7 @@ export function newestFirst<T extends { receivedAt?: string; processedAt?: strin
   return [...entries].sort((left, right) => {
     const leftTime = Date.parse(left.receivedAt || left.processedAt || '') || 0;
     const rightTime = Date.parse(right.receivedAt || right.processedAt || '') || 0;
-    return rightTime - leftTime;
+    if (rightTime !== leftTime) return rightTime - leftTime;
+    return (Date.parse(right.processedAt || '') || 0) - (Date.parse(left.processedAt || '') || 0);
   });
 }
