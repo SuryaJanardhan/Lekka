@@ -36,7 +36,7 @@ try {
     const client = await import('/node_modules/.vite/deps/react-dom_client.js');
     const { createRoot } = client.default || client;
     const { RulesPanel } = await import('/src/RulesPanel.tsx');
-    const categories = [{ _id: 'food', name: 'Food' }, { _id: 'travel', name: 'Office Travel' }, { _id: 'long', name: 'LongCategoryName'.repeat(10) }];
+    const categories = [{ _id: 'food', name: 'Food', colorCode: '#0f766e' }, { _id: 'travel', name: 'Office Travel', colorCode: '#2563eb' }, { _id: 'long', name: 'LongCategoryName'.repeat(10), colorCode: '#b45309' }, ...Array.from({ length: 27 }, (_, index) => ({ _id: `category-${index}`, name: `Category ${String(index + 1).padStart(2, '0')}`, colorCode: `hsl(${index * 31} 60% 45%)` }))];
     const merchants = ['Samskruti restaurant', 'SNEHA FRESH CHICKEN', 'BBNOW', 'INNOVATIVE RETAIL C', 'CTRLX TECHNOLOGIES', 'FLEXIRIDE SOLUTIONS', 'YARRA NANDINI', 'LongUnbrokenMerchant'.repeat(12)];
     window.layoutRules = merchants.map((value, index) => ({
       _id: `rule-${index}`, categoryId: categories[index === 7 ? 2 : index === 5 ? 1 : 0], priority: 20,
@@ -85,10 +85,14 @@ try {
   const saved = await page.evaluate(() => window.layoutSaved);
   assert.equal(saved.id, 'rule-0'); assert.equal(saved.payload.conditions.length, 3); assert.equal(saved.payload.priority, 20);
   await page.getByRole('button', { name: 'Delete rule for Food', exact: true }).first().click();
-  const category = page.getByRole('combobox', { name: 'Rule category', exact: true });
-  await category.click(); await page.getByRole('textbox', { name: 'Search Rule category', exact: true }).fill('LongCategory');
-  assert.equal(await page.getByRole('option').filter({ hasText: 'LongCategory' }).count(), 1); await page.getByRole('option').filter({ hasText: 'LongCategory' }).click();
+  const category = page.getByRole('button', { name: 'Rule category', exact: true });
+  await category.click(); const dialog = page.getByRole('dialog', { name: 'Choose Rule category', exact: true }); await dialog.waitFor();
+  assert.equal(await page.getByLabel('All categories').getByRole('button').count(), 30);
+  await page.screenshot({ path: join(screenshots, 'category-picker-30.png') });
+  await dialog.getByRole('button', { name: 'LongCategoryName'.repeat(10), exact: true }).click();
   assert.equal(await category.innerText(), 'LongCategoryName'.repeat(10));
+  await category.click(); assert.equal(await page.getByLabel('Recent categories').getByRole('button', { name: 'LongCategoryName'.repeat(10), exact: true }).count(), 1);
+  await page.getByRole('button', { name: 'Close category picker', exact: true }).click();
   assert.equal(await page.evaluate(() => window.layoutDeleted), 'rule-0');
   assert.deepEqual(pageErrors, []);
   console.log('PASS Rules layout: 18 viewport/text-size combinations, long conditions, aligned actions, edit/save/delete.');

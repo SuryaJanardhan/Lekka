@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { Category, Rule } from './types';
 import { Dropdown } from './Dropdown';
+import { CategorySelect } from './CategorySelect';
 
 type Condition = Rule['conditions'][number];
 const initial: Condition = { field: 'subject', operator: 'contains', value: '' };
@@ -45,7 +46,7 @@ export function RulesPanel({ rules, categories, onSave, onDelete }: {
       </div>)}
       <button className="secondary-button" type="button" disabled={saving || conditions.length >= 8} onClick={() => setConditions(previous => [...previous, { ...initial }])}><Plus size={17} />Add condition</button>
       <div className="two-col">
-        <label>Category<Dropdown searchable label="Rule category" placeholder="Choose category" allowEmpty required={!customName.trim()} disabled={saving} value={categoryId} onValueChange={setCategoryId} options={categories.map(category => ({ value: category._id, label: category.name }))} /></label>
+        <label>Category<CategorySelect categories={categories} label="Rule category" placeholder="Choose category" allowEmpty disabled={saving} value={categoryId} onChange={setCategoryId} /></label>
         <label>Priority<input type="number" min={0} max={1000} step={1} required disabled={saving} value={priority} onChange={event => setPriority(event.target.value)} /></label>
       </div>
       {!editing && <label>New category<input maxLength={80} disabled={saving} value={customName} onChange={event => setCustomName(event.target.value)} placeholder="Optional" /></label>}
