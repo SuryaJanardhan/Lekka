@@ -35,8 +35,10 @@ import { CategorySettings } from './CategorySettings';
 import { CategoryPicker } from './CategoryPicker';
 import { SnapshotCache, SyncMetadata } from './cacheStore';
 import { DataSync } from './dataSync';
+import { categorySpendForIstDay } from './spendMap';
 import { RulesPanel } from './RulesPanel';
 import { Dropdown } from './Dropdown';
+import { CategorySelect } from './CategorySelect';
 import { SpendingSummary } from './SpendingSummary';
 import { receiptPreview } from './receiptPreview';
 import { ChatComposer } from './ChatComposer';
@@ -386,6 +388,11 @@ export function App() {
       quarter: sumFrom(startQuarter),
       year: sumFrom(startYear)
     };
+  }, [confirmedEntries]);
+
+  const todaySpend = useMemo(() => {
+    const categories = categorySpendForIstDay(confirmedEntries);
+    return { total: categories.reduce((sum, row) => sum + row.value, 0), categories };
   }, [confirmedEntries]);
 
   const orderedEntries = newestFirst(entries);
@@ -746,6 +753,8 @@ export function App() {
               </div>
             </div>
 
+            <SpendingSummary compact title="Today's spend map" periodLabel="today" total={todaySpend.total} categories={todaySpend.categories} modes={[]} />
+
             <SectionTitle title="Recent ledger" action="View all" onAction={() => setTab('ledger')} />
             <EntryList entries={orderedEntries.slice(0, 6)} onSelect={setSelectedEntry} empty="No expenses yet" />
           </section>
@@ -819,7 +828,7 @@ export function App() {
               {manual.paymentMode === 'FRIEND_PAID' && (
                 <label>Friend name<input value={manual.friendName} onChange={(event) => setManual({ ...manual, friendName: event.target.value })} placeholder="Who paid?" /></label>
               )}
-              <label>Category<Dropdown searchable label="Category" placeholder="Choose category" value={manual.categoryId} onValueChange={(value) => setManual({ ...manual, categoryId: value })} options={categories.filter((c) => c._id !== 'all').map(category => ({ value: category._id, label: category.name }))} /></label>
+              <label>Category<CategorySelect categories={categories.filter((c) => c._id !== 'all')} label="Category" placeholder="Choose category" value={manual.categoryId} onChange={(value) => setManual({ ...manual, categoryId: value })} /></label>
               <label>Date<input type="date" value={manual.date} onChange={(event) => setManual({ ...manual, date: event.target.value })} /></label>
               <label>Notes<textarea value={manual.notes} onChange={(event) => setManual({ ...manual, notes: event.target.value })} placeholder="Optional" /></label>
               <button className="primary-button" type="submit" disabled={savingManual}>{savingManual ? 'Saving...' : `Save ${manual.transactionDirection === 'CREDIT' ? 'credit' : 'debit'}`}</button>

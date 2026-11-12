@@ -38,7 +38,7 @@ try {
     (client.default || client).createRoot(host).render(React.createElement(Fixture));
   });
   const input = page.getByLabel('Message AI', { exact: true });
-  await input.fill('@'); await page.getByRole('listbox').waitFor(); assert.equal(await page.getByRole('option').count(), 6);
+  await input.fill('@'); await page.getByRole('listbox').waitFor(); assert.equal(await page.getByRole('option').count(), 7);
   await input.fill('@r'); assert.equal(await page.getByRole('option').count(), 2);
   await input.press('ArrowDown'); await input.press('Enter'); assert.equal((await input.inputValue()).trim(), '@rules'); assert.equal(await page.evaluate(() => window.sent), undefined);
   await input.fill('Food last month @sp'); await page.getByRole('option').filter({ hasText: '@spending' }).tap(); assert.equal(await input.inputValue(), 'Food last month @spending ');
@@ -60,7 +60,7 @@ try {
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Open settings fixture' }).click(); await page.getByRole('button', { name: 'AI skills & Spending Watch' }).click();
-  await page.getByText('Setup needed', { exact: true }).waitFor(); assert.equal(await page.locator('.ai-skill-reference > div').count(), 6);
+  await page.getByText('Setup needed', { exact: true }).waitFor(); assert.equal(await page.locator('.ai-skill-reference > div').count(), 7);
   await page.screenshot({ path: join(screenshots, 'settings-mobile.png') });
   await page.getByRole('button', { name: '@spending', exact: true }).click(); assert.ok((await input.inputValue()).startsWith('@spending '));
   assert.deepEqual(errors, []); console.log('PASS AI UI: mention filtering, keyboard/touch, draft preservation, small viewport placement, budget validation, and Settings reference.');

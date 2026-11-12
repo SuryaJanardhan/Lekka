@@ -3,8 +3,8 @@ import { ChevronRight, Search, X } from 'lucide-react';
 import { money } from './format';
 import { BreakdownRow, shareOf, spendMapRows } from './spendMap';
 
-export function SpendingSummary({ title, total, categories, modes }: {
-  title: string; total: number; categories: BreakdownRow[]; modes: BreakdownRow[];
+export function SpendingSummary({ title, total, categories, modes, periodLabel = 'this month', compact = false }: {
+  title: string; total: number; categories: BreakdownRow[]; modes: BreakdownRow[]; periodLabel?: string; compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -22,8 +22,8 @@ export function SpendingSummary({ title, total, categories, modes }: {
     else dialog.current?.close();
   }, [open]);
 
-  return <section className="chart-card spend-summary">
-    <div className="spend-heading"><h2>{title}</h2><span>This month</span></div>
+  return <section className={`chart-card spend-summary${compact ? ' compact' : ''}`}>
+    <div className="spend-heading"><h2>{title}</h2><span>{periodLabel}</span></div>
     <div className="spend-ring">
       <svg viewBox="0 0 42 42" role="img" aria-label={`${title}: ${money(total)}`}>
         <circle cx="21" cy="21" r="16" fill="none" stroke="#e5e7eb" strokeWidth="4" />
@@ -37,18 +37,18 @@ export function SpendingSummary({ title, total, categories, modes }: {
       <div><strong style={{ fontSize: money(total).length > 12 ? 14 : 19 }}>{money(total)}</strong><span>{active.length} active {active.length === 1 ? 'category' : 'categories'}</span></div>
     </div>
     <div className="spend-category-bars">
-      {active.slice(0, 5).map(row => <CategoryBar key={row.label} row={row} total={sum} />)}
-      {!active.length && <p className="spend-empty">No transactions this month</p>}
+      {active.slice(0, compact ? 3 : 5).map(row => <CategoryBar key={row.label} row={row} total={sum} />)}
+      {!active.length && <p className="spend-empty">No transactions {periodLabel}</p>}
     </div>
-    <button className="spend-view-all" type="button" onClick={() => { setSearch(''); setOpen(true); }}>View all {categories.length} categories<ChevronRight size={17} /></button>
-    <div className="spend-modes">
+    {!compact && <button className="spend-view-all" type="button" onClick={() => { setSearch(''); setOpen(true); }}>View all {categories.length} categories<ChevronRight size={17} /></button>}
+    {!compact && <div className="spend-modes">
       {modes.filter(row => row.value > 0).map(row => <div className="spend-mode-row" key={row.label}>
         <div><span>{row.label.replace('_', ' ')}</span><strong>{money(row.value)}</strong></div>
         <div className="spend-track"><span style={{ width: `${shareOf(row.value, modeTotal)}%`, background: row.color || '#0f766e' }} /></div>
       </div>)}
       {!modeTotal && <p className="spend-empty">No payment mode data yet</p>}
-    </div>
-    <dialog ref={dialog} className="category-breakdown-dialog" aria-labelledby={heading} onClose={() => setOpen(false)} onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}>
+    </div>}
+    {!compact && <dialog ref={dialog} className="category-breakdown-dialog" aria-labelledby={heading} onClose={() => setOpen(false)} onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}>
       <div className="category-dialog-surface">
         <header><div><h2 id={heading}>{title} categories</h2><span>{money(total)} this month</span></div><button className="icon-button" type="button" aria-label="Close categories" onClick={() => setOpen(false)}><X size={18} /></button></header>
         <div className="search-panel"><Search size={17} /><input autoFocus aria-label="Search categories" placeholder="Search categories" value={search} onChange={event => setSearch(event.target.value)} />{search && <button className="icon-button search-clear" type="button" aria-label="Clear category search" onClick={() => setSearch('')}><X size={16} /></button>}</div>
@@ -60,7 +60,7 @@ export function SpendingSummary({ title, total, categories, modes }: {
           {!visible.length && <p className="spend-empty">No matching categories</p>}
         </div>
       </div>
-    </dialog>
+    </dialog>}
   </section>;
 }
 

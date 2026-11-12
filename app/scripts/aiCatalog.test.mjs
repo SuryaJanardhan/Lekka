@@ -5,8 +5,8 @@ import ts from 'typescript';
 const source = ts.transpileModule(fs.readFileSync(new URL('../src/aiCatalog.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const { aiCatalog, skillMention, insertMention } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 
-test('catalog exposes five skills and exactly one read-only watch agent', () => {
-  assert.equal(aiCatalog.filter(row => row.kind === 'Skill').length, 5);
+test('catalog exposes six skills and exactly one read-only watch agent', () => {
+  assert.equal(aiCatalog.filter(row => row.kind === 'Skill').length, 6);
   assert.deepEqual(aiCatalog.filter(row => row.kind === 'Agent').map(row => row.id), ['watch']);
 });
 test('mention detection filters at the cursor without treating email addresses as skills', () => {
