@@ -36,17 +36,23 @@ export class ReadGateway {
       ], options).toArray();
       return { kind: 'rules', records, count, page: request.page, pageSize: PAGE_SIZE };
     }
-    if (request.skill === 'spending' || request.skill === 'compare') {
-      const rows = await db.collection('emails').aggregate([
+    if (request.skill === 'spending' || request.skill === 'compare' || request.skill === 'insights') {
+      const [rows, categoryRows] = await Promise.all([db.collection('emails').aggregate([
         { $match: match }, { $addFields: { amount: paise, flow: { $cond: [{ $eq: ['$parsedJson.transactionDirection', 'CREDIT'] }, 'CREDIT', 'DEBIT'] },
           payment: { $cond: [{ $in: ['$parsedJson.paymentMode', ['CASH', 'CARD', 'FRIEND_PAID']] }, '$parsedJson.paymentMode', 'UPI'] } } },
         { $group: { _id: { flow: '$flow', mode: '$payment' }, amount: { $sum: '$amount' }, count: { $sum: 1 } } }
-      ], options).toArray();
+      ], options).toArray(), db.collection('emails').aggregate([
+        { $match: { ...match, 'parsedJson.transactionDirection': { $ne: 'CREDIT' } } }, { $addFields: { amount: paise } },
+        { $group: { _id: '$categoryId', amount: { $sum: '$amount' }, count: { $sum: 1 } } }, { $sort: { amount: -1 } }, { $limit: 5 },
+        { $lookup: { from: 'categories', localField: '_id', foreignField: '_id', as: 'category' } },
+        { $project: { _id: 0, name: { $ifNull: [{ $arrayElemAt: ['$category.name', 0] }, 'Unassigned'] }, amount: 1, count: 1 } }
+      ], options).toArray()]);
       const amount = (flow: string, mode?: string) => rows.filter(row => row._id.flow === flow && (!mode || row._id.mode === mode)).reduce((sum, row) => sum + Number(row.amount), 0);
       return { kind: 'summary', period: request.range, category: request.category, mode: request.mode,
         debitPaise: amount('DEBIT'), creditPaise: amount('CREDIT'), count: rows.reduce((sum, row) => sum + row.count, 0),
         debitCount: rows.filter(row => row._id.flow === 'DEBIT').reduce((sum, row) => sum + row.count, 0), creditCount: rows.filter(row => row._id.flow === 'CREDIT').reduce((sum, row) => sum + row.count, 0),
-        modes: ['CASH', 'UPI', 'CARD', 'FRIEND_PAID'].map(mode => ({ mode, debitPaise: amount('DEBIT', mode), creditPaise: amount('CREDIT', mode) })) };
+        modes: ['CASH', 'UPI', 'CARD', 'FRIEND_PAID'].map(mode => ({ mode, debitPaise: amount('DEBIT', mode), creditPaise: amount('CREDIT', mode) })),
+        topCategories: categoryRows.map(row => ({ name: row.name, debitPaise: Number(row.amount), count: row.count })) };
     }
     if (request.skill === 'review') match.$and = [{ $or: [{ needsUserReview: true }, { categoryId: null }, { categorySource: 'UNASSIGNED' }] }];
     const count = await db.collection('emails').countDocuments(match, options);

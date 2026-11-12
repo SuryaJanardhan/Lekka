@@ -10,6 +10,11 @@ function summaryLines(result: any, request: SkillRequest) {
 }
 export function formatSkillReply(result: any, request: SkillRequest, previous?: any): string {
   if (result.kind === 'summary') {
+    if (request.view === 'overview') {
+      const net = result.creditPaise - result.debitPaise;
+      const categories = (result.topCategories || []).map((row: any) => `${row.name}: ${inr(row.debitPaise)} (${result.debitPaise ? (row.debitPaise / result.debitPaise * 100).toFixed(1) : '0.0'}%)`);
+      return [`${result.period.label} / confirmed ledger`, `Debits: ${inr(result.debitPaise)}`, `Credits: ${inr(result.creditPaise)}`, `Recorded net flow: ${net >= 0 ? '+' : '-'}${inr(Math.abs(net))}`, 'This is not your current bank account balance.', 'Main debit categories:', ...(categories.length ? categories : ['No debit categories recorded.'])].join('\n');
+    }
     if (request.view === 'modes') {
       const field = request.direction === 'CREDIT' ? 'creditPaise' : 'debitPaise';
       const cash = result.modes.find((row: any) => row.mode === 'CASH')?.[field] || 0;

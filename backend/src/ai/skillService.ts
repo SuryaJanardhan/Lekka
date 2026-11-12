@@ -19,9 +19,9 @@ export class SkillService {
     const followup = !/(?:^|\s)@/.test(message) && /^(?:(?:and |what about |same |instead )|(?:next )?page\s*\d*\s*$|\d{1,3}$|(?:last|this) (?:month|week|year)\s*[?!.]*$)/i.test(message);
     const priorSkill = prior ? chooseSkill(prior.content) : undefined;
     if (!skill && followup) skill = previousRequest?.skill || priorSkill;
-    if (!skill && /^(?:hi|hello|hey|help)[!.?\s]*$/i.test(message)) return { reply: 'Ask about your ledger, or choose @spending, @compare, @search, @review, @rules or @watch.', toolUsed: null, aiCalls: 0 };
+    if (!skill && /^(?:hi|hello|hey|help|what can (?:you|u) do)[!.?\s]*$/i.test(message)) return { reply: 'I can calculate spending and credits, compare periods, search transactions, show reviews and rules, provide AI-based @insights, and run the scheduled @watch agent.', toolUsed: null, aiCalls: 0 };
     if (!skill) {
-      const messages: any[] = [{ role: 'system', content: 'You are Lekka. Reply briefly in plain text. No ledger facts are provided. Never invent financial records or totals. For ledger questions suggest @spending, @compare, @search, @review, @rules or @watch.' }, { role: 'user', content: message }];
+      const messages: any[] = [{ role: 'system', content: 'You are Lekka. Reply briefly in plain text. No ledger facts are provided. Never invent financial records or totals. For ledger questions suggest @spending, @compare, @search, @review, @rules, @insights or @watch.' }, { role: 'user', content: message }];
       const response = await AiProvider.complete({ model: 'qwen/qwen3.8-27b', messages, temperature: 0, ...{ reasoning_effort: 'none' } });
       return { reply: response.choices[0]?.message?.content || 'Please narrow the question or choose a skill.', aiCalls: 1 };
     }
@@ -52,6 +52,13 @@ export class SkillService {
       result = await gateway.execute({ ...request, range: request.previous! });
     } else result = await gateway.execute(request);
     const reply = formatSkillReply(result, request, previous);
+    if (skill === 'insights') {
+      const messages: any[] = [{ role: 'system', content: 'Act as a concise personal spending coach. Use only supplied facts. Explain the largest debit areas and give at most three practical observations. Never call net flow a bank balance. No markdown tables, no invented causes, no investment advice.' }, { role: 'user', content: `${message}\n${reply}` }];
+      if (inputUpperBound(messages) <= 800) {
+        try { const response = await AiProvider.complete({ model: 'qwen/qwen3.8-27b', messages, temperature: 0.1, ...{ reasoning_effort: 'none' } }); return { reply: `${reply}\n\nAI observations:\n${response.choices[0]?.message?.content || ''}`, toolUsed: skill, aiCalls: 1, context: request }; } catch {}
+      }
+      return { reply: `${reply}\n\nAI observations deferred by the small free-tier budget.`, toolUsed: skill, aiCalls: 0, context: request };
+    }
     if (/\b(explain|why|how|insight)\b/i.test(message)) {
       const messages: any[] = [{ role: 'system', content: 'Explain only the supplied ledger facts in plain text. Do not invent causes, transactions or financial advice. Missing information is unknown.' }, { role: 'user', content: `${message}\n${reply}` }];
       if (inputUpperBound(messages) <= 800) {

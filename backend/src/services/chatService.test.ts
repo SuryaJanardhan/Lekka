@@ -16,7 +16,7 @@ test('chat routes to bounded read-only skills without sending client snapshots t
 test('model requests are bounded and never contain the old whole-app context', async t => {
   let captured: any;
   t.mock.method(AiProvider, 'complete', async (request: any) => { captured = request; return { choices: [{ message: { content: 'A short answer.' } }] } as any; });
-  const result = await ChatService.processChatMessage({ sessionId: 'general', userMessage: 'What can you do?', clientState: { recentEntries: [{ secret: 'must-not-leak' }] } });
+  const result = await ChatService.processChatMessage({ sessionId: 'general', userMessage: 'Explain compound interest generally', clientState: { recentEntries: [{ secret: 'must-not-leak' }] } });
   assert.equal(result.reply, 'A short answer.');
   assert.doesNotMatch(JSON.stringify(captured), /must-not-leak/);
   assert.ok(JSON.stringify(captured.messages).length < 800);
@@ -50,4 +50,14 @@ test('persisted filters survive repeated page commands and category-only followu
   const food = await ChatService.processChatMessage({ sessionId: 'filters', userMessage: '@spending Food last month' });
   await ChatService.processChatMessage({ sessionId: 'filters', userMessage: 'and Travel', context: food.context });
   assert.equal(queries.at(-1).category, 'Travel'); assert.equal(queries.at(-1).range.start, food.context?.range.start);
+});
+
+test('decision-oriented natural questions use the insights skill and one bounded model call', async t => {
+  t.mock.method(ReadGateway.prototype, 'categories', async () => [{ name: 'Food' }, { name: 'Travel' }] as any);
+  t.mock.method(ReadGateway.prototype, 'execute', async (request: any) => ({ kind: 'summary', period: request.range, debitPaise: 100000, creditPaise: 25000, count: 6, debitCount: 5, creditCount: 1, modes: [], topCategories: [{ name: 'Food', debitPaise: 60000, count: 3 }, { name: 'Travel', debitPaise: 40000, count: 2 }] }));
+  let calls = 0;
+  t.mock.method(AiProvider, 'complete', async (request: any) => { calls++; assert.ok(JSON.stringify(request.messages).length < 800); return { choices: [{ message: { content: 'Food is the largest area. Review frequent small purchases.' } }] } as any; });
+  const result = await ChatService.processChatMessage({ sessionId: 'insights', userMessage: 'According to debit credit what is my holding amount and where did main debits go this month for better decisions?' });
+  assert.equal(result.toolUsed, 'insights'); assert.equal(calls, 1);
+  assert.match(result.reply, /This is not your current bank account balance/); assert.match(result.reply, /Food: INR 600\.00/); assert.match(result.reply, /AI observations/);
 });

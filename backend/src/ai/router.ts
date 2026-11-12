@@ -4,11 +4,12 @@ import { parsePeriods, stripPeriods } from './periods';
 export function chooseSkill(message: string): SkillId | undefined {
   const explicit = /(?:^|\s)@([a-z]+)\b/i.exec(message);
   if (explicit) {
-    if (!skillIds.includes(explicit[1].toLowerCase() as SkillId)) throw aiError('Unknown skill. Choose @spending, @compare, @search, @review, @rules or @watch.');
+    if (!skillIds.includes(explicit[1].toLowerCase() as SkillId)) throw aiError('Unknown skill. Choose @spending, @compare, @search, @review, @rules, @insights or @watch.');
     return explicit[1].toLowerCase() as SkillId;
   }
   if (/\b(compare|versus|vs\.?|difference|more than|less than)\b/i.test(message)) return 'compare';
   if (/\b(watch|unusual|duplicate|anomal|suspicious)/i.test(message)) return 'watch';
+  if (/\b(insight|decision|decisions|where did|main debits?|holding amount|financial habits?|improve|recommend)/i.test(message)) return 'insights';
   if (/\b(review|uncategorized|uncategorised|pending categor)/i.test(message)) return 'review';
   if (/\b(rule|categorization|categorisation)/i.test(message)) return 'rules';
   if (/\b(find|search|look for|show.*transactions?|payments? (?:to|from|at))\b/i.test(message)) return 'search';
@@ -19,7 +20,7 @@ export function chooseSkill(message: string): SkillId | undefined {
 export function buildRequest(skill: SkillId, message: string, categories: string[], now = new Date()): SkillRequest {
   const text = message.replace(/(?:^|\s)@[a-z]+\b/gi, ' ').replace(/^(?:and|what about|same|instead)\s+/i, '').trim();
   if (text.length > 240) throw aiError('Keep the skill question under 240 characters so its context stays small.');
-  if (['spending', 'compare'].includes(skill) && /\b(balance|bank balance)\b/i.test(text)) throw aiError('Lekka tracks transactions, not your bank balance. Ask for recorded debits, credits or net flow.');
+  if (['spending', 'compare'].includes(skill) && /\b(balance|bank balance)\b/i.test(text)) throw aiError('Lekka tracks transactions, not your bank balance. Use @insights for recorded net flow and spending decisions.');
   const category = categories.slice().sort((a, b) => b.length - a.length).find(name => new RegExp(`(?:^|\\W)${escapeRegex(name)}(?:$|\\W)`, 'i').test(text));
   if (category && categories.some(name => name !== category && new RegExp(`(?:^|\\W)${escapeRegex(name)}(?:$|\\W)`, 'i').test(text.replace(new RegExp(escapeRegex(category), 'i'), '')))) throw aiError('Choose one category per question so the result is unambiguous.');
   if (/\bcategory\s*[:=]/i.test(text) && !category) throw aiError('Category not found. Use its exact name from Settings.');
@@ -44,5 +45,6 @@ export function buildRequest(skill: SkillId, message: string, categories: string
   }
   const page = Number(/\bpage\s+(\d+)\b/i.exec(text)?.[1] || 1);
   return { skill, range: periods[0], previous: periods[1], category, mode, term, page,
-    direction: credit && debit ? 'BOTH' : credit ? 'CREDIT' : debit ? 'DEBIT' : ['search', 'review'].includes(skill) ? 'BOTH' : 'DEBIT' };
+    direction: skill === 'insights' ? 'BOTH' : credit && debit ? 'BOTH' : credit ? 'CREDIT' : debit ? 'DEBIT' : ['search', 'review'].includes(skill) ? 'BOTH' : 'DEBIT',
+    ...(skill === 'insights' ? { view: 'overview' as const } : {}) };
 }
