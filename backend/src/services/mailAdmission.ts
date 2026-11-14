@@ -16,6 +16,12 @@ export function mailSender(mail: ParsedMail) {
   return mail.from?.value[0]?.address?.trim().toLowerCase() || '';
 }
 
+export function hasAuthenticatedTransport(mail: ParsedMail) {
+  const header = mail.headers.get('authentication-results');
+  const text = Array.isArray(header) ? header.join(' ') : String(header || '');
+  return /\b(?:spf|dkim|dmarc)=pass\b/i.test(text);
+}
+
 function mailText(mail: ParsedMail) {
   return mail.text || (typeof mail.html === 'string' ? mail.html : '') || mail.subject || '';
 }
@@ -39,6 +45,7 @@ function headerAddresses(value: unknown): string[] {
 export async function admitMail(mail: ParsedMail, filters: MailFilters) {
   const transportSender = mailSender(mail);
   if (!transportSender) return { accepted: false as const, reason: 'missing_sender', transportSender };
+  if (!hasAuthenticatedTransport(mail)) return { accepted: false as const, reason: 'sender_authentication_failed', transportSender };
   if (exactSenderMatch(transportSender, filters.selectedSenders)) {
     return { accepted: true as const, reason: 'selected_sender', sender: transportSender, transportSender, mail, isTest: false };
   }

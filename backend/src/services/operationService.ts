@@ -5,6 +5,7 @@ import { OperationCommand, operationError, operationHash, validateOperation } fr
 import { executeOperation } from './operationExecutor';
 import { bumpDataRevision } from './dataRevisionService';
 import { PushService } from './pushService';
+import { privateTransactionConfirmation } from './notificationFormat';
 
 mongoose.set('transactionAsyncLocalStorage', true);
 
@@ -22,7 +23,7 @@ export class OperationService {
     if (!claimed) throw operationError('Confirmation is already processing', 425);
     try {
       if (PushService.isConfigured()) {
-        const result = await PushService.send('Lekka transaction saved', `${op.payload.title}: INR ${op.payload.amount}. ${op.payload.transactionDirection === 'CREDIT' ? 'Credit' : 'Debit'} saved.`, `operation-${op._id}`, 'ledger', {
+        const result = await PushService.send('Lekka transaction saved', privateTransactionConfirmation(op.payload.transactionDirection), `operation-${op._id}`, 'ledger', {
           skipInstallationIds: claimed.notificationDeliveredTo,
           onDelivered: async installationId => { await OperationModel.updateOne({ _id: op._id, notificationOwner: owner }, { $addToSet: { notificationDeliveredTo: installationId } }); }
         });
