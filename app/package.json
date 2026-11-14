@@ -9,6 +9,7 @@
     "test:native-features": "node scripts/verifyNativeFeatures.mjs",
     "test:prod-config": "node scripts/verifyProductionConfig.mjs",
     "test:cache": "node --test scripts/dataSync.test.mjs",
+    "test:security": "node --test scripts/localCrypto.test.mjs",
     "test:rules-layout": "node scripts/rulesLayout.test.mjs",
     "test:ai-ui": "node scripts/aiSkills.browser.test.mjs",
     "preview": "vite preview",

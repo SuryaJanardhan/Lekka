@@ -8,6 +8,9 @@ function limitFor(req: Request): Limit {
   if (req.path === '/ingest' || req.path === '/ingest/preview' || req.path === '/ingest/recover-credits') {
     return { name: 'ingestion', requests: 2, windowMs: 3_600_000 };
   }
+  if (req.path === '/notifications/digest' || req.path === '/notifications/reminder') {
+    return { name: 'notification-trigger', requests: 4, windowMs: 3_600_000 };
+  }
   if (req.path === '/export') return { name: 'export', requests: 2, windowMs: 3_600_000 };
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return { name: 'write', requests: 30, windowMs: 60_000 };
   return { name: 'read', requests: 120, windowMs: 60_000 };

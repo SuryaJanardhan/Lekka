@@ -4,7 +4,11 @@ export type EncryptedPayload = { version: 1; iv: string; ciphertext: string };
 const storageKeyName = 'data.master-key';
 let storageKeyPromise: Promise<CryptoKey> | undefined;
 
-const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
+const encode = (bytes: Uint8Array) => {
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  return btoa(binary);
+};
 const decode = (value: string) => Uint8Array.from(atob(value), character => character.charCodeAt(0));
 
 async function storageKey() {
