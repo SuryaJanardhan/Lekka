@@ -49,6 +49,7 @@ import { OutboxStore } from './outboxStore';
 import { projectOutbox } from './outboxProjection';
 import { entityId, LocalOperation, OperationKind } from './outboxTypes';
 import { OutboxPanel } from './OutboxPanel';
+import { initializePinCredential, replacePin, verifyPin } from './pinSecurity';
 
 type Tab = 'today' | 'ledger' | 'add' | 'review' | 'insights' | 'rules' | 'settings' | 'ai';
 type PaymentMode = 'CASH' | 'FRIEND_PAID' | 'UPI' | 'CARD';
@@ -73,7 +74,9 @@ export function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pin, setPin] = useState('');
   const [pinMood, setPinMood] = useState<'idle' | 'success' | 'error'>('idle');
-  const [savedPin, setSavedPin] = useState(() => localStorage.getItem('lekka_app_pin') || '1234');
+  const [pinReady, setPinReady] = useState(false);
+  const pinFailures = useRef(0);
+  const pinBlockedUntil = useRef(0);
   const [biometricEnabled, setBiometricEnabled] = useState(() => localStorage.getItem('lekka_biometric_enabled') === 'true');
   const autoBiometricAttempted = useRef(false);
   const biometricBusy = useRef(false);
@@ -92,6 +95,9 @@ export function App() {
     if (message) toastTimer.current = setTimeout(() => setToastValue(''), 3000);
   }, []);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+  useEffect(() => {
+    void initializePinCredential().then(() => setPinReady(true)).catch(() => setToast('Secure PIN storage is unavailable'));
+  }, [setToast]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -420,8 +426,12 @@ export function App() {
 
   const reviewEntries = orderedEntries.filter(requiresReview);
 
-  const unlockWithPin = (value: string) => {
-    if (value === savedPin) {
+  const unlockWithPin = async (value: string) => {
+    if (!pinReady) return showToast('Secure PIN is still loading');
+    const remaining = pinBlockedUntil.current - Date.now();
+    if (remaining > 0) { setPin(''); return showToast(`Try again in ${Math.ceil(remaining / 1000)} seconds`); }
+    if (await verifyPin(value)) {
+      pinFailures.current = 0;
       setPinMood('success');
       setTimeout(() => {
         setIsUnlocked(true);
@@ -431,6 +441,8 @@ export function App() {
       showToast('Unlocked');
       return;
     }
+    pinFailures.current += 1;
+    if (pinFailures.current >= 3) pinBlockedUntil.current = Date.now() + Math.min(30_000, 1000 * 2 ** (pinFailures.current - 3));
     setPinMood('error');
     setToast('Wrong PIN');
     setTimeout(() => {
@@ -443,7 +455,7 @@ export function App() {
     if (pinMood !== 'idle') return;
     const next = `${pin}${key}`;
     setPin(next);
-    if (next.length === 4) unlockWithPin(next);
+    if (next.length === 4) void unlockWithPin(next);
   };
 
   const biometricUnlock = async () => {
@@ -700,13 +712,11 @@ export function App() {
     }
   };
 
-  const updatePin = (event: React.FormEvent) => {
+  const updatePin = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (pinForm.current !== savedPin) return showToast('Current PIN is wrong');
     if (!/^\d{4}$/.test(pinForm.next)) return showToast('New PIN must be 4 digits');
     if (pinForm.next !== pinForm.confirm) return showToast('PIN confirmation does not match');
-    localStorage.setItem('lekka_app_pin', pinForm.next);
-    setSavedPin(pinForm.next);
+    if (!await replacePin(pinForm.current, pinForm.next)) return showToast('Current PIN is wrong');
     setPinForm({ current: '', next: '', confirm: '' });
     showToast('PIN updated');
   };
