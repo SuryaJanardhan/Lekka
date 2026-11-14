@@ -8,6 +8,8 @@ From `backend`, run `npm run mail:preview`. This calls the deployed production A
 
 The result reports the connected mailbox, selected senders, trusted forwarders, private test recipient, matching-message count, sample subjects/reasons, parsed amount previews, and whether a message was already recorded. A zero `matchingSearchCount` means no matching mail was found in this Inbox; a successful connection alone is not an import.
 
+Exact sender matching is followed by transport authentication. Direct bank mail and mail from a trusted personal forwarder must contain SPF, DKIM or DMARC pass evidence in the received `Authentication-Results` header. A matching but unauthenticated `From` header is rejected as `sender_authentication_failed`; it cannot create a ledger record.
+
 Preview amounts use the regular deterministic parser. Full ingestion additionally tries AI when no amount was found. Messages without an amount after parsing become review notifications, never invented expenses.
 
 Chat and ingestion share credential lookup: the first non-empty `GROQ_API_KEY`, `GROQ_API_KEY_1` or `GROQ_API_KEY_2` is used. These are production credential aliases, not a local or mock mode. A failed run does not advance the mailbox checkpoint, so retrying after a configuration fix recovers waiting emails; existing Message-ID receipts prevent duplicates.

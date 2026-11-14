@@ -24,9 +24,9 @@ graph LR
 * **Rules**: Category rules run before AI so repeat merchants stay predictable.
 * **Your categories, your call**: Every new pattern goes to Review with an AI suggestion. Only your saved choice trains a sender-plus-merchant rule for next time. Create a category directly in Review or rename it in Settings without breaking its history.
 * **Separate money flows**: Debits and incoming credits are tracked separately. Credits never inflate spending, and unclear transactions go to review. [Ledger flow details](docs/ledger-flows.md).
-* **Android-native bits**: compact PIN lock, fingerprint unlock, local confirmations, and FCM remote notifications once Firebase is configured.
+* **Android-native bits**: compact PIN lock, fingerprint unlock, Keystore-protected local encryption, local confirmations, and FCM remote notifications once Firebase is configured.
 * **AI chats**: saved conversations, compact `@` skills, read-only ledger retrieval and a small-budget Spending Watch agent. Settings lists what each tool does. [AI flow and limits](docs/ai-skills.md).
-* **Cache first**: saved production data opens instantly from IndexedDB after unlocking. Fresh same-day reopens skip backend reads. Changes land in a durable local outbox immediately, then sync through a journal and background worker with duplicate protection. Pending is not confirmed spending. [Sync details](docs/cache-sync.md) and [durable writes](docs/durable-writes.md).
+* **Cache first**: an encrypted compact ledger opens instantly after unlocking. Fresh same-day reopens skip backend reads, and changed revisions use incremental records plus deletion tombstones. Changes land in an encrypted durable local outbox immediately, then sync through a journal and background worker with duplicate protection. Pending is not confirmed spending. [Sync details](docs/cache-sync.md) and [durable writes](docs/durable-writes.md).
 
 Remote push setup and the daily notification plan: [the Firebase guide](docs/push-notifications.md).
 * **LLM export**: Save a local JSON context bundle for deeper review elsewhere.
@@ -43,6 +43,23 @@ Remote push setup and the daily notification plan: [the Firebase guide](docs/pus
 | Database | MongoDB | Stores emails, categories, rules, and notifications |
 | AI Intelligence | Groq API (`qwen/qwen3.8-27b`) | Merchant classification and chat assistant tool calling |
 | OCR Engine | Tesseract.js | Extracts text and totals from image receipts |
+
+---
+
+## Security Model
+
+Lekka is a single-user personal application, not a multi-tenant finance product.
+
+* The Android PIN is a local privacy lock. Its salted verifier and pepper are encrypted by an Android Keystore AES-GCM key. After three wrong attempts, retries receive an increasing delay. The PIN does not authenticate API requests.
+* Cached transactions, chat history and offline write payloads are AES-GCM encrypted. The data key is wrapped by Android Keystore. Android backup and cleartext network traffic are disabled.
+* Normal sync records contain only compact transaction fields and an 800-character receipt preview. Full email bodies and OCR text remain on the backend and are not copied into the normal device snapshot.
+* API authentication intentionally remains a shared single-user bearer value. `VITE_LEKKA_API_SECRET` is compiled into the APK and must be treated as an application credential, not as a hidden server secret or user identity. This accepted design is unsuitable for multiple users or untrusted APK distribution.
+* Backend limits are deliberately lightweight: 120 reads/minute, 30 writes/minute, 5 AI calls/minute, and 2 ingestion or export requests/hour. Ordinary API bodies are capped at 128 KB.
+* Direct and trusted-forwarded finance mail requires SPF, DKIM or DMARC pass evidence on the received transport. Exact sender allowlists still apply.
+* Remote transaction confirmations omit merchant names and amounts. Detailed financial information is fetched only after opening Lekka.
+* The AI query gateway requires and verifies a separate read-only MongoDB user. Generated AI filters are validated and bounded before database execution.
+
+The web preview uses a browser storage compatibility path and should not be treated as encrypted native storage. Production financial use is the Android build.
 
 ---
 
@@ -77,7 +94,7 @@ GROQ_API_KEY=your_groq_api_key_here
 GROQ_API_KEY_1=optional_backup_groq_key
 GROQ_API_KEY_2=optional_backup_groq_key
 
-# API security secret used by the app and smoke tests
+# Shared single-user bearer value used by the APK and smoke tests
 LEKKA_API_SECRET=your_secure_api_secret_here
 CRON_SECRET=your_secure_api_secret_here
 
@@ -125,7 +142,7 @@ The app will run locally on `http://localhost:5173`.
 
 Dockerfiles exist for both the backend and web preview. No local MongoDB container or database fallback is used.
 
-The web image reads `app/.env.production` through a BuildKit secret during compilation. It must contain the production HTTPS `VITE_BACKEND_URL` and `VITE_LEKKA_API_SECRET`. Only put browser configuration in this file; never MongoDB, Gmail, Groq or Firebase server credentials. Vite values become part of the browser bundle, as they do in the APK.
+The web image reads `app/.env.production` through a BuildKit secret during compilation. It must contain the production HTTPS `VITE_BACKEND_URL` and `VITE_LEKKA_API_SECRET`. Only put browser configuration in this file; never MongoDB, Gmail, Groq or Firebase server credentials. Vite values become part of the browser bundle and APK, so the shared bearer value is not confidential client-side.
 
 ```bash
 docker compose build app
@@ -196,6 +213,8 @@ VITE_BACKEND_URL=https://lekka-suryas-projects-f3f7a1b9.vercel.app
 VITE_LEKKA_API_SECRET=...
 ```
 
+This is the accepted single-user bearer model described under Security Model. Changing it requires updating both Vercel and the Android build.
+
 Capacitor Android uses the WebView origin `https://localhost`, so backend CORS must allow:
 ```text
 https://localhost
@@ -212,6 +231,7 @@ npm run build
 cd ../app
 npm run test:prod-config
 npm run test:native-features
+npm run test:cache
 npm run build
 ```
 
