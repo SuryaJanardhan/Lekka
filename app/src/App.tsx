@@ -124,8 +124,9 @@ export function App() {
   const searchInput = useRef<HTMLInputElement>(null);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [chatInput, setChatInput] = useState('');
-  const [conversations, setConversations] = useState<Conversation[]>(loadConversations);
-  const [conversationId, setConversationId] = useState(() => conversations[0]?.id || newConversationId());
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversationId, setConversationId] = useState<string>(() => newConversationId());
+  const [chatHistoryReady, setChatHistoryReady] = useState(false);
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
   const chatMessages = conversations.find((item) => item.id === conversationId)?.messages || [];
   const chatLog = useRef<HTMLDivElement>(null);
@@ -143,9 +144,17 @@ export function App() {
     };
   }, []);
   useEffect(() => {
-    try { saveConversations(conversations); }
-    catch { setToast('Chat history could not be saved. Device storage may be full.'); }
-  }, [conversations, setToast]);
+    if (!isUnlocked || chatHistoryReady) return;
+    void loadConversations().then(rows => {
+      setConversations(rows);
+      if (rows[0]) setConversationId(rows[0].id);
+      setChatHistoryReady(true);
+    }).catch(() => { setChatHistoryReady(true); setToast('Encrypted chat history could not be opened'); });
+  }, [isUnlocked, chatHistoryReady, setToast]);
+  useEffect(() => {
+    if (!chatHistoryReady) return;
+    void saveConversations(conversations).catch(() => setToast('Chat history could not be saved. Device storage may be full.'));
+  }, [conversations, chatHistoryReady, setToast]);
   useEffect(() => {
     if (chatLog.current) chatLog.current.scrollTop = chatLog.current.scrollHeight;
   }, [conversations, chatLoading, viewportHeight, tab]);

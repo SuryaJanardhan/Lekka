@@ -2,18 +2,22 @@ import { secureVault } from './secureVault';
 
 export type EncryptedPayload = { version: 1; iv: string; ciphertext: string };
 const storageKeyName = 'data.master-key';
+let storageKeyPromise: Promise<CryptoKey> | undefined;
 
 const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const decode = (value: string) => Uint8Array.from(atob(value), character => character.charCodeAt(0));
 
 async function storageKey() {
-  let encoded = await secureVault.get(storageKeyName);
-  if (!encoded) {
-    const bytes = crypto.getRandomValues(new Uint8Array(32));
-    encoded = encode(bytes);
-    await secureVault.set(storageKeyName, encoded);
-  }
-  return crypto.subtle.importKey('raw', Uint8Array.from(decode(encoded)).buffer, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  if (!storageKeyPromise) storageKeyPromise = (async () => {
+    let encoded = await secureVault.get(storageKeyName);
+    if (!encoded) {
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      encoded = encode(bytes);
+      await secureVault.set(storageKeyName, encoded);
+    }
+    return crypto.subtle.importKey('raw', Uint8Array.from(decode(encoded)).buffer, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  })().catch(error => { storageKeyPromise = undefined; throw error; });
+  return storageKeyPromise;
 }
 
 export function isEncryptedPayload(value: unknown): value is EncryptedPayload {
