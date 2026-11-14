@@ -5,6 +5,7 @@ import { RuleEngine } from './ruleEngine';
 import { notificationService } from './notificationService';
 import { GroqService } from './groqService';
 import { notesBackfillQuery } from './transactionNotes';
+import { SyncDeletionModel } from '../models/SyncDeletion';
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -184,6 +185,7 @@ export class LedgerService {
     if (!result) {
       throw new Error('Ledger entry not found');
     }
+    await SyncDeletionModel.updateOne({ _id: `entry:${id}` }, { $set: { kind: 'entry', recordId: id, deletedAt: new Date() } }, { upsert: true });
     await notificationService.resolveCategoryReview(id);
   }
 

@@ -8,6 +8,7 @@ import { RuleModel } from '../models/Rule';
 import { SyncStateModel } from '../models/SyncState';
 import { LedgerReportService } from './ledgerReportService';
 import { notificationService } from './notificationService';
+import { SyncDeletionModel } from '../models/SyncDeletion';
 
 function query(value: any): any { return { sort() { return this; }, populate() { return this; }, select() { return this; }, lean: async () => value }; }
 
@@ -59,6 +60,24 @@ test('legacy snapshots exclude credits while credit-aware clients can request bo
   t.mock.method(EmailModel, 'find', (filter: any) => { filters.push(filter); return query([]); });
   await SnapshotService.snapshot();
   await SnapshotService.snapshot(true);
-  assert.deepEqual(filters[0], { 'parsedJson.transactionDirection': { $ne: 'CREDIT' } });
-  assert.deepEqual(filters[1], {});
+  assert.deepEqual(filters[0]['parsedJson.transactionDirection'], { $ne: 'CREDIT' });
+  assert.ok(filters[0].updatedAt.$lte instanceof Date);
+  assert.equal(filters[1]['parsedJson.transactionDirection'], undefined);
+  assert.ok(filters[1].updatedAt.$lte instanceof Date);
+});
+
+test('incremental sync returns compact changed entries and deletion tombstones', async t => {
+  t.mock.method(DataRevisionModel, 'findById', () => query({ version: 9 }));
+  t.mock.method(SyncStateModel, 'findOne', () => query(null));
+  t.mock.method(CategoryModel, 'find', () => query([]));
+  t.mock.method(RuleModel, 'find', () => query([]));
+  t.mock.method(EmailModel, 'find', () => query([{ _id: 'changed', sender: 'bank', subject: 'Paid', rawTextBody: 'x'.repeat(1200), ocrExtractedText: 'private OCR', parsedJson: { detectedAmount: 10, rawSummary: 'private raw summary' }, updatedAt: new Date() }]));
+  t.mock.method(SyncDeletionModel, 'find', () => query([{ recordId: 'deleted' }]));
+  t.mock.method(LedgerReportService, 'getDashboardStats', async () => ({ summary: {} }));
+  t.mock.method(notificationService, 'getNotifications', async () => []);
+  const changes = await SnapshotService.changes('2026-01-01T00:00:00.000Z', true);
+  assert.deepEqual(changes.deletedEntryIds, ['deleted']);
+  assert.equal(changes.entries[0].rawTextBody.length, 800);
+  assert.equal('ocrExtractedText' in changes.entries[0], false);
+  assert.equal('rawSummary' in changes.entries[0].parsedJson, false);
 });

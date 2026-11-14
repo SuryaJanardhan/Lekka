@@ -34,6 +34,7 @@ router.post('/operations/:id/resolve', OperationController.resolve);
 router.use(trackSnapshotChanges);
 router.get('/sync/status', SnapshotController.status);
 router.get('/sync/snapshot', SnapshotController.snapshot);
+router.get('/sync/changes', SnapshotController.changes);
 router.get('/ai/status', AiController.status);
 router.get('/reports', ReportController.list);
 router.get('/reports/:periodKey', ReportController.get);
