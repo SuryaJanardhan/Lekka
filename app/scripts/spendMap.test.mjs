@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
 const source = ts.transpileModule(fs.readFileSync(new URL('../src/spendMap.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
-const { spendMapRows, shareOf, categorySpendForIstDay } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const { spendMapRows, shareOf, categorySpendForIstDay, ledgerMonthOptions, ledgerBreakdownForIstMonth } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 
 test('largest categories come first without mutating the source or omitting zero categories', () => {
   const rows = [{ label: 'Movies', value: 0 }, { label: 'Food', value: 20 }, { label: 'Travel', value: 100 }];
@@ -31,4 +31,28 @@ test('home day map uses IST today, confirmed debits only, and groups categories'
     { receivedAt: '2026-11-12T19:10:00Z', categoryId: { name: 'Travel' }, parsedJson: { detectedAmount: 500, transactionDirection: 'CREDIT' } }
   ], now);
   assert.deepEqual(rows.map(row => [row.label, row.value]), [['Travel', 100], ['Food', 30]]);
+});
+
+test('stats month options include current month and transaction months newest first in IST', () => {
+  const months = ledgerMonthOptions([
+    { receivedAt: '2026-09-30T18:29:00Z' },
+    { receivedAt: '2026-09-30T18:31:00Z' },
+    { receivedAt: '2026-08-02T10:00:00Z' }
+  ], new Date('2026-11-14T10:00:00Z'));
+  assert.deepEqual(months, ['2026-11', '2026-10', '2026-09', '2026-08']);
+});
+
+test('stats breakdown filters the selected IST month and direction and groups categories and modes', () => {
+  const entries = [
+    { receivedAt: '2026-09-30T18:31:00Z', categoryId: { name: 'Food', colorCode: '#111' }, parsedJson: { detectedAmount: 100, paymentMode: 'UPI' } },
+    { receivedAt: '2026-10-02T10:00:00Z', categoryId: { name: 'Travel', colorCode: '#222' }, parsedJson: { detectedAmount: 50, paymentMode: 'CARD' } },
+    { receivedAt: '2026-10-03T10:00:00Z', categoryId: { name: 'Food', colorCode: '#111' }, parsedJson: { detectedAmount: 400, transactionDirection: 'CREDIT', paymentMode: 'UPI' } }
+  ];
+  const debit = ledgerBreakdownForIstMonth(entries, '2026-10', 'DEBIT', [{ name: 'Movies', colorCode: '#333' }]);
+  assert.equal(debit.total, 150);
+  assert.deepEqual(debit.categories.map(row => [row.label, row.value]), [['Food', 100], ['Travel', 50], ['Movies', 0]]);
+  assert.deepEqual(debit.modes.map(row => [row.label, row.value]), [['UPI', 100], ['CARD', 50]]);
+  const credit = ledgerBreakdownForIstMonth(entries, '2026-10', 'CREDIT');
+  assert.equal(credit.total, 400);
+  assert.deepEqual(credit.categories.map(row => [row.label, row.value]), [['Food', 400]]);
 });

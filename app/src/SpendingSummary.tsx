@@ -50,11 +50,11 @@ export function SpendingSummary({ title, total, categories, modes, periodLabel =
     </div>}
     {!compact && <dialog ref={dialog} className="category-breakdown-dialog" aria-labelledby={heading} onClose={() => setOpen(false)} onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}>
       <div className="category-dialog-surface">
-        <header><div><h2 id={heading}>{title} categories</h2><span>{money(total)} this month</span></div><button className="icon-button" type="button" aria-label="Close categories" onClick={() => setOpen(false)}><X size={18} /></button></header>
+        <header><div><h2 id={heading}>{title} categories</h2><span>{money(total)} {periodLabel}</span></div><button className="icon-button" type="button" aria-label="Close categories" onClick={() => setOpen(false)}><X size={18} /></button></header>
         <div className="search-panel"><Search size={17} /><input autoFocus aria-label="Search categories" placeholder="Search categories" value={search} onChange={event => setSearch(event.target.value)} />{search && <button className="icon-button search-clear" type="button" aria-label="Clear category search" onClick={() => setSearch('')}><X size={16} /></button>}</div>
         <div className="category-breakdown-list">
           {visible.map((row, index) => <div key={row.label}>
-            {row.value === 0 && (index === 0 || visible[index - 1].value > 0) && <h3 className="category-zero-heading">No transactions this month</h3>}
+            {row.value === 0 && (index === 0 || visible[index - 1].value > 0) && <h3 className="category-zero-heading">No transactions {periodLabel}</h3>}
             <CategoryBar row={row} total={sum} />
           </div>)}
           {!visible.length && <p className="spend-empty">No matching categories</p>}

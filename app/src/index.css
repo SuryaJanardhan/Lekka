@@ -391,6 +391,10 @@ textarea { resize: vertical; min-height: 74px; }
 .spend-empty { font-size: .8rem; color: var(--muted); text-align: center; padding: 8px 0; }
 .reports-view { display: grid; gap: 14px; }
 .stats-view-toggle { margin-bottom: 0; }
+.stats-map-controls { display: grid; gap: 10px; }
+.stats-month-picker { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.stats-month-picker > span { color: var(--muted); font-size: .74rem; font-weight: 700; }
+.stats-month-picker .dropdown-trigger { min-height: 40px; background: var(--panel-soft); }
 .reports-index, .report-detail { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
 .report-tabs { display: grid; gap: 6px; margin-top: 10px; }
 .report-tabs button { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 42px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-soft); color: var(--ink); text-align: left; padding: 7px 10px; }

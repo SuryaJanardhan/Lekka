@@ -35,7 +35,7 @@ import { CategorySettings } from './CategorySettings';
 import { CategoryPicker } from './CategoryPicker';
 import { SnapshotCache, SyncMetadata } from './cacheStore';
 import { DataSync } from './dataSync';
-import { categorySpendForIstDay } from './spendMap';
+import { categorySpendForIstDay, istMonth, ledgerBreakdownForIstMonth, ledgerMonthOptions } from './spendMap';
 import { RulesPanel } from './RulesPanel';
 import { Dropdown } from './Dropdown';
 import { CategorySelect } from './CategorySelect';
@@ -100,6 +100,7 @@ export function App() {
   const manualWriteBusy = useRef(false);
   const [statsDirection, setStatsDirection] = useState<'DEBIT' | 'CREDIT'>('DEBIT');
   const [statsView, setStatsView] = useState<'live' | 'reports'>('live');
+  const [statsMonth, setStatsMonth] = useState(() => istMonth(new Date()));
 
   const [entries, setEntries] = useState<EmailRecord[]>([]);
   const [confirmedEntries, setConfirmedEntries] = useState<EmailRecord[]>([]);
@@ -394,6 +395,19 @@ export function App() {
     const categories = categorySpendForIstDay(confirmedEntries);
     return { total: categories.reduce((sum, row) => sum + row.value, 0), categories };
   }, [confirmedEntries]);
+
+  const statsMonths = useMemo(() => ledgerMonthOptions(confirmedEntries), [confirmedEntries]);
+  const statsMonthOptions = useMemo(() => statsMonths.map(month => ({
+    value: month,
+    label: new Date(`${month}-01T12:00:00+05:30`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+  })), [statsMonths]);
+  const selectedStatsMonthLabel = statsMonthOptions.find(option => option.value === statsMonth)?.label || statsMonth;
+  const selectedMonthBreakdown = useMemo(() => ledgerBreakdownForIstMonth(
+    confirmedEntries,
+    statsMonth,
+    statsDirection,
+    categories.filter(category => category._id !== 'all')
+  ), [confirmedEntries, statsMonth, statsDirection, categories]);
 
   const orderedEntries = newestFirst(entries);
   const filteredEntries = orderedEntries.filter((entry) => {
@@ -871,12 +885,16 @@ export function App() {
               <Metric label="Auto sorted" value={`${analytics?.summary.aiAccuracyPercentage || 100}%`} />
               <Metric label="Entries" value={String(analytics?.summary.totalTransactions ?? analytics?.summary.totalEmails ?? 0)} />
             </div>
-            <div className="mode-grid flow-toggle">{(['DEBIT', 'CREDIT'] as const).map(direction => <button key={direction} type="button" className={statsDirection === direction ? 'selected' : ''} onClick={() => setStatsDirection(direction)}>{direction === 'DEBIT' ? 'Debits' : 'Credits'}</button>)}</div>
+            <div className="stats-map-controls">
+              <div className="stats-month-picker"><span>Map month</span><Dropdown label="Stats month" value={statsMonth} onValueChange={setStatsMonth} options={statsMonthOptions} /></div>
+              <div className="mode-grid flow-toggle">{(['DEBIT', 'CREDIT'] as const).map(direction => <button key={direction} type="button" className={statsDirection === direction ? 'selected' : ''} onClick={() => setStatsDirection(direction)}>{direction === 'DEBIT' ? 'Debits' : 'Credits'}</button>)}</div>
+            </div>
             <SpendingSummary
               title={statsDirection === 'CREDIT' ? 'Credit map' : 'Spend map'}
-              total={statsDirection === 'CREDIT' ? analytics?.summary.totalCredits || 0 : analytics?.summary.totalFinancialAmount || 0}
-              categories={(analytics?.categoryBreakdown || []).map((item) => ({ label: item.categoryName, value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount || 0, color: item.colorCode }))}
-              modes={(analytics?.paymentModeBreakdown || []).map((item, index) => ({ label: item.mode, value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))}
+              periodLabel={`in ${selectedStatsMonthLabel}`}
+              total={selectedMonthBreakdown.total}
+              categories={selectedMonthBreakdown.categories}
+              modes={selectedMonthBreakdown.modes}
             />
             <ReportBars title="Daily trend" rows={(analytics?.dailyTrend || []).map((item, index) => ({ label: item.date.slice(8), value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#14b8a6', '#2563eb', '#f59e0b', '#ef4444'][index % 4] }))} />
             <ReportBars title="Monthly trend" rows={(analytics?.monthlyTrend || []).map((item, index) => ({ label: new Date(Number(item.month.slice(0, 4)), Number(item.month.slice(5, 7)) - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }), value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))} />
