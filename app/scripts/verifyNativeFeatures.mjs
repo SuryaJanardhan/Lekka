@@ -11,6 +11,8 @@ const androidManifest = readFileSync(resolve(root, 'android/app/src/main/Android
 const remotePushSource = readFileSync(resolve(root, 'src/remotePush.ts'), 'utf8');
 const operationSource = readFileSync(resolve(root, '../backend/src/services/operationService.ts'), 'utf8');
 const mailQueueSource = readFileSync(resolve(root, '../backend/src/services/mailIngestionQueue.ts'), 'utf8');
+const cacheSource = readFileSync(resolve(root, 'src/cacheStore.ts'), 'utf8');
+const secureVaultSource = readFileSync(resolve(root, 'android/app/src/main/java/com/lekka/app/SecureVaultPlugin.java'), 'utf8');
 
 const checks = [
   {
@@ -68,6 +70,12 @@ const checks = [
   {
     name: 'Android keyboard resizes content and hides bottom navigation',
     pass: androidManifest.includes('android:windowSoftInputMode="adjustResize"') && appSource.includes('window.visualViewport') && appSource.includes('keyboard-editing')
+  },
+  {
+    name: 'financial snapshots use a Keystore-protected key and are excluded from Android backup',
+    pass: cacheSource.includes('encryptJson(snapshot)') && cacheSource.includes('decryptJson<DataSnapshot>') &&
+      secureVaultSource.includes('AndroidKeyStore') && secureVaultSource.includes('AES/GCM/NoPadding') &&
+      androidManifest.includes('android:allowBackup="false"') && androidManifest.includes('android:usesCleartextTraffic="false"')
   },
   {
     name: 'AI assistant calls backend chat endpoint',

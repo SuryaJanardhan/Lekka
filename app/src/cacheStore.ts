@@ -1,4 +1,5 @@
 import type { DataSnapshot } from './types';
+import { decryptJson, encryptJson, isEncryptedPayload } from './localCrypto';
 
 export class SnapshotCache {
   constructor(private key: string) {}
@@ -15,19 +16,25 @@ export class SnapshotCache {
 
   async read(): Promise<DataSnapshot | null> {
     const db = await this.open();
-    return new Promise((resolve, reject) => {
+    const stored = await new Promise<unknown>((resolve, reject) => {
       const tx = db.transaction('snapshots', 'readonly');
       const request = tx.objectStore('snapshots').get(this.key);
       tx.oncomplete = () => { db.close(); resolve(request.result || null); };
       tx.onerror = tx.onabort = () => { db.close(); reject(tx.error || new Error('Could not read saved data')); };
     });
+    if (!stored) return null;
+    if (isEncryptedPayload(stored)) return decryptJson<DataSnapshot>(stored);
+    const legacy = stored as DataSnapshot;
+    await this.write(legacy);
+    return legacy;
   }
 
   async write(snapshot: DataSnapshot): Promise<void> {
+    const encrypted = await encryptJson(snapshot);
     const db = await this.open();
     return new Promise((resolve, reject) => {
       const tx = db.transaction('snapshots', 'readwrite');
-      tx.objectStore('snapshots').put(snapshot, this.key);
+      tx.objectStore('snapshots').put(encrypted, this.key);
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onerror = tx.onabort = () => { db.close(); reject(tx.error || new Error('Could not save local data')); };
     });
