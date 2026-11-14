@@ -7,11 +7,20 @@ import { CronService } from './services/cronService';
 import { CategoryModel } from './models/Category';
 import { RuleModel } from './models/Rule';
 import { runtimeConfig } from './config/runtimeConfig';
+import { secureApiMiddleware } from './middleware/authMiddleware';
+import { apiRateLimit } from './middleware/rateLimit';
 
 dotenv.config();
 
 const app = express();
 const PORT = runtimeConfig.port;
+app.disable('x-powered-by');
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Frame-Options', 'DENY');
+  next();
+});
 
 app.use(cors({
   origin(origin, callback) {
@@ -24,9 +33,6 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-API-SECRET']
 }));
-
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check endpoint
 app.get('/health', async (_req, res, next) => {
@@ -110,8 +116,9 @@ export async function connectDatabase() {
   await dbConnectionPromise;
 }
 
-// Middleware for serverless request DB connection
-app.use(async (_req, _res, next) => {
+// Authenticate before database work or parsing request bodies.
+app.use('/api', secureApiMiddleware);
+app.use('/api', async (_req, _res, next) => {
   try {
     await connectDatabase();
     next();
@@ -119,15 +126,18 @@ app.use(async (_req, _res, next) => {
     next(error);
   }
 });
+app.use('/api', apiRateLimit);
+app.use('/api', express.json({ limit: '128kb' }));
+app.use('/api', express.urlencoded({ extended: false, limit: '128kb' }));
 
 // API route middleware
 app.use('/api', apiRouter);
 
 app.use((error: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[Server] Request failed:', error);
-  res.status(500).json({
+  res.status(error?.type === 'entity.too.large' ? 413 : 500).json({
     success: false,
-    error: error.message || 'Internal server error'
+    error: error?.type === 'entity.too.large' ? 'Request body is too large' : 'Internal server error'
   });
 });
 

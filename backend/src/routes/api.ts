@@ -9,7 +9,6 @@ import { NotificationController } from '../services/notificationService';
 import { ChatController } from '../controllers/chatController';
 import { SystemController } from '../controllers/systemController';
 import { PushController } from '../controllers/pushController';
-import { secureApiMiddleware } from '../middleware/authMiddleware';
 import { SnapshotController } from '../controllers/snapshotController';
 import { trackSnapshotChanges } from '../middleware/snapshotRevision';
 import { OperationController } from '../controllers/operationController';
@@ -22,8 +21,6 @@ import { recoverMailIngestions } from '../services/mailIngestionQueue';
 
 const router = Router();
 
-// Apply cryptographic API secret middleware to all /api routes
-router.use(secureApiMiddleware);
 router.use((req, _res, next) => {
   if (req.method === 'GET' && ['/ingest', '/notifications/digest'].includes(req.path)) {
     waitUntil(recoverOperations()); waitUntil(recoverWatches());

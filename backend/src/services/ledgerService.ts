@@ -6,6 +6,8 @@ import { notificationService } from './notificationService';
 import { GroqService } from './groqService';
 import { notesBackfillQuery } from './transactionNotes';
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export interface CreateManualLedgerEntryInput {
   title: string;
   amount: number;
@@ -47,15 +49,18 @@ export class LedgerService {
     if (params.categoryId) query.categoryId = params.categoryId;
     if (params.needsReview) query.needsUserReview = true;
     if (params.search) {
+      const search = params.search.trim().slice(0, 80);
+      if (!search) return [];
+      const pattern = escapeRegex(search);
       query.$or = [
-        { subject: { $regex: params.search, $options: 'i' } },
-        { sender: { $regex: params.search, $options: 'i' } },
-        { rawTextBody: { $regex: params.search, $options: 'i' } }
+        { subject: { $regex: pattern, $options: 'i' } },
+        { sender: { $regex: pattern, $options: 'i' } },
+        { rawTextBody: { $regex: pattern, $options: 'i' } }
       ];
     }
 
     const limit = Math.min(Math.max(params.limit || 100, 1), 250);
-    return EmailModel.find(query).populate('categoryId').sort({ receivedAt: -1 }).limit(limit);
+    return EmailModel.find(query).populate('categoryId').sort({ receivedAt: -1 }).limit(limit).maxTimeMS(3000);
   }
 
   public static async getEntryById(id: string) {
