@@ -1,7 +1,7 @@
-import type { DataSnapshot, SyncStatus } from './types';
+import type { DataChanges, DataSnapshot, SyncStatus } from './types';
 import type { CacheMetadata } from './cacheStore';
 
-interface SyncApi { getSnapshot(): Promise<DataSnapshot>; getSyncStatus(): Promise<SyncStatus> }
+interface SyncApi { getSnapshot(): Promise<DataSnapshot>; getChanges(after: string): Promise<DataChanges>; getSyncStatus(): Promise<SyncStatus> }
 interface Cache { read(): Promise<DataSnapshot | null>; write(snapshot: DataSnapshot): Promise<void> }
 interface Metadata { read(): CacheMetadata; write(meta: CacheMetadata): void }
 export interface SyncResult { snapshot: DataSnapshot; network: boolean; persisted: boolean }
@@ -15,6 +15,24 @@ export function validSnapshot(value: unknown): value is DataSnapshot {
     Array.isArray(s.rules) && s.rules.every(r => r && typeof r._id === 'string' && Array.isArray(r.conditions)) &&
     Array.isArray(s.notifications) && s.notifications.every(n => n && typeof n.id === 'string' && typeof n.message === 'string') &&
     s.analytics?.summary && Number.isFinite(s.analytics.summary.totalEmails) && Number.isFinite(s.analytics.summary.totalFinancialAmount) && Array.isArray(s.analytics.categoryBreakdown));
+}
+
+function validChanges(value: unknown): value is DataChanges {
+  const changes = value as DataChanges | null;
+  return Boolean(changes && changes.schemaVersion === 1 && typeof changes.revision === 'string' && Number.isFinite(Date.parse(changes.generatedAt)) &&
+    Array.isArray(changes.entries) && changes.entries.every(entry => entry && typeof entry._id === 'string' && typeof entry.receivedAt === 'string' && entry.parsedJson) &&
+    Array.isArray(changes.deletedEntryIds) && changes.deletedEntryIds.every(id => typeof id === 'string') &&
+    Array.isArray(changes.categories) && Array.isArray(changes.rules) && Array.isArray(changes.notifications) && changes.analytics?.summary);
+}
+
+function mergeChanges(snapshot: DataSnapshot, changes: DataChanges): DataSnapshot {
+  const entries = new Map(snapshot.entries.map(entry => [entry._id, entry]));
+  for (const id of changes.deletedEntryIds) entries.delete(id);
+  for (const entry of changes.entries) entries.set(entry._id, entry);
+  return {
+    ...snapshot, ...changes,
+    entries: [...entries.values()].sort((left, right) => right.receivedAt.localeCompare(left.receivedAt))
+  };
 }
 
 export function indiaDay(date: Date): string {
@@ -91,7 +109,12 @@ export class DataSync {
       }
     }
     const generation = this.generation;
-    const snapshot = await this.api.getSnapshot();
+    let snapshot: DataSnapshot;
+    if (this.snapshot) {
+      const changes = await this.api.getChanges(this.snapshot.generatedAt);
+      if (!validChanges(changes)) throw new Error('Incomplete incremental sync; saved data was kept');
+      snapshot = mergeChanges(this.snapshot, changes);
+    } else snapshot = await this.api.getSnapshot();
     if (!validSnapshot(snapshot)) throw new Error('Incomplete server snapshot; saved data was kept');
     this.snapshot = snapshot;
     let persisted = true;

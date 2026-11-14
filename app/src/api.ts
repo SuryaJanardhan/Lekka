@@ -1,4 +1,4 @@
-import { Category, DashboardStats, EmailRecord, NotificationItem, Rule, DataSnapshot, SyncStatus } from './types';
+import { Category, DashboardStats, EmailRecord, NotificationItem, Rule, DataChanges, DataSnapshot, SyncStatus } from './types';
 import type { OperationCommand, OperationReceipt } from './outboxTypes';
 
 export interface ApiClientConfig {
@@ -82,6 +82,7 @@ export class ApiClient {
   }
 
   getSnapshot() { return this.request<DataSnapshot>('/api/sync/snapshot?includeCredits=true'); }
+  getChanges(after: string) { return this.request<DataChanges>(`/api/sync/changes?includeCredits=true&after=${encodeURIComponent(after)}`); }
   getSyncStatus() { return this.request<SyncStatus>('/api/sync/status'); }
 
   renameCategory(id: string, name: string) {

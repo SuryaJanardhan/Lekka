@@ -23,6 +23,16 @@ export interface DataSnapshot extends SyncStatus {
   notifications: NotificationItem[];
 }
 
+export interface DataChanges extends SyncStatus {
+  generatedAt: string;
+  categories: Category[];
+  entries: EmailRecord[];
+  deletedEntryIds: string[];
+  analytics: DashboardStats;
+  rules: Rule[];
+  notifications: NotificationItem[];
+}
+
 export interface EmailRecord {
   updatedAt?: string;
   syncState?: 'pending' | 'blocked';

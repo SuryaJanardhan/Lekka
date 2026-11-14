@@ -10,8 +10,13 @@ const { ApiClient } = await import(`data:text/javascript;base64,${Buffer.from(ap
 const now = new Date('2026-10-16T10:00:00Z');
 const snapshot = revision => ({ schemaVersion: 1, revision, generatedAt: now.toISOString(), lastSuccessfulIngestionAt: '2026-10-15T18:58:00Z', categories: [], entries: [], rules: [], notifications: [], analytics: { period: { startDate: '2026-10-01T00:00:00Z' }, summary: { totalEmails: 0, totalFinancialAmount: 0 }, categoryBreakdown: [] } });
 function fixture(saved = snapshot('1'), meta = { nextCheckAt: now.getTime() + 3600000 }) {
-  const state = { saved, meta, reads: 0, snapshots: 0, status: 0, remote: snapshot('2'), serverStatus: snapshot('2'), fail: false, failStorage: false };
-  const api = { getSnapshot: async () => { state.snapshots++; if (state.fail) throw Error('Offline'); return structuredClone(state.remote); }, getSyncStatus: async () => { state.status++; return state.serverStatus; } };
+  const remote = snapshot('2');
+  const state = { saved, meta, reads: 0, snapshots: 0, changes: 0, status: 0, remote, remoteChanges: { ...remote, entries: [], deletedEntryIds: [] }, serverStatus: snapshot('2'), fail: false, failStorage: false };
+  const api = {
+    getSnapshot: async () => { state.snapshots++; if (state.fail) throw Error('Offline'); return structuredClone(state.remote); },
+    getChanges: async () => { state.changes++; if (state.fail) throw Error('Offline'); return structuredClone(state.remoteChanges); },
+    getSyncStatus: async () => { state.status++; return state.serverStatus; }
+  };
   const cache = { read: async () => { state.reads++; return structuredClone(state.saved); }, write: async value => { if (state.failStorage) throw Error('Quota'); state.saved = structuredClone(value); } };
   const metadata = { read: () => state.meta, write: meta => { state.meta = meta; } };
   return { state, create: () => new DataSync(api, cache, metadata, () => now) };
@@ -19,7 +24,7 @@ function fixture(saved = snapshot('1'), meta = { nextCheckAt: now.getTime() + 36
 test('fresh cached reopen performs zero network reads', async () => {
   const f = fixture();
   for (let i = 0; i < 3; i++) { const sync = f.create(); assert.equal((await sync.hydrate()).revision, '1'); assert.equal((await sync.synchronize()).network, false); }
-  assert.equal(f.state.snapshots + f.state.status, 0);
+  assert.equal(f.state.snapshots + f.state.changes + f.state.status, 0);
 });
 test('first launch and concurrent refreshes download one complete snapshot', async () => {
   const f = fixture(null, {}), sync = f.create();
@@ -34,19 +39,22 @@ test('daily unchanged revision only requests lightweight status', async () => {
   assert.equal(f.state.status, 1);
   assert.equal(f.state.snapshots, 0);
 });
-test('changed server revision downloads and replaces deleted rows, never merges them', async () => {
+test('changed server revision downloads changes and applies deletion tombstones', async () => {
   const old = snapshot('1'); old.entries = [{ _id: 'old', sender: 'Bank', receivedAt: now.toISOString(), parsedJson: {} }];
   const f = fixture(old, {});
+  f.state.remoteChanges.deletedEntryIds = ['old'];
   await f.create().synchronize();
   assert.deepEqual(f.state.saved.entries, []);
   assert.equal(f.state.saved.revision, '2');
+  assert.equal(f.state.changes, 1);
+  assert.equal(f.state.snapshots, 0);
 });
 test('force refresh ignores cache age and push keys are deduplicated', async () => {
   const f = fixture(), sync = f.create();
   assert.equal(sync.invalidate('push-1'), true);
   assert.equal(sync.invalidate('push-1'), false);
   await sync.synchronize(true);
-  assert.equal(f.state.snapshots, 1);
+  assert.equal(f.state.changes, 1);
   assert.equal(f.state.meta.dirty, false);
 });
 test('offline or partial snapshots never overwrite the last good local snapshot', async () => {
@@ -54,7 +62,7 @@ test('offline or partial snapshots never overwrite the last good local snapshot'
   sync.invalidate(); f.state.fail = true;
   await assert.rejects(() => sync.synchronize(true), /Offline/);
   assert.equal(f.state.saved.revision, '1');
-  f.state.fail = false; f.state.remote = { revision: '3' };
+  f.state.fail = false; f.state.remoteChanges = { revision: '3' };
   await assert.rejects(() => sync.synchronize(true), /Incomplete/);
   assert.equal(f.state.saved.revision, '1');
   assert.equal(f.state.meta.dirty, true);
