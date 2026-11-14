@@ -35,7 +35,7 @@ app.use(cors({
 }));
 
 // Health check endpoint
-app.get('/health', async (_req, res, next) => {
+app.get('/health', secureApiMiddleware, async (_req, res, next) => {
   try {
     await connectDatabase();
     const isMongoConnected = mongoose.connection.readyState === 1;

@@ -67,7 +67,7 @@ export class ApiClient {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 12000);
     try {
-      const response = await fetch(`${this.baseUrl}/health`, { signal: controller.signal });
+      const response = await fetch(`${this.baseUrl}/health`, { signal: controller.signal, headers: this.headers() });
       if (!response.ok) return { connected: false, status: response.status };
       return response.json();
     } catch (error: any) {

@@ -18,8 +18,8 @@ export function mailSender(mail: ParsedMail) {
 
 export function hasAuthenticatedTransport(mail: ParsedMail) {
   const header = mail.headers.get('authentication-results');
-  const text = Array.isArray(header) ? header.join(' ') : String(header || '');
-  return /\b(?:spf|dkim|dmarc)=pass\b/i.test(text);
+  const values = Array.isArray(header) ? header : [header];
+  return values.some(value => /^\s*mx\.google\.com\s*;/i.test(String(value || '')) && /\b(?:spf|dkim|dmarc)=pass\b/i.test(String(value)));
 }
 
 function mailText(mail: ParsedMail) {

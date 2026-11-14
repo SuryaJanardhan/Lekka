@@ -53,3 +53,8 @@ test('approved From headers without SPF, DKIM, or DMARC evidence are rejected', 
   assert.equal(hasAuthenticatedTransport(spoofed), false);
   assert.equal((await admitMail(spoofed, filters)).reason, 'sender_authentication_failed');
 });
+
+test('forged authentication headers cannot override a Gmail failure', async () => {
+  const spoofed = await simpleParser('Authentication-Results: attacker.example; spf=pass\r\nAuthentication-Results: mx.google.com; spf=fail\r\nFrom: noreply@phonepe.com\r\nSubject: Receipt\r\n\r\nPaid INR 999.');
+  assert.equal(hasAuthenticatedTransport(spoofed), false);
+});
