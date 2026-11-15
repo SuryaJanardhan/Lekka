@@ -22,6 +22,18 @@ test('model requests are bounded and never contain the old whole-app context', a
   assert.ok(JSON.stringify(captured.messages).length < 800);
 });
 
+test('general chat receives a short recent conversation window within the shared context budget', async t => {
+  let captured: any;
+  t.mock.method(AiProvider, 'complete', async (request: any) => { captured = request; return { choices: [{ message: { content: 'That follows from what we discussed.' } }] } as any; });
+  await ChatService.processChatMessage({ sessionId: 'talk', userMessage: 'Can you explain that more?', history: [
+    { role: 'user', content: 'What does pending mean?' },
+    { role: 'assistant', content: 'It is saved locally and awaiting server confirmation.' },
+    { role: 'user', content: 'Can you explain that more?' }
+  ] });
+  assert.ok(captured.messages.some((row: any) => row.content.includes('awaiting server confirmation')));
+  assert.ok(JSON.stringify(captured.messages).length < 800);
+});
+
 test('general provider failures are errors rather than fake successful replies', async t => {
   t.mock.method(AiProvider, 'complete', async () => { throw Object.assign(new Error('AI rate limit reached'), { status: 429 }); });
   await assert.rejects(() => ChatService.processChatMessage({ sessionId: 'limited', userMessage: 'Tell me something useful' }), /rate limit/);
@@ -60,4 +72,29 @@ test('decision-oriented natural questions use the insights skill and one bounded
   const result = await ChatService.processChatMessage({ sessionId: 'insights', userMessage: 'According to debit credit what is my holding amount and where did main debits go this month for better decisions?' });
   assert.equal(result.toolUsed, 'insights'); assert.equal(calls, 1);
   assert.match(result.reply, /This is not your current bank account balance/); assert.match(result.reply, /Food: INR 600\.00/); assert.match(result.reply, /AI observations/);
+});
+
+test('why follow-ups reuse the prior ledger filters and explain only freshly calculated facts', async t => {
+  const queries: any[] = [];
+  t.mock.method(ReadGateway.prototype, 'categories', async () => [{ name: 'Food' }] as any);
+  t.mock.method(ReadGateway.prototype, 'execute', async (request: any) => {
+    queries.push(request);
+    return { kind: 'summary', period: request.range, debitPaise: 60000, creditPaise: 0, count: 5, debitCount: 5, creditCount: 0 };
+  });
+  const first = await ChatService.processChatMessage({ sessionId: 'why-followup', userMessage: '@spending Food last month' });
+  let prompt = '';
+  t.mock.method(AiProvider, 'complete', async (request: any) => {
+    prompt = JSON.stringify(request.messages);
+    return { choices: [{ message: { content: 'Food is higher because the five recorded transactions total INR 600.00.' } }] } as any;
+  });
+  const followup = await ChatService.processChatMessage({
+    sessionId: 'why-followup', userMessage: 'Why is that high?', context: first.context,
+    history: [{ role: 'user', content: '@spending Food last month' }, { role: 'assistant', content: first.reply }, { role: 'user', content: 'Why is that high?' }]
+  });
+  assert.equal(queries.length, 2);
+  assert.equal(queries[1].category, 'Food');
+  assert.equal(queries[1].range.start, queries[0].range.start);
+  assert.equal(followup.toolUsed, 'spending');
+  assert.match(followup.reply, /Food is higher/);
+  assert.match(prompt, /INR 600\.00/);
 });
