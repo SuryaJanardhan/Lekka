@@ -28,6 +28,30 @@ export function ledgerMonthOptions(entries: SpendEntry[], now = new Date()) {
   return [...months].sort((left, right) => right.localeCompare(left));
 }
 
+function distinctStatsCategoryColors(rows: BreakdownRow[]) {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = (row.color || '#9ca3af').toLowerCase();
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const used = new Set(rows.filter(row => (counts.get((row.color || '#9ca3af').toLowerCase()) || 0) === 1)
+    .map(row => (row.color || '#9ca3af').toLowerCase()));
+  return rows.map(row => {
+    const original = row.color || '#9ca3af';
+    if ((counts.get(original.toLowerCase()) || 0) === 1) return row;
+    let hash = 0;
+    for (const character of row.label.toLocaleLowerCase()) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+    let hue = hash % 360;
+    let color = `hsl(${hue} 68% 42%)`;
+    while (used.has(color)) {
+      hue = (hue + 137) % 360;
+      color = `hsl(${hue} 68% 42%)`;
+    }
+    used.add(color);
+    return { ...row, color };
+  });
+}
+
 export function ledgerBreakdownForIstMonth(
   entries: SpendEntry[],
   month: string,
@@ -61,7 +85,7 @@ export function ledgerBreakdownForIstMonth(
     total += amount;
   }
 
-  return { total, categories: spendMapRows([...categories.values()]), modes: spendMapRows([...modes.values()]) };
+  return { total, categories: spendMapRows(distinctStatsCategoryColors([...categories.values()])), modes: spendMapRows([...modes.values()]) };
 }
 
 export function categorySpendForIstDay(entries: SpendEntry[], now = new Date()) {

@@ -56,3 +56,16 @@ test('stats breakdown filters the selected IST month and direction and groups ca
   assert.equal(credit.total, 400);
   assert.deepEqual(credit.categories.map(row => [row.label, row.value]), [['Food', 400]]);
 });
+
+test('monthly stats gives repeated default category colors distinct stable chart colors', () => {
+  const catalog = ['Food', 'Travel', 'Groceries', 'Medicine', 'Movies'].map(name => ({ name, colorCode: '#0f766e' }));
+  const entries = catalog.map((category, index) => ({
+    receivedAt: `2026-10-${String(index + 1).padStart(2, '0')}T10:00:00Z`,
+    categoryId: category,
+    parsedJson: { detectedAmount: (index + 1) * 10 }
+  }));
+  const rows = ledgerBreakdownForIstMonth(entries, '2026-10', 'DEBIT', catalog).categories;
+  assert.equal(new Set(rows.map(row => row.color)).size, catalog.length);
+  const again = ledgerBreakdownForIstMonth(entries, '2026-10', 'DEBIT', catalog).categories;
+  assert.deepEqual(rows.map(row => [row.label, row.color]), again.map(row => [row.label, row.color]));
+});

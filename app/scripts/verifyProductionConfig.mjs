@@ -87,7 +87,10 @@ async function checkCorsOrigin(origin) {
 
 if (failures.length === 0) {
   try {
-    const health = await fetch(`${backendUrl.replace(/\/+$/, '')}/health`, { signal: AbortSignal.timeout(8000) });
+    const health = await fetch(`${backendUrl.replace(/\/+$/, '')}/health`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'X-API-SECRET': secret }
+    });
     if (!health.ok) failures.push(`/health returned ${health.status}`);
 
     const categories = await checkEndpoint('/api/categories');
