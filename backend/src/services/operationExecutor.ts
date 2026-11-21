@@ -26,7 +26,9 @@ export async function executeOperation(op: StoredOperation) {
     const versionMismatch = !expected || new Date(row.updatedAt).toISOString() !== new Date(expected).toISOString();
     if (versionMismatch) {
       if (op.kind === 'entry.category' && String(row.categoryId || '') === String(op.payload.categoryId || '')) {
-        return JSON.parse(JSON.stringify(row));
+        await EmailModel.updateOne({ _id: op.targetId }, { $set: { categoryId: op.payload.categoryId, categorySource: 'USER_MANUAL', needsUserReview: false, reviewStatus: 'APPROVED', updatedAt: new Date() } });
+        const fresh = await EmailModel.findById(op.targetId).lean();
+        return JSON.parse(JSON.stringify(fresh || row));
       }
       if (op.kind !== 'entry.delete' && op.kind !== 'entry.category') {
         throw operationError('This record changed elsewhere. Refresh before editing again.', 409);

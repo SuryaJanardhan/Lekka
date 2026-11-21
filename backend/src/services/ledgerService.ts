@@ -218,6 +218,8 @@ export class LedgerService {
     email.categorySource = 'USER_MANUAL';
     email.needsUserReview = false;
     email.reviewStatus = 'APPROVED';
+    email.updatedAt = new Date();
+    (email as any).markModified('updatedAt');
     await email.save();
 
     if (params.createAutoRule !== false) {
