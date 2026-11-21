@@ -30,7 +30,7 @@ export function buildRequest(skill: SkillId, message: string, categories: string
     if (unrecognized) {
       if (/(?:^|\s)@spending\b/i.test(message)) throw aiError('I could not identify that category or filter. Use its exact name from Settings, or @search for a merchant.');
       term = stripPeriods(text)
-        .replace(/^(?:how much (?:did i|was)?\s*)?(?:spend|spent|paid)\s*(?:on|at|for|to)?\s*/i, '')
+        .replace(/^(?:how much (?:did i|was)?\s*)?(?:spending|spend|spent|paid)\s*(?:on|at|for|to)?\s*/i, '')
         .replace(/\b(?:last|this)\s+(?:month|week|year|quarter)\b/gi, '')
         .trim();
       if (!term || term.length > 80) term = unrecognized.slice(0, 80);
