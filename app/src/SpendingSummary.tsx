@@ -37,7 +37,7 @@ export function SpendingSummary({ title, total, categories, modes, periodLabel =
       <div><strong style={{ fontSize: money(total).length > 12 ? 14 : 19 }}>{money(total)}</strong><span>{active.length} active {active.length === 1 ? 'category' : 'categories'}</span></div>
     </div>
     <div className="spend-category-bars">
-      {active.slice(0, compact ? 3 : 5).map(row => <CategoryBar key={row.label} row={row} total={sum} />)}
+      {active.map(row => <CategoryBar key={row.label} row={row} total={sum} />)}
       {!active.length && <p className="spend-empty">No transactions {periodLabel}</p>}
     </div>
     {!compact && <button className="spend-view-all" type="button" onClick={() => { setSearch(''); setOpen(true); }}>View all {categories.length} categories<ChevronRight size={17} /></button>}

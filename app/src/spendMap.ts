@@ -28,26 +28,77 @@ export function ledgerMonthOptions(entries: SpendEntry[], now = new Date()) {
   return [...months].sort((left, right) => right.localeCompare(left));
 }
 
+const HIGH_CONTRAST_PALETTE = [
+  '#2563eb', // Blue
+  '#ea580c', // Orange
+  '#059669', // Emerald
+  '#7c3aed', // Purple
+  '#e11d48', // Rose
+  '#0284c7', // Sky
+  '#d97706', // Amber
+  '#c026d3', // Fuchsia
+  '#16a34a', // Green
+  '#4f46e5', // Indigo
+  '#0891b2', // Cyan
+  '#be123c', // Crimson
+  '#65a30d', // Lime
+  '#9333ea', // Violet
+  '#0d9488', // Teal
+  '#ca8a04', // Mustard
+  '#475569', // Slate
+  '#db2777', // Pink
+  '#b45309', // Brown
+  '#4338ca', // Deep Indigo
+];
+
+const DEFAULT_CATEGORY_COLORS = new Set(['#0f766e', '#9ca3af', '#3b82f6', '']);
+
 function distinctStatsCategoryColors(rows: BreakdownRow[]) {
   const counts = new Map<string, number>();
   for (const row of rows) {
     const key = (row.color || '#9ca3af').toLowerCase();
     counts.set(key, (counts.get(key) || 0) + 1);
   }
-  const used = new Set(rows.filter(row => (counts.get((row.color || '#9ca3af').toLowerCase()) || 0) === 1)
-    .map(row => (row.color || '#9ca3af').toLowerCase()));
-  return rows.map(row => {
-    const original = row.color || '#9ca3af';
-    if ((counts.get(original.toLowerCase()) || 0) === 1) return row;
-    let hash = 0;
-    for (const character of row.label.toLocaleLowerCase()) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-    let hue = hash % 360;
-    let color = `hsl(${hue} 68% 42%)`;
-    while (used.has(color)) {
-      hue = (hue + 137) % 360;
-      color = `hsl(${hue} 68% 42%)`;
+
+  const used = new Set<string>();
+  for (const row of rows) {
+    const original = (row.color || '#9ca3af').toLowerCase();
+    if (counts.get(original) === 1 && !DEFAULT_CATEGORY_COLORS.has(original)) {
+      used.add(original);
     }
-    used.add(color);
+  }
+
+  return rows.map(row => {
+    const original = (row.color || '#9ca3af').toLowerCase();
+    if (counts.get(original) === 1 && !DEFAULT_CATEGORY_COLORS.has(original)) {
+      return row;
+    }
+
+    let hash = 0;
+    for (const character of row.label.toLocaleLowerCase()) {
+      hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+    }
+
+    let paletteIndex = hash % HIGH_CONTRAST_PALETTE.length;
+    let color = HIGH_CONTRAST_PALETTE[paletteIndex];
+    let attempts = 0;
+
+    while (used.has(color.toLowerCase()) && attempts < HIGH_CONTRAST_PALETTE.length) {
+      paletteIndex = (paletteIndex + 1) % HIGH_CONTRAST_PALETTE.length;
+      color = HIGH_CONTRAST_PALETTE[paletteIndex];
+      attempts++;
+    }
+
+    if (used.has(color.toLowerCase())) {
+      let hue = (hash + attempts * 137) % 360;
+      color = `hsl(${hue} 70% 42%)`;
+      while (used.has(color.toLowerCase())) {
+        hue = (hue + 137) % 360;
+        color = `hsl(${hue} 70% 42%)`;
+      }
+    }
+
+    used.add(color.toLowerCase());
     return { ...row, color };
   });
 }
@@ -107,7 +158,7 @@ export function categorySpendForIstDay(entries: SpendEntry[], dayOrDate: string 
     const row = rows.get(label) || { label, value: 0, color: entry.categoryId?.colorCode || '#9ca3af' };
     row.value += amount; rows.set(label, row);
   }
-  return spendMapRows([...rows.values()]);
+  return spendMapRows(distinctStatsCategoryColors([...rows.values()]));
 }
 
 export function categorySpendForIstRange(entries: SpendEntry[], startDay: string, endDay: string) {
@@ -120,7 +171,7 @@ export function categorySpendForIstRange(entries: SpendEntry[], startDay: string
     const row = rows.get(label) || { label, value: 0, color: entry.categoryId?.colorCode || '#9ca3af' };
     row.value += amount; rows.set(label, row);
   }
-  return spendMapRows([...rows.values()]);
+  return spendMapRows(distinctStatsCategoryColors([...rows.values()]));
 }
 
 export function currentWeekDaysForIst(entries: SpendEntry[], now = new Date()): { days: WeekDayOption[]; startDay: string; endDay: string; weekTotal: number } {
