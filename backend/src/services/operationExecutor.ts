@@ -23,7 +23,15 @@ export async function executeOperation(op: StoredOperation) {
       if (previous?.state !== 'DONE' || previous.targetId !== op.targetId) throw operationError('An earlier change must be resolved first.', 409);
       expected = previous.result?.updatedAt;
     }
-    if (!expected || new Date(row.updatedAt).toISOString() !== new Date(expected).toISOString()) throw operationError('This record changed elsewhere. Refresh before editing again.', 409);
+    const versionMismatch = !expected || new Date(row.updatedAt).toISOString() !== new Date(expected).toISOString();
+    if (versionMismatch) {
+      if (op.kind === 'entry.category' && String(row.categoryId || '') === String(op.payload.categoryId || '')) {
+        return JSON.parse(JSON.stringify(row));
+      }
+      if (op.kind !== 'entry.delete' && op.kind !== 'entry.category') {
+        throw operationError('This record changed elsewhere. Refresh before editing again.', 409);
+      }
+    }
   }
   // Reuse the existing validated command handlers, capturing their result inside the transaction.
   const req = { params: { id: op.targetId, emailId: op.targetId }, body: { ...op.payload, _id: op.targetId } } as unknown as Request;

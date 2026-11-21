@@ -931,7 +931,14 @@ export function App() {
               await queueChange('category.rename', id, { name }, categories.find(row => row._id === id));
             }} />
             <OutboxPanel operations={pendingOperations} onRetry={() => { void outbox.retryNow(); }} onResolve={async (id, action) => {
-              try { await outbox.resolve(id, action); }
+              try {
+                await outbox.resolve(id, action);
+                if (action === 'discard') {
+                  const result = await dataSync.recover();
+                  applySnapshot(result.snapshot);
+                  if (result.persisted) await outbox.reconcile(result.snapshot.revision);
+                }
+              }
               catch (error: any) { setToast(error.message || 'Could not resolve pending change'); }
             }} />
             <AiReference api={api} onChoose={prefix => {
@@ -951,6 +958,19 @@ export function App() {
               <label className="toggle"><span>Spending summaries & review alerts</span><input type="checkbox" checked={remotePushEnabled} onChange={(event) => setRemotePushPreference(event.target.checked)} /></label>
               <label className="toggle"><span>Biometric unlock</span><input type="checkbox" checked={biometricEnabled} onChange={(event) => setBiometricPreference(event.target.checked)} /></label>
               <button className="secondary-button" onClick={exportContext}>Export LLM context</button>
+              <button className="secondary-button" type="button" onClick={async () => {
+                setLoading(true);
+                try {
+                  const result = await dataSync.recover();
+                  applySnapshot(result.snapshot);
+                  if (result.persisted) await outbox.reconcile(result.snapshot.revision);
+                  showToast('Fresh server snapshot restored');
+                } catch (e: any) {
+                  showToast(e.message || 'Recovery failed');
+                } finally {
+                  setLoading(false);
+                }
+              }}>Reload full server snapshot</button>
             </div>
             <section className="form-card collapsible">
               <button className="collapse-head" type="button" onClick={sync}>

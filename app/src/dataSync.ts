@@ -69,6 +69,12 @@ export class DataSync {
     return true;
   }
 
+  recover(): Promise<SyncResult> {
+    this.snapshot = null;
+    this.memoryDirty = true;
+    return this.synchronize(true);
+  }
+
   hydrate(): Promise<DataSnapshot | null> {
     if (this.snapshot) return Promise.resolve(this.snapshot);
     if (!this.hydration) this.hydration = this.cache.read().then(value => {
