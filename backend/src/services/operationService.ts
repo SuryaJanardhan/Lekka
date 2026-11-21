@@ -6,6 +6,9 @@ import { executeOperation } from './operationExecutor';
 import { bumpDataRevision } from './dataRevisionService';
 import { PushService } from './pushService';
 import { privateTransactionConfirmation } from './notificationFormat';
+import { EmailModel } from '../models/Email';
+import { CategoryModel } from '../models/Category';
+import { RuleModel } from '../models/Rule';
 
 mongoose.set('transactionAsyncLocalStorage', true);
 
@@ -93,8 +96,24 @@ export class OperationService {
       if (existing?.hash !== hash) throw operationError('Operation ID already belongs to a different change.', 409);
       if (existing.state === 'CANCELLED') return existing;
     }
+    const update: Record<string, any> = {
+      state: action === 'retry' ? 'PENDING' : 'CANCELLED',
+      nextAttemptAt: new Date()
+    };
+    if (action === 'retry') {
+      const existing = await OperationModel.findById(id).lean();
+      if (existing?.expectedUpdatedAt && existing.targetId) {
+        const model = existing.kind.startsWith('entry.') ? EmailModel : existing.kind.startsWith('category.') ? CategoryModel : existing.kind.startsWith('rule.') ? RuleModel : null;
+        if (model) {
+          const row: any = await (model as any).findById(existing.targetId).lean();
+          if (row?.updatedAt) {
+            update.expectedUpdatedAt = new Date(row.updatedAt).toISOString();
+          }
+        }
+      }
+    }
     const op = await OperationModel.findOneAndUpdate({ _id: id, state: 'BLOCKED' }, {
-      $set: { state: action === 'retry' ? 'PENDING' : 'CANCELLED', nextAttemptAt: new Date() }, $unset: { error: '' }
+      $set: update, $unset: { error: '' }
     }, { new: true }).lean();
     if (!op) throw operationError('Only a rejected change can be retried or discarded. Refresh its status.', 409);
     return op;

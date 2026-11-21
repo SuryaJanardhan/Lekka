@@ -24,7 +24,7 @@ graph LR
 * **Rules**: Category rules run before AI so repeat merchants stay predictable.
 * **Your categories, your call**: Every new pattern goes to Review with an AI suggestion. Only your saved choice trains a sender-plus-merchant rule for next time. Create a category directly in Review or rename it in Settings without breaking its history.
 * **Separate money flows**: Debits and incoming credits are tracked separately. Credits never inflate spending, and unclear transactions go to review. [Ledger flow details](docs/ledger-flows.md).
-* **Android-native bits**: compact PIN lock, fingerprint unlock, Keystore-protected local encryption, local confirmations, and FCM remote notifications once Firebase is configured.
+* **Android-native bits**: compact PIN lock, fingerprint unlock, Keystore-protected local encryption, local confirmations, and FCM remote notifications.
 * **AI chats**: saved conversations, compact `@` skills, read-only ledger retrieval and a small-budget Spending Watch agent. Settings lists what each tool does. [AI flow and limits](docs/ai-skills.md).
 * **Cache first**: an encrypted compact ledger opens instantly after unlocking. Fresh same-day reopens skip backend reads, and changed revisions use incremental records plus deletion tombstones. Changes land in an encrypted durable local outbox immediately, then sync through a journal and background worker with duplicate protection. Pending is not confirmed spending. [Sync details](docs/cache-sync.md) and [durable writes](docs/durable-writes.md).
 
