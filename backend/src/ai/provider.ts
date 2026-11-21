@@ -16,7 +16,7 @@ export class AiProvider {
     const keys = groqApiKeys();
     if (!keys.length) throw aiError('AI is not configured', 503);
     const bytes = inputUpperBound(params.messages);
-    const limits = purpose === 'email' ? { input: 2400, output: 160, minuteCalls: 3, minuteTokens: 5000, dailyCalls: 12, dailyTokens: 24000 } : AI_LIMITS;
+    const limits = purpose === 'email' ? { input: 2400, output: 350, minuteCalls: 12, minuteTokens: 15000, dailyCalls: 150, dailyTokens: 150000 } : AI_LIMITS;
     if (bytes > limits.input) throw aiError('Request is too large for the small AI budget. Narrow it or send it to manual review.', 413);
     const output = Math.min(Number(params.max_tokens || 512), limits.output);
     const cacheId = createHash('sha256').update(JSON.stringify({ params, purpose, output })).digest('hex');

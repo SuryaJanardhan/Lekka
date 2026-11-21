@@ -353,7 +353,18 @@ export class GmailService {
 
     if (!categoryId) {
       needsReview = true;
-      const aiResult = await GroqService.classifyEmailContent(emailData.sender, emailData.subject, emailData.rawTextBody);
+      let aiResult;
+      if (emailData.parsedJson?.categoryName) {
+        aiResult = {
+          categoryName: emailData.parsedJson.categoryName,
+          confidenceScore: emailData.parsedJson.confidenceScore || 0.85,
+          reasoning: 'Categorized via unified AI extraction',
+          merchantName: emailData.parsedJson.merchantName,
+          notes: emailData.parsedJson.notes
+        };
+      } else {
+        aiResult = await GroqService.classifyEmailContent(emailData.sender, emailData.subject, emailData.rawTextBody);
+      }
       if (aiResult.merchantName) emailData.parsedJson.merchantName = aiResult.merchantName;
       if (aiResult.notes) emailData.parsedJson.notes = aiResult.notes;
       categorySource = 'GROQ_AI';
@@ -373,7 +384,9 @@ export class GmailService {
       if (!category) categorySource = 'UNASSIGNED';
     }
 
-    emailData.parsedJson.notes = fiveWordNote(emailData.parsedJson.notes) || await GroqService.summarizeTransaction(emailData.sender, emailData.subject, emailData.rawTextBody);
+    if (!emailData.parsedJson.notes) {
+      emailData.parsedJson.notes = await GroqService.summarizeTransaction(emailData.sender, emailData.subject, emailData.rawTextBody);
+    }
     if (emailData.parsedJson.notes) emailData.parsedJson.notesSource = 'AI';
     const entry = await EmailModel.create({
       messageId: emailData.messageId,

@@ -8,12 +8,12 @@ import { hasPeriod } from './periods';
 
 const gateway = new ReadGateway();
 
-function conversationalMessages(message: string, history: Array<{ role: string; content: string }>) {
-  const system = 'You are Lekka, a concise personal finance assistant. Reply naturally and directly. Do not claim current ledger facts unless they appear in the supplied conversation. Prior assistant figures are historical context, not a fresh query. For new financial totals, ask to run @spending, @compare, @search, @review, @rules or @insights. Never invent records, causes or balances.';
+function conversationalMessages(message: string, history: Array<{ role: string; content: string }>, summaryContext = '') {
+  const system = `You are Lekka, a concise personal finance assistant. Reply naturally and directly.${summaryContext ? ` Ledger: ${summaryContext}.` : ''} Do not claim current ledger facts unless they appear in the supplied conversation. Prior assistant figures are historical context, not a fresh query. For new financial totals, ask to run @spending, @compare, @search, @review, @rules or @insights. Never invent records, causes or balances.`;
   const recent = history.filter(row => ['user', 'assistant'].includes(row.role) && row.content !== message)
     .slice(-2).map(row => ({ role: row.role, content: row.content.slice(-120) }));
   const messages: any[] = [{ role: 'system', content: system }, ...recent, { role: 'user', content: message }];
-  while (recent.length && inputUpperBound(messages) > 800) {
+  while (recent.length && inputUpperBound(messages) > 780) {
     recent.shift();
     messages.splice(1, 1);
   }
@@ -41,7 +41,17 @@ export class SkillService {
     if (!skill && followup) skill = previousRequest?.skill || priorSkill;
     if (!skill && /^(?:hi|hello|hey|help|what can (?:you|u) do)[!.?\s]*$/i.test(message)) return { reply: 'I can calculate spending and credits, compare periods, search transactions, show reviews and rules, provide AI-based @insights, and run the scheduled @watch agent.', toolUsed: null, aiCalls: 0 };
     if (!skill) {
-      const messages = conversationalMessages(message, history);
+      let facts = '';
+      try {
+        const now = new Date();
+        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1) - 330 * 60000).toISOString();
+        const end = new Date().toISOString();
+        const stats: any = await gateway.execute({ skill: 'spending', range: { start, end, label: 'This month' }, direction: 'BOTH', page: 1 });
+        if (stats.kind === 'summary') {
+          facts = `Debits INR ${(stats.debitPaise / 100).toFixed(0)}, Credits INR ${(stats.creditPaise / 100).toFixed(0)}`;
+        }
+      } catch {}
+      const messages = conversationalMessages(message, history, facts);
       const response = await AiProvider.complete({ model: 'qwen/qwen3.8-27b', messages, temperature: 0, ...{ reasoning_effort: 'none' } });
       return { reply: response.choices[0]?.message?.content || 'Please narrow the question or choose a skill.', aiCalls: 1 };
     }

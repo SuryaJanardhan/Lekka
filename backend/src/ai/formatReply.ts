@@ -2,7 +2,7 @@ import { PAGE_SIZE, SkillRequest } from './contract';
 
 export const inr = (paise: number) => `INR ${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 function summaryLines(result: any, request: SkillRequest) {
-  const labels = [`${result.period.label}${request.category ? ` / ${request.category}` : ''}${request.mode ? ` / ${request.mode}` : ''}`];
+  const labels = [`${result.period.label}${request.category ? ` / ${request.category}` : ''}${request.term ? ` / "${request.term}"` : ''}${request.mode ? ` / ${request.mode}` : ''}`];
   if (request.direction !== 'CREDIT') labels.push(`Debits: ${inr(result.debitPaise)}`);
   if (request.direction !== 'DEBIT') labels.push(`Credits: ${inr(result.creditPaise)}`);
   labels.push(`${result.count} recorded transactions. Confirmed ledger only.`);
