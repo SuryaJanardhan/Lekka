@@ -32,6 +32,7 @@ export function buildRequest(skill: SkillId, message: string, categories: string
       term = stripPeriods(text)
         .replace(/^(?:how much (?:did i|was)?\s*)?(?:spending|spend|spent|paid)\s*(?:on|at|for|to)?\s*/i, '')
         .replace(/\b(?:last|this)\s+(?:month|week|year|quarter)\b/gi, '')
+        .replace(/[?!.,;:]+$/g, '')
         .trim();
       if (!term || term.length > 80) term = unrecognized.slice(0, 80);
     }
