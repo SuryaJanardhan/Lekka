@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
 const source = ts.transpileModule(fs.readFileSync(new URL('../src/spendMap.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
-const { spendMapRows, shareOf, categorySpendForIstDay, ledgerMonthOptions, ledgerBreakdownForIstMonth } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const { spendMapRows, shareOf, categorySpendForIstDay, categorySpendForIstRange, currentWeekDaysForIst, ledgerMonthOptions, ledgerBreakdownForIstMonth } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 
 test('largest categories come first without mutating the source or omitting zero categories', () => {
   const rows = [{ label: 'Movies', value: 0 }, { label: 'Food', value: 20 }, { label: 'Travel', value: 100 }];
@@ -68,4 +68,37 @@ test('monthly stats gives repeated default category colors distinct stable chart
   assert.equal(new Set(rows.map(row => row.color)).size, catalog.length);
   const again = ledgerBreakdownForIstMonth(entries, '2026-10', 'DEBIT', catalog).categories;
   assert.deepEqual(rows.map(row => [row.label, row.color]), again.map(row => [row.label, row.color]));
+});
+
+test('week days in IST spans Monday to Sunday with correct daily spend and week totals', () => {
+  const fixedNow = new Date('2026-11-21T10:00:00.000Z'); // Saturday 21 Nov 15:30 IST
+  const entries = [
+    { receivedAt: '2026-11-16T10:00:00Z', categoryId: { name: 'Groceries' }, parsedJson: { detectedAmount: 200 } },
+    { receivedAt: '2026-11-19T05:00:00Z', categoryId: { name: 'Food' }, parsedJson: { detectedAmount: 50 } },
+    { receivedAt: '2026-11-19T08:00:00Z', categoryId: { name: 'Food' }, parsedJson: { detectedAmount: 25 } },
+    { receivedAt: '2026-11-20T10:00:00Z', categoryId: { name: 'Travel' }, parsedJson: { detectedAmount: 100 } },
+    { receivedAt: '2026-11-20T11:00:00Z', categoryId: { name: 'Travel' }, parsedJson: { detectedAmount: 500, transactionDirection: 'CREDIT' } }
+  ];
+
+  const week = currentWeekDaysForIst(entries, fixedNow);
+  assert.equal(week.days.length, 7);
+  assert.equal(week.startDay, '2026-11-16');
+  assert.equal(week.endDay, '2026-11-22');
+  assert.equal(week.weekTotal, 375); // 200 + 75 + 100
+
+  const monday = week.days.find(d => d.key === '2026-11-16');
+  assert.equal(monday?.totalSpend, 200);
+
+  const thursday = week.days.find(d => d.key === '2026-11-19');
+  assert.equal(thursday?.totalSpend, 75);
+
+  const saturday = week.days.find(d => d.key === '2026-11-21');
+  assert.equal(saturday?.isToday, true);
+  assert.equal(saturday?.totalSpend, 0);
+
+  const rangeSpend = categorySpendForIstRange(entries, week.startDay, week.endDay);
+  assert.deepEqual(rangeSpend.map(r => [r.label, r.value]), [['Groceries', 200], ['Travel', 100], ['Food', 75]]);
+
+  const thuSpend = categorySpendForIstDay(entries, '2026-11-19');
+  assert.deepEqual(thuSpend.map(r => [r.label, r.value]), [['Food', 75]]);
 });

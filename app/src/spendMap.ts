@@ -88,8 +88,18 @@ export function ledgerBreakdownForIstMonth(
   return { total, categories: spendMapRows(distinctStatsCategoryColors([...categories.values()])), modes: spendMapRows([...modes.values()]) };
 }
 
-export function categorySpendForIstDay(entries: SpendEntry[], now = new Date()) {
-  const day = istDay(now), rows = new Map<string, BreakdownRow>();
+export interface WeekDayOption {
+  key: string;
+  weekday: string;
+  dayNum: number;
+  formattedDate: string;
+  isToday: boolean;
+  totalSpend: number;
+}
+
+export function categorySpendForIstDay(entries: SpendEntry[], dayOrDate: string | Date = new Date()) {
+  const day = typeof dayOrDate === 'string' ? dayOrDate : istDay(dayOrDate);
+  const rows = new Map<string, BreakdownRow>();
   for (const entry of entries) {
     if (entry.parsedJson?.transactionDirection === 'CREDIT' || istDay(new Date(entry.receivedAt)) !== day) continue;
     const label = entry.categoryId?.name || 'Unassigned', amount = Number(entry.parsedJson?.detectedAmount || 0);
@@ -98,4 +108,57 @@ export function categorySpendForIstDay(entries: SpendEntry[], now = new Date()) 
     row.value += amount; rows.set(label, row);
   }
   return spendMapRows([...rows.values()]);
+}
+
+export function categorySpendForIstRange(entries: SpendEntry[], startDay: string, endDay: string) {
+  const rows = new Map<string, BreakdownRow>();
+  for (const entry of entries) {
+    const entryDay = istDay(new Date(entry.receivedAt));
+    if (entry.parsedJson?.transactionDirection === 'CREDIT' || entryDay < startDay || entryDay > endDay) continue;
+    const label = entry.categoryId?.name || 'Unassigned', amount = Number(entry.parsedJson?.detectedAmount || 0);
+    if (!(amount > 0)) continue;
+    const row = rows.get(label) || { label, value: 0, color: entry.categoryId?.colorCode || '#9ca3af' };
+    row.value += amount; rows.set(label, row);
+  }
+  return spendMapRows([...rows.values()]);
+}
+
+export function currentWeekDaysForIst(entries: SpendEntry[], now = new Date()): { days: WeekDayOption[]; startDay: string; endDay: string; weekTotal: number } {
+  const nowDayStr = istDay(now);
+  const [y, m, d] = nowDayStr.split('-').map(Number);
+  const currentCal = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const dayOfWeek = (currentCal.getUTCDay() + 6) % 7;
+  const monday = new Date(currentCal.getTime() - dayOfWeek * 86400000);
+  const days: WeekDayOption[] = [];
+  const dayTotals = new Map<string, number>();
+
+  for (const entry of entries) {
+    if (entry.parsedJson?.transactionDirection === 'CREDIT') continue;
+    const amount = Number(entry.parsedJson?.detectedAmount || 0);
+    if (!(amount > 0)) continue;
+    const day = istDay(new Date(entry.receivedAt));
+    dayTotals.set(day, (dayTotals.get(day) || 0) + amount);
+  }
+
+  let weekTotal = 0;
+  for (let i = 0; i < 7; i++) {
+    const dayCal = new Date(monday.getTime() + i * 86400000);
+    const dayStr = istDay(dayCal);
+    const parts = new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' }).formatToParts(dayCal);
+    const weekday = parts.find(p => p.type === 'weekday')?.value || '';
+    const dayNum = Number(parts.find(p => p.type === 'day')?.value || '0');
+    const month = parts.find(p => p.type === 'month')?.value || '';
+    const totalSpend = dayTotals.get(dayStr) || 0;
+    weekTotal += totalSpend;
+    days.push({
+      key: dayStr,
+      weekday,
+      dayNum,
+      formattedDate: `${dayNum} ${month}`,
+      isToday: dayStr === nowDayStr,
+      totalSpend
+    });
+  }
+
+  return { days, startDay: days[0].key, endDay: days[6].key, weekTotal };
 }

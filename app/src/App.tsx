@@ -35,7 +35,7 @@ import { CategorySettings } from './CategorySettings';
 import { CategoryPicker } from './CategoryPicker';
 import { SnapshotCache, SyncMetadata } from './cacheStore';
 import { DataSync } from './dataSync';
-import { categorySpendForIstDay, istMonth, ledgerBreakdownForIstMonth, ledgerMonthOptions } from './spendMap';
+import { categorySpendForIstDay, categorySpendForIstRange, currentWeekDaysForIst, istMonth, ledgerBreakdownForIstMonth, ledgerMonthOptions } from './spendMap';
 import { RulesPanel } from './RulesPanel';
 import { Dropdown } from './Dropdown';
 import { CategorySelect } from './CategorySelect';
@@ -406,10 +406,37 @@ export function App() {
     };
   }, [confirmedEntries]);
 
-  const todaySpend = useMemo(() => {
-    const categories = categorySpendForIstDay(confirmedEntries);
-    return { total: categories.reduce((sum, row) => sum + row.value, 0), categories };
-  }, [confirmedEntries]);
+  const weekInfo = useMemo(() => currentWeekDaysForIst(confirmedEntries), [confirmedEntries]);
+  const [selectedDayKey, setSelectedDayKey] = useState<string>('auto');
+
+  const activeDayKey = useMemo(() => {
+    if (selectedDayKey !== 'auto') return selectedDayKey;
+    const today = weekInfo.days.find(d => d.isToday);
+    if (today && today.totalSpend > 0) return today.key;
+    return 'week';
+  }, [selectedDayKey, weekInfo]);
+
+  const activeSpend = useMemo(() => {
+    if (activeDayKey === 'week') {
+      const categories = categorySpendForIstRange(confirmedEntries, weekInfo.startDay, weekInfo.endDay);
+      return {
+        total: weekInfo.weekTotal,
+        categories,
+        title: "This week's spend map",
+        periodLabel: 'this week'
+      };
+    }
+    const dayItem = weekInfo.days.find(d => d.key === activeDayKey);
+    const categories = categorySpendForIstDay(confirmedEntries, activeDayKey);
+    const total = categories.reduce((sum, row) => sum + row.value, 0);
+    const dayLabel = dayItem?.isToday ? 'Today' : (dayItem?.formattedDate || activeDayKey);
+    return {
+      total,
+      categories,
+      title: `${dayLabel}'s spend map`,
+      periodLabel: dayItem?.isToday ? 'today' : dayLabel
+    };
+  }, [activeDayKey, weekInfo, confirmedEntries]);
 
   const statsMonths = useMemo(() => ledgerMonthOptions(confirmedEntries), [confirmedEntries]);
   const statsMonthOptions = useMemo(() => statsMonths.map(month => ({
@@ -492,8 +519,8 @@ export function App() {
       });
       setPinMood('success');
       setTimeout(() => {
-      setIsUnlocked(true);
-      setPin('');
+        setIsUnlocked(true);
+        setPin('');
         setPinMood('idle');
       }, 320);
       showToast('Biometric unlock successful');
@@ -786,7 +813,41 @@ export function App() {
               </div>
             </div>
 
-            <SpendingSummary compact title="Today's spend map" periodLabel="today" total={todaySpend.total} categories={todaySpend.categories} modes={[]} />
+            <div className="week-strip" role="tablist" aria-label="Select day for spend map">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeDayKey === 'week'}
+                className={`week-strip-chip ${activeDayKey === 'week' ? 'active' : ''}`}
+                onClick={() => setSelectedDayKey('week')}
+              >
+                <span className="strip-label">Week</span>
+                <span className="strip-amt">{money(weekInfo.weekTotal)}</span>
+              </button>
+              <div className="week-strip-divider" />
+              <div className="week-days-scroll">
+                {weekInfo.days.map(day => (
+                  <button
+                    key={day.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeDayKey === day.key}
+                    className={`week-day-chip ${activeDayKey === day.key ? 'active' : ''} ${day.isToday ? 'today' : ''}`}
+                    onClick={() => setSelectedDayKey(day.key)}
+                  >
+                    <span className="day-name">{day.isToday ? 'Today' : day.weekday}</span>
+                    <span className="day-num">{day.dayNum}</span>
+                    {day.totalSpend > 0 ? (
+                      <i className="spend-dot" title={money(day.totalSpend)} />
+                    ) : (
+                      <i className="spend-dot empty" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <SpendingSummary compact title={activeSpend.title} periodLabel={activeSpend.periodLabel} total={activeSpend.total} categories={activeSpend.categories} modes={[]} />
 
             <SectionTitle title="Recent ledger" action="View all" onAction={() => setTab('ledger')} />
             <EntryList entries={orderedEntries.slice(0, 6)} onSelect={setSelectedEntry} empty="No expenses yet" />
@@ -795,32 +856,32 @@ export function App() {
 
         {tab === 'ai' && (
           <section className="ai-conversation">
-              <div className="section-title">
-                <h2>Ask AI</h2>
-                <div className="top-actions">
-                  <button className="icon-button" title="Chat history" aria-label="Chat history" aria-expanded={chatHistoryOpen} onClick={() => setChatHistoryOpen((open) => !open)}><History size={18} /></button>
-                  <button className="icon-button" title="New chat" aria-label="New chat" disabled={chatLoading} onClick={() => { setConversationId(newConversationId()); setChatInput(''); setChatHistoryOpen(false); }}><Plus size={18} /></button>
-                </div>
+            <div className="section-title">
+              <h2>Ask AI</h2>
+              <div className="top-actions">
+                <button className="icon-button" title="Chat history" aria-label="Chat history" aria-expanded={chatHistoryOpen} onClick={() => setChatHistoryOpen((open) => !open)}><History size={18} /></button>
+                <button className="icon-button" title="New chat" aria-label="New chat" disabled={chatLoading} onClick={() => { setConversationId(newConversationId()); setChatInput(''); setChatHistoryOpen(false); }}><Plus size={18} /></button>
               </div>
-              {chatHistoryOpen && <div className="conversation-history">
-                {conversations.length === 0 && <p>No saved chats yet</p>}
-                {conversations.map((item) => <div key={item.id}>
-                  <button disabled={chatLoading} className={item.id === conversationId ? 'selected' : ''} onClick={() => { setConversationId(item.id); setChatInput(''); setChatHistoryOpen(false); }}><strong>{item.title}</strong><small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>
-                  <button disabled={chatLoading} className="icon-button danger" title="Delete conversation" aria-label={`Delete ${item.title}`} onClick={() => { if (!window.confirm('Delete this conversation?')) return; setConversations((previous) => previous.filter((chat) => chat.id !== item.id)); if (item.id === conversationId) setConversationId(newConversationId()); }}><Trash2 size={16} /></button>
-                </div>)}
-              </div>}
-              {chatMessages.length === 0 && <div className="chip-row">
-                {['Spend this month?', 'Cash vs online?', 'Pending reviews?'].map((prompt) => (
-                  <button className="chip" key={prompt} onClick={() => askAssistant(prompt)}>{prompt}</button>
-                ))}
-              </div>}
-              <div className="chat-log conversation-messages" ref={chatLog}>
-                {chatMessages.length === 0 ? <div className="empty-state small">Ask about your ledger</div> : chatMessages.map((message, index) => (
-                  <AssistantMessage key={`${message.role}-${index}`} message={message} />
-                ))}
-                {chatLoading && <TypingDots />}
-              </div>
-              <ChatComposer value={chatInput} onChange={setChatInput} onSend={() => { void askAssistant(); }} busy={chatLoading} inputRef={chatComposer} />
+            </div>
+            {chatHistoryOpen && <div className="conversation-history">
+              {conversations.length === 0 && <p>No saved chats yet</p>}
+              {conversations.map((item) => <div key={item.id}>
+                <button disabled={chatLoading} className={item.id === conversationId ? 'selected' : ''} onClick={() => { setConversationId(item.id); setChatInput(''); setChatHistoryOpen(false); }}><strong>{item.title}</strong><small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>
+                <button disabled={chatLoading} className="icon-button danger" title="Delete conversation" aria-label={`Delete ${item.title}`} onClick={() => { if (!window.confirm('Delete this conversation?')) return; setConversations((previous) => previous.filter((chat) => chat.id !== item.id)); if (item.id === conversationId) setConversationId(newConversationId()); }}><Trash2 size={16} /></button>
+              </div>)}
+            </div>}
+            {chatMessages.length === 0 && <div className="chip-row">
+              {['Spend this month?', 'Cash vs online?', 'Pending reviews?'].map((prompt) => (
+                <button className="chip" key={prompt} onClick={() => askAssistant(prompt)}>{prompt}</button>
+              ))}
+            </div>}
+            <div className="chat-log conversation-messages" ref={chatLog}>
+              {chatMessages.length === 0 ? <div className="empty-state small">Ask about your ledger</div> : chatMessages.map((message, index) => (
+                <AssistantMessage key={`${message.role}-${index}`} message={message} />
+              ))}
+              {chatLoading && <TypingDots />}
+            </div>
+            <ChatComposer value={chatInput} onChange={setChatInput} onSend={() => { void askAssistant(); }} busy={chatLoading} inputRef={chatComposer} />
           </section>
         )}
 
@@ -890,34 +951,34 @@ export function App() {
               <button type="button" className={statsView === 'reports' ? 'selected' : ''} onClick={() => setStatsView('reports')}>Reports</button>
             </div>
             {statsView === 'reports' ? <ReportsPanel api={api} /> : <>
-            <div className="stat-grid">
-              <Metric label="Debits this month" value={money(analytics?.summary.totalFinancialAmount)} />
-              <Metric label="Credits this month" value={money(analytics?.summary.totalCredits)} />
-              <Metric label="Net flow" value={money(analytics?.summary.netAmount ?? -(analytics?.summary.totalFinancialAmount || 0))} />
-              <Metric label="Today" value={money(periodTotals.today)} />
-              <Metric label="Week" value={money(periodTotals.week)} />
-              <Metric label="Debit entries" value={String(analytics?.summary.debitCount ?? analytics?.summary.totalEmails ?? 0)} />
-              <Metric label="Credit entries" value={String(analytics?.summary.creditCount || 0)} />
-              <Metric label="Quarter" value={money(periodTotals.quarter)} />
-              <Metric label={`Year ${new Date().getFullYear()}`} value={money(periodTotals.year)} />
-              <Metric label="Avg debit" value={money(analytics?.summary.averageAmount || 0)} />
-              <Metric label="Auto sorted" value={`${analytics?.summary.aiAccuracyPercentage || 100}%`} />
-              <Metric label="Entries" value={String(analytics?.summary.totalTransactions ?? analytics?.summary.totalEmails ?? 0)} />
-            </div>
-            <div className="stats-map-controls">
-              <div className="stats-month-picker"><span>Map month</span><Dropdown label="Stats month" value={statsMonth} onValueChange={setStatsMonth} options={statsMonthOptions} /></div>
-              <div className="mode-grid flow-toggle">{(['DEBIT', 'CREDIT'] as const).map(direction => <button key={direction} type="button" className={statsDirection === direction ? 'selected' : ''} onClick={() => setStatsDirection(direction)}>{direction === 'DEBIT' ? 'Debits' : 'Credits'}</button>)}</div>
-            </div>
-            <SpendingSummary
-              title={statsDirection === 'CREDIT' ? 'Credit map' : 'Spend map'}
-              periodLabel={`in ${selectedStatsMonthLabel}`}
-              total={selectedMonthBreakdown.total}
-              categories={selectedMonthBreakdown.categories}
-              modes={selectedMonthBreakdown.modes}
-            />
-            <ReportBars title="Daily trend" rows={(analytics?.dailyTrend || []).map((item, index) => ({ label: item.date.slice(8), value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#14b8a6', '#2563eb', '#f59e0b', '#ef4444'][index % 4] }))} />
-            <ReportBars title="Monthly trend" rows={(analytics?.monthlyTrend || []).map((item, index) => ({ label: new Date(Number(item.month.slice(0, 4)), Number(item.month.slice(5, 7)) - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }), value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))} />
-            <ReportBars title="Yearly trend" rows={(analytics?.yearlyTrend || []).map((item, index) => ({ label: item.year, value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#2563eb', '#0f766e', '#b45309', '#dc2626'][index % 4] }))} />
+              <div className="stat-grid">
+                <Metric label="Debits this month" value={money(analytics?.summary.totalFinancialAmount)} />
+                <Metric label="Credits this month" value={money(analytics?.summary.totalCredits)} />
+                <Metric label="Net flow" value={money(analytics?.summary.netAmount ?? -(analytics?.summary.totalFinancialAmount || 0))} />
+                <Metric label="Today" value={money(periodTotals.today)} />
+                <Metric label="Week" value={money(periodTotals.week)} />
+                <Metric label="Debit entries" value={String(analytics?.summary.debitCount ?? analytics?.summary.totalEmails ?? 0)} />
+                <Metric label="Credit entries" value={String(analytics?.summary.creditCount || 0)} />
+                <Metric label="Quarter" value={money(periodTotals.quarter)} />
+                <Metric label={`Year ${new Date().getFullYear()}`} value={money(periodTotals.year)} />
+                <Metric label="Avg debit" value={money(analytics?.summary.averageAmount || 0)} />
+                <Metric label="Auto sorted" value={`${analytics?.summary.aiAccuracyPercentage || 100}%`} />
+                <Metric label="Entries" value={String(analytics?.summary.totalTransactions ?? analytics?.summary.totalEmails ?? 0)} />
+              </div>
+              <div className="stats-map-controls">
+                <div className="stats-month-picker"><span>Map month</span><Dropdown label="Stats month" value={statsMonth} onValueChange={setStatsMonth} options={statsMonthOptions} /></div>
+                <div className="mode-grid flow-toggle">{(['DEBIT', 'CREDIT'] as const).map(direction => <button key={direction} type="button" className={statsDirection === direction ? 'selected' : ''} onClick={() => setStatsDirection(direction)}>{direction === 'DEBIT' ? 'Debits' : 'Credits'}</button>)}</div>
+              </div>
+              <SpendingSummary
+                title={statsDirection === 'CREDIT' ? 'Credit map' : 'Spend map'}
+                periodLabel={`in ${selectedStatsMonthLabel}`}
+                total={selectedMonthBreakdown.total}
+                categories={selectedMonthBreakdown.categories}
+                modes={selectedMonthBreakdown.modes}
+              />
+              <ReportBars title="Daily trend" rows={(analytics?.dailyTrend || []).map((item, index) => ({ label: item.date.slice(8), value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#14b8a6', '#2563eb', '#f59e0b', '#ef4444'][index % 4] }))} />
+              <ReportBars title="Monthly trend" rows={(analytics?.monthlyTrend || []).map((item, index) => ({ label: new Date(Number(item.month.slice(0, 4)), Number(item.month.slice(5, 7)) - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }), value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#0f766e', '#2563eb', '#b45309', '#dc2626'][index % 4] }))} />
+              <ReportBars title="Yearly trend" rows={(analytics?.yearlyTrend || []).map((item, index) => ({ label: item.year, value: statsDirection === 'CREDIT' ? item.creditAmount || 0 : item.totalAmount, color: ['#2563eb', '#0f766e', '#b45309', '#dc2626'][index % 4] }))} />
             </>}
           </section>
         )}
