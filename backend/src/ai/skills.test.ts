@@ -35,6 +35,14 @@ test('skills resolve exact category mode direction and bounded pagination', () =
   assert.throws(() => validateRequest({ ...request, page: 1000 }), /page/);
   assert.throws(() => buildRequest('spending', 'bank balance', [], now), /not your bank balance/);
   assert.throws(() => buildRequest('spending', '@spending Fod last month', ['Food'], now), /could not identify/);
+  assert.equal(buildRequest('spending', 'spending on Swiggy this month', ['Food'], now).term, 'Swiggy');
+  assert.equal(buildRequest('spending', 'How much did I spend at Starbucks?', [], now).term, 'Starbucks');
+  assert.equal(buildRequest('spending', 'How much did I spend in total this month?', [], now).term, undefined);
+  assert.equal(buildRequest('spending', 'Can you give me an overview of my spending?', [], now).term, undefined);
+  assert.equal(chooseSkill('What is my balance?'), 'insights');
+  assert.equal(chooseSkill('spending overview'), 'insights');
+  assert.equal(chooseSkill('What needs attention?'), 'review');
+  assert.equal(chooseSkill('Show transactions for Netflix'), 'search');
 });
 test('watch flags possible duplicates without treating them as proven or editing anything', () => {
   const recent = [{ _id: 'one', subject: 'Shop', receivedAt: new Date('2026-10-29T20:00:00Z'), parsedJson: { detectedAmount: 120, merchantName: 'Shop' } }, { _id: 'two', subject: 'Shop', receivedAt: new Date('2026-10-29T20:04:00Z'), parsedJson: { detectedAmount: 120, merchantName: 'Shop' } }];

@@ -9,13 +9,17 @@ import { hasPeriod } from './periods';
 const gateway = new ReadGateway();
 
 function conversationalMessages(message: string, history: Array<{ role: string; content: string }>, summaryContext = '') {
-  const system = `You are Lekka, a concise personal finance assistant. Reply naturally and directly.${summaryContext ? ` Ledger: ${summaryContext}.` : ''} Do not claim current ledger facts unless they appear in the supplied conversation. Prior assistant figures are historical context, not a fresh query. For new financial totals, ask to run @spending, @compare, @search, @review, @rules or @insights. Never invent records, causes or balances.`;
+  const boundedContext = summaryContext ? summaryContext.slice(0, 220) : '';
+  const system = `You are Lekka, a concise personal finance assistant. Answer directly in 1 to 3 sentences using the user's verified ledger facts: ${boundedContext || 'No current ledger facts'}. Quote exact figures when relevant. Never invent records or balances. Do not tell the user to run commands unless specifically asked how to use the app.`;
   const recent = history.filter(row => ['user', 'assistant'].includes(row.role) && row.content !== message)
-    .slice(-2).map(row => ({ role: row.role, content: row.content.slice(-120) }));
+    .slice(-2).map(row => ({ role: row.role, content: row.content.slice(-100) }));
   const messages: any[] = [{ role: 'system', content: system }, ...recent, { role: 'user', content: message }];
-  while (recent.length && inputUpperBound(messages) > 780) {
+  while (recent.length && (inputUpperBound(messages) > 780 || JSON.stringify(messages).length >= 750)) {
     recent.shift();
     messages.splice(1, 1);
+  }
+  if (JSON.stringify(messages).length >= 750) {
+    messages[0] = { role: 'system', content: `You are Lekka. Facts: ${boundedContext.slice(0, 100)}. Answer in 1 to 2 sentences directly.` };
   }
   return messages;
 }
@@ -41,19 +45,10 @@ export class SkillService {
     if (!skill && followup) skill = previousRequest?.skill || priorSkill;
     if (!skill && /^(?:hi|hello|hey|help|what can (?:you|u) do)[!.?\s]*$/i.test(message)) return { reply: 'I can calculate spending and credits, compare periods, search transactions, show reviews and rules, provide AI-based @insights, and run the scheduled @watch agent.', toolUsed: null, aiCalls: 0 };
     if (!skill) {
-      let facts = '';
-      try {
-        const now = new Date();
-        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1) - 330 * 60000).toISOString();
-        const end = new Date().toISOString();
-        const stats: any = await gateway.execute({ skill: 'spending', range: { start, end, label: 'This month' }, direction: 'BOTH', page: 1 });
-        if (stats.kind === 'summary') {
-          facts = `Debits INR ${(stats.debitPaise / 100).toFixed(0)}, Credits INR ${(stats.creditPaise / 100).toFixed(0)}`;
-        }
-      } catch {}
-      const messages = conversationalMessages(message, history, facts);
-      const response = await AiProvider.complete({ model: 'qwen/qwen3.8-27b', messages, temperature: 0, ...{ reasoning_effort: 'none' } });
-      return { reply: response.choices[0]?.message?.content || 'Please narrow the question or choose a skill.', aiCalls: 1 };
+      const summaryContext = await gateway.getLedgerContext();
+      const messages = conversationalMessages(message, history, summaryContext);
+      const response = await AiProvider.complete({ model: 'qwen/qwen3.8-27b', messages, temperature: 0.1, ...{ reasoning_effort: 'none' } });
+      return { reply: response.choices[0]?.message?.content || 'Please ask about your spending, categories, or search transactions.', aiCalls: 1 };
     }
     if (skill === 'watch') {
       const data = await gateway.watchData(); const findings = detectWatchFindings(data);

@@ -7,13 +7,13 @@ export function chooseSkill(message: string): SkillId | undefined {
     if (!skillIds.includes(explicit[1].toLowerCase() as SkillId)) throw aiError('Unknown skill. Choose @spending, @compare, @search, @review, @rules, @insights or @watch.');
     return explicit[1].toLowerCase() as SkillId;
   }
-  if (/\b(compare|versus|vs\.?|difference|more than|less than)\b/i.test(message)) return 'compare';
+  if (/\b(compare|versus|vs\.?|difference|more than|less than|higher than|lower than)\b/i.test(message)) return 'compare';
   if (/\b(watch|unusual|duplicate|anomal|suspicious)/i.test(message)) return 'watch';
-  if (/\b(insight|decision|decisions|where did|main debits?|holding amount|financial habits?|improve|recommend|biggest|highest|most spent|where is my money|saving|budget)\b/i.test(message)) return 'insights';
-  if (/\b(review|uncategorized|uncategorised|pending categor)/i.test(message)) return 'review';
-  if (/\b(rule|categorization|categorisation)/i.test(message)) return 'rules';
-  if (/\b(find|search|look for|show.*transactions?|payments? (?:to|from|at))\b/i.test(message)) return 'search';
-  if (/\b(spend|spending|spent|total|cash|upi|income|credit|debit|balance)/i.test(message)) return 'spending';
+  if (/\b(insight|insights|decision|decisions|where did|main debits?|holding amount|financial habits?|improve|recommend|biggest|highest|most spent|where is my money|saving|savings|budget|net flow|net balance|balance|financial overview|financial summary|spending overview|spending summary|spending habits|finances? overview|finances? summary)\b/i.test(message)) return 'insights';
+  if (/\b(review|uncategorized|uncategorised|pending|needs attention|attention)\b/i.test(message)) return 'review';
+  if (/\b(rule|rules|categorization|categorisation)/i.test(message)) return 'rules';
+  if (/\b(find|search|look for|show.*(?:transactions?|payments?|receipts?|orders?)|payments? (?:to|from|at|for)|transaction history|history of)\b/i.test(message)) return 'search';
+  if (/\b(spend|spending|spent|total|cash|upi|income|credit|debit)\b/i.test(message)) return 'spending';
   return undefined;
 }
 
@@ -22,19 +22,33 @@ export function buildRequest(skill: SkillId, message: string, categories: string
   if (text.length > 240) throw aiError('Keep the skill question under 240 characters so its context stays small.');
   if (['spending', 'compare'].includes(skill) && /\b(balance|bank balance)\b/i.test(text)) throw aiError('Lekka tracks transactions, not your bank balance. Use @insights for recorded net flow and spending decisions.');
   const category = categories.slice().sort((a, b) => b.length - a.length).find(name => new RegExp(`(?:^|\\W)${escapeRegex(name)}(?:$|\\W)`, 'i').test(text));
-  if (category && categories.some(name => name !== category && new RegExp(`(?:^|\\W)${escapeRegex(name)}(?:$|\\W)`, 'i').test(text.replace(new RegExp(escapeRegex(category), 'i'), '')))) throw aiError('Choose one category per question so the result is unambiguous.');
+  const explicitSkill = /(?:^|\s)@[a-z]+\b/i.test(message);
+  if (explicitSkill && category && categories.some(name => name !== category && new RegExp(`(?:^|\\W)${escapeRegex(name)}(?:$|\\W)`, 'i').test(text.replace(new RegExp(escapeRegex(category), 'i'), '')))) throw aiError('Choose one category per question so the result is unambiguous.');
   if (/\bcategory\s*[:=]/i.test(text) && !category) throw aiError('Category not found. Use its exact name from Settings.');
   let term: string | undefined;
-  if (['spending', 'compare'].includes(skill) && !category) {
-    const unrecognized = stripPeriods(text).replace(/\b(?:what|how|much|did|do|does|have|i|we|my|the|is|are|was|were|show|me|please|recorded|total|totals|amount|transactions?|payments?|spending|spend|spent|debits?|credits?|income|received|refunds?|cash|online|upi|card|friend|paid|in|on|for|to|from|at|and|or|vs|versus|compare|with|of|between|explain|why|insights?|more|less|than|page)\b/gi, '').replace(/[\d\s.,?!:;=+\-/]/g, '');
-    if (unrecognized) {
-      if (/(?:^|\s)@spending\b/i.test(message)) throw aiError('I could not identify that category or filter. Use its exact name from Settings, or @search for a merchant.');
-      term = stripPeriods(text)
-        .replace(/^(?:how much (?:did i|was)?\s*)?(?:spending|spend|spent|paid)\s*(?:on|at|for|to)?\s*/i, '')
-        .replace(/\b(?:last|this)\s+(?:month|week|year|quarter)\b/gi, '')
-        .replace(/[?!.,;:]+$/g, '')
-        .trim();
-      if (!term || term.length > 80) term = unrecognized.slice(0, 80);
+  const quoted = /["\u201c]([^"\u201d]{1,80})["\u201d]/.exec(text)?.[1];
+  if (quoted) {
+    term = quoted.trim();
+  } else if (['spending', 'compare'].includes(skill) && !category) {
+    const isExplicit = /(?:^|\s)@spending\b/i.test(message);
+    const nonMerchants = /^(?:me|us|them|this|that|these|those|month|week|year|today|yesterday|quarter|cash|online|upi|card|friend|paid|credit|credits|debit|debits|income|spending|spend|spent|overview|summary|breakdown|all|everything|details|insights?|stats|statistics|food|travel|shopping|entertainment|bills?|utilities|groceries|health|medical|balance|total|totals|average|general|any|recent|current|money|finances?)$/i;
+    const cleanText = stripPeriods(text).replace(/\b(?:last|this|next)\s+(?:month|week|year|quarter|day)\b/gi, '').trim();
+    const targetMatch = /\b(?:on|at|for|to|from)\s+([a-zA-Z0-9&'._-]+(?:\s+[a-zA-Z0-9&'._-]+)?)/i.exec(cleanText);
+
+    if (targetMatch) {
+      let candidate = targetMatch[1].trim().replace(/[?!.,;:]+$/, '');
+      const parts = candidate.split(/\s+/);
+      if (parts.length > 1 && /^(?:and|or|in|with|by|of|this|last|today|yesterday|page|the|a|an|my)$/i.test(parts[1])) {
+        candidate = parts[0];
+      }
+      if (!nonMerchants.test(candidate)) {
+        term = candidate;
+      }
+    } else if (isExplicit) {
+      const stripped = stripPeriods(text).replace(/\b(?:spending|spend|spent|debits?|credits?|income|cash|online|upi|card|friend|paid)\b/gi, '').trim();
+      if (stripped && !nonMerchants.test(stripped)) {
+        throw aiError('I could not identify that category or filter. Use its exact name from Settings, or @search for a merchant.');
+      }
     }
   }
   const scope = (category ? text.replace(new RegExp(escapeRegex(category), 'i'), ' ') : text).replace(/["\u201c][^"\u201d]*["\u201d]/g, '');
@@ -42,13 +56,11 @@ export function buildRequest(skill: SkillId, message: string, categories: string
   const credit = /\b(credits?|income|received|refunds?)\b/i.test(directionText), debit = /\b(debits?|spend|spending|spent)\b/i.test(directionText);
   const periods = parsePeriods(scope, skill === 'compare', now);
   const mode = /\bfriend[ -]paid\b/i.test(scope) ? 'FRIEND_PAID' : /\bcash\b/i.test(scope) ? 'CASH' : /\bupi\b/i.test(scope) ? 'UPI' : /\bcard\b/i.test(scope) ? 'CARD' : /\bonline\b/i.test(scope) ? 'ONLINE' : undefined;
-  const quoted = /["\u201c]([^"\u201d]{1,80})["\u201d]/.exec(text)?.[1];
-  if (quoted) term = quoted;
   if (skill === 'search') {
     const explicit = /(?:^|\s)@search\b/i.test(message);
     term = quoted || stripPeriods(text.replace(/\bpage\s+\d+\b/gi, ''))
       .replace(/\b(?:debits?|credits?|income)\b/gi, '')
-      .replace(/^(?:find|search(?: for)?|show(?: me)?|look for)\s+/i, '').replace(/^(?:transactions?|payments?|receipts?)\s*(?:(?:to|from|at|for)\s+)?/i, '').trim();
+      .replace(/^(?:find|search(?: for)?|show(?: me)?|look for)\s+/i, '').replace(/^(?:transactions?|payments?|receipts?|orders?)\s*(?:(?:to|from|at|for)\s+)?/i, '').trim();
     if (!explicit && /^(?:the|my|all|recent|latest)?\s*$/i.test(term)) term = undefined;
     if (term && term.length > 80) throw aiError('Use a shorter merchant or search phrase.');
   }

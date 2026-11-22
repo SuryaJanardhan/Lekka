@@ -81,4 +81,52 @@ export class ReadGateway {
     return { recent: recent.slice(0, 200), truncated: recent.length > 200, average: Number(baseline[0]?.average || 0), baselineCount: baseline[0]?.count || 0, growth, categories: await this.categories(),
       windowKey: today.toISOString(), coveredThrough: recent.length > 200 ? new Date(recent[199].processedAt) : now };
   }
+  async getLedgerContext(now = new Date()): Promise<string> {
+    try {
+      const db = await this.database();
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1) - 330 * 60000);
+      const match = { receivedAt: { $gte: start, $lte: now } };
+      const [totals, topCats, maxTx, reviewCount] = await Promise.all([
+        db.collection('emails').aggregate([
+          { $match: match },
+          { $group: { _id: { flow: { $cond: [{ $eq: ['$parsedJson.transactionDirection', 'CREDIT'] }, 'CREDIT', 'DEBIT'] } }, amount: { $sum: paise }, count: { $sum: 1 } } }
+        ], options).toArray(),
+        db.collection('emails').aggregate([
+          { $match: { ...match, 'parsedJson.transactionDirection': { $ne: 'CREDIT' } } },
+          { $group: { _id: '$categoryId', amount: { $sum: paise } } },
+          { $sort: { amount: -1 } },
+          { $limit: 3 },
+          { $lookup: { from: 'categories', localField: '_id', foreignField: '_id', as: 'cat' } },
+          { $project: { name: { $arrayElemAt: ['$cat.name', 0] }, amount: 1 } }
+        ], options).toArray(),
+        db.collection('emails').find(
+          { ...match, 'parsedJson.transactionDirection': { $ne: 'CREDIT' } },
+          { ...options, projection: { 'parsedJson.detectedAmount': 1, 'parsedJson.merchantName': 1, subject: 1 } }
+        ).sort({ 'parsedJson.detectedAmount': -1 }).limit(1).toArray(),
+        db.collection('emails').countDocuments(
+          { $or: [{ needsUserReview: true }, { categoryId: null }, { categorySource: 'UNASSIGNED' }] },
+          options
+        )
+      ]);
+      let debitPaise = 0, creditPaise = 0, debitCount = 0, creditCount = 0;
+      for (const t of totals) {
+        if (t._id?.flow === 'CREDIT') {
+          creditPaise += Number(t.amount) || 0;
+          creditCount += Number(t.count) || 0;
+        } else {
+          debitPaise += Number(t.amount) || 0;
+          debitCount += Number(t.count) || 0;
+        }
+      }
+      const debitInr = Math.round(debitPaise / 100);
+      const creditInr = Math.round(creditPaise / 100);
+      const net = creditInr - debitInr;
+      const topStr = topCats.map((c: any) => `${c.name || 'Unassigned'}: INR ${Math.round((Number(c.amount) || 0) / 100)}`).join(', ');
+      const maxStr = maxTx[0] ? `Top debit: ${maxTx[0].parsedJson?.merchantName || maxTx[0].subject} (INR ${Math.round(maxTx[0].parsedJson?.detectedAmount || 0)})` : '';
+      const reviewStr = reviewCount > 0 ? `Unreviewed records: ${reviewCount}` : '';
+      return `This month: Debits INR ${debitInr} (${debitCount} tx), Credits INR ${creditInr} (${creditCount} tx), Net ${net >= 0 ? '+' : '-'}INR ${Math.abs(net)}${topStr ? `. Top categories: ${topStr}` : ''}${maxStr ? `. ${maxStr}` : ''}${reviewStr ? `. ${reviewStr}` : ''}.`;
+    } catch {
+      return '';
+    }
+  }
 }
