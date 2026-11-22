@@ -43,6 +43,10 @@ test('skills resolve exact category mode direction and bounded pagination', () =
   assert.equal(chooseSkill('spending overview'), 'insights');
   assert.equal(chooseSkill('What needs attention?'), 'review');
   assert.equal(chooseSkill('Show transactions for Netflix'), 'search');
+  assert.equal(buildRequest('spending', 'Starbucks spending this month', [], now).term, 'Starbucks');
+  assert.equal(buildRequest('search', 'Show all Swiggy transactions', [], now).term, 'Swiggy');
+  assert.equal(buildRequest('search', 'Show my Amazon transactions', [], now).term, 'Amazon');
+  assert.equal(buildRequest('search', 'Show recent transactions', [], now).term, undefined);
 });
 test('watch flags possible duplicates without treating them as proven or editing anything', () => {
   const recent = [{ _id: 'one', subject: 'Shop', receivedAt: new Date('2026-10-29T20:00:00Z'), parsedJson: { detectedAmount: 120, merchantName: 'Shop' } }, { _id: 'two', subject: 'Shop', receivedAt: new Date('2026-10-29T20:04:00Z'), parsedJson: { detectedAmount: 120, merchantName: 'Shop' } }];

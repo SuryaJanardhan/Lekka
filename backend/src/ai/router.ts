@@ -34,6 +34,7 @@ export function buildRequest(skill: SkillId, message: string, categories: string
     const nonMerchants = /^(?:me|us|them|this|that|these|those|month|week|year|today|yesterday|quarter|cash|online|upi|card|friend|paid|credit|credits|debit|debits|income|spending|spend|spent|overview|summary|breakdown|all|everything|details|insights?|stats|statistics|food|travel|shopping|entertainment|bills?|utilities|groceries|health|medical|balance|total|totals|average|general|any|recent|current|money|finances?)$/i;
     const cleanText = stripPeriods(text).replace(/\b(?:last|this|next)\s+(?:month|week|year|quarter|day)\b/gi, '').trim();
     const targetMatch = /\b(?:on|at|for|to|from)\s+([a-zA-Z0-9&'._-]+(?:\s+[a-zA-Z0-9&'._-]+)?)/i.exec(cleanText);
+    const prefixMatch = /^([a-zA-Z0-9&'._-]+)\s+(?:spending|spend|spent|expenses?|charges?|purchases?|orders?|rides?|total)\b/i.exec(cleanText);
 
     if (targetMatch) {
       let candidate = targetMatch[1].trim().replace(/[?!.,;:]+$/, '');
@@ -44,6 +45,8 @@ export function buildRequest(skill: SkillId, message: string, categories: string
       if (!nonMerchants.test(candidate)) {
         term = candidate;
       }
+    } else if (prefixMatch && !nonMerchants.test(prefixMatch[1].trim())) {
+      term = prefixMatch[1].trim().replace(/[?!.,;:]+$/, '');
     } else if (isExplicit) {
       const stripped = stripPeriods(text).replace(/\b(?:spending|spend|spent|debits?|credits?|income|cash|online|upi|card|friend|paid)\b/gi, '').trim();
       if (stripped && !nonMerchants.test(stripped)) {
@@ -58,10 +61,16 @@ export function buildRequest(skill: SkillId, message: string, categories: string
   const mode = /\bfriend[ -]paid\b/i.test(scope) ? 'FRIEND_PAID' : /\bcash\b/i.test(scope) ? 'CASH' : /\bupi\b/i.test(scope) ? 'UPI' : /\bcard\b/i.test(scope) ? 'CARD' : /\bonline\b/i.test(scope) ? 'ONLINE' : undefined;
   if (skill === 'search') {
     const explicit = /(?:^|\s)@search\b/i.test(message);
-    term = quoted || stripPeriods(text.replace(/\bpage\s+\d+\b/gi, ''))
+    let extracted = quoted || stripPeriods(text.replace(/\bpage\s+\d+\b/gi, ''))
       .replace(/\b(?:debits?|credits?|income)\b/gi, '')
-      .replace(/^(?:find|search(?: for)?|show(?: me)?|look for)\s+/i, '').replace(/^(?:transactions?|payments?|receipts?|orders?)\s*(?:(?:to|from|at|for)\s+)?/i, '').trim();
-    if (!explicit && /^(?:the|my|all|recent|latest)?\s*$/i.test(term)) term = undefined;
+      .replace(/^(?:find|search(?: for)?|show(?: me)?|look for)\s+/i, '')
+      .replace(/^(?:the|my|all|recent|latest)\s+/i, '')
+      .replace(/^(?:transactions?|payments?|receipts?|orders?)\s*(?:(?:to|from|at|for|with)\s+)?/i, '')
+      .replace(/\s+(?:transactions?|payments?|receipts?|orders?)$/i, '')
+      .replace(/^(?:to|from|at|for|with)\s+/i, '')
+      .trim();
+    if (!explicit && /^(?:the|my|all|recent|latest)?\s*$/i.test(extracted)) extracted = '';
+    term = extracted || undefined;
     if (term && term.length > 80) throw aiError('Use a shorter merchant or search phrase.');
   }
   const page = Number(/\bpage\s+(\d+)\b/i.exec(text)?.[1] || 1);
